@@ -1,0 +1,10 @@
+{
+  "final_calls_performed": false,
+  "rejected_round": 1,
+  "review_policy": "factual-summary-review/v1",
+  "scorer_version": "journal-recovery-evidence/v1",
+  "summary": "d6067d1f2937867170955966228723cf758e476ad3ab90b73d65517ae59fa21e",
+  "task_version": "journal-recovery-evidence/v2",
+  "trial": 2,
+  "trial_status": "summary-rejected"
+}

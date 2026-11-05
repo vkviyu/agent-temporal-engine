@@ -1,0 +1,935 @@
+{
+  "Packet": {
+    "ID": "8593c8b27ed926985a6517c3950d12a57368a0c0aaea3e8e71df1bea9fa5f635",
+    "Space": "project",
+    "Key": {
+      "Actor": "worker",
+      "Execution": "execution"
+    },
+    "Source": {
+      "Anchor": {
+        "Fence": {
+          "Store": "56edb172cad0f66f9288bacab950e426",
+          "LSN": 200,
+          "CommitDigest": "277b660c42182f41585086d52b3fe0c734a3f54d31b2411ed8438eb9b1654108"
+        },
+        "Space": "project",
+        "Cursor": {
+          "Store": "56edb172cad0f66f9288bacab950e426",
+          "Space": "project",
+          "Revision": "9491be72c69f35afb45696f12614eadbecc665b998606ad735099fd47d5e2332"
+        },
+        "Knowledge": {
+          "Actor": "worker",
+          "Execution": "execution"
+        }
+      },
+      "ViewDigest": "c15d6b17a581668bb98fe06e725e3da4dfc9c80e0bb3216949a9ec86dd31d0f3",
+      "Frontier": "610b536c5cd2ea260931468715fc7ac2ba6ae7f433c1446d404d14c1932c8b4e"
+    },
+    "GoalRef": "e60597cf9de21adb1491aee8314ef3b29008b1c99c14efc804663f48d82d04ae",
+    "Items": [
+      {
+        "Ordinal": 0,
+        "Observation": "344dfcb897625abe2753201ad1d125a75f98b4b9aedf6dc717e9ea82c989376e",
+        "Content": "e60597cf9de21adb1491aee8314ef3b29008b1c99c14efc804663f48d82d04ae",
+        "Label": "C-unknown"
+      },
+      {
+        "Ordinal": 1,
+        "Observation": "5dfbd04df1a5c7a785219bfc2224ed89dedd030f154fe8e81294d5ed9422c04c",
+        "Content": "d99c7cc20e60f4250351c073487ae7b190f615cb2de8aee62120e8184d456b0d",
+        "Label": "E-checksum"
+      },
+      {
+        "Ordinal": 2,
+        "Observation": "c21ef5e1128667dccff440980fc916d2a51c4cfd0c9de363fceccebacf4cf9b0",
+        "Content": "b4289e9811ab8c5d6c40717e585e9e090e0b861a6ef0fc5e01f48c84557e5fb4",
+        "Label": "C-preserve"
+      },
+      {
+        "Ordinal": 3,
+        "Observation": "fbcce661f92afbeb4eda2c3ecf23d991c7ff509cf59ee31bea7087088d8233a7",
+        "Content": "f7e01e8172c753b7cccd0aee7fca13b7d422237bb148a663d50aea1855afdb5b",
+        "Label": "unreviewed-notes-3"
+      },
+      {
+        "Ordinal": 4,
+        "Observation": "822a2caf5936c410801ab75b34ee4a2a17eb2acb6a4d1aaa9225c33e8ddf0506",
+        "Content": "0be67dc7c4db35a75f133db698dd8c7f41dee5591cc00992dfbc4b532ce421f4",
+        "Label": "B-failure"
+      },
+      {
+        "Ordinal": 5,
+        "Observation": "bda0fd17a4ce92485285e1335983193bbb926dc9bb96122e4d846c5294e6685f",
+        "Content": "94815ef424e8bb52bca909be9cdf3d3c0ec408f5d2397ab8ba185be6a2fdc735",
+        "Label": "B-support"
+      },
+      {
+        "Ordinal": 6,
+        "Observation": "ddf859ab8e33c76d6bd712740f7c8694ab013881eb429e17417dbfcec1dd50ac",
+        "Content": "4e1733b88b058ed197b5f3d5fbb218187fa33e354f7bdc554b24c02218fc78be",
+        "Label": "B-safe"
+      }
+    ],
+    "Renderer": "ate-effect-evidence-json/v1",
+    "Tokenizer": "utf8-quarter-estimate/v1",
+    "EstimatedTokens": 854,
+    "Input": {
+      "Object": "b3e9901c10ee9ed37599d7a3229212de79dfeb1becc3ab23e6003cb1dde9277d",
+      "Anchor": {
+        "Fence": {
+          "Store": "56edb172cad0f66f9288bacab950e426",
+          "LSN": 201,
+          "CommitDigest": "20c10dd519f1c0e8c46bff6d512b61271f161708074eef34c919a045174244dc"
+        },
+        "Space": "project",
+        "Cursor": null,
+        "Knowledge": null
+      },
+      "Encoding": "application/json"
+    },
+    "Selection": {
+      "Proposal": {
+        "Source": {
+          "Anchor": {
+            "Fence": {
+              "Store": "56edb172cad0f66f9288bacab950e426",
+              "LSN": 200,
+              "CommitDigest": "277b660c42182f41585086d52b3fe0c734a3f54d31b2411ed8438eb9b1654108"
+            },
+            "Space": "project",
+            "Cursor": {
+              "Store": "56edb172cad0f66f9288bacab950e426",
+              "Space": "project",
+              "Revision": "9491be72c69f35afb45696f12614eadbecc665b998606ad735099fd47d5e2332"
+            },
+            "Knowledge": {
+              "Actor": "worker",
+              "Execution": "execution"
+            }
+          },
+          "ViewDigest": "c15d6b17a581668bb98fe06e725e3da4dfc9c80e0bb3216949a9ec86dd31d0f3",
+          "Frontier": "610b536c5cd2ea260931468715fc7ac2ba6ae7f433c1446d404d14c1932c8b4e"
+        },
+        "Capacity": {
+          "Window": 4096,
+          "OutputReserve": 1024,
+          "FramingReserve": 256
+        },
+        "Mandatory": [
+          "344dfcb897625abe2753201ad1d125a75f98b4b9aedf6dc717e9ea82c989376e",
+          "5dfbd04df1a5c7a785219bfc2224ed89dedd030f154fe8e81294d5ed9422c04c",
+          "c21ef5e1128667dccff440980fc916d2a51c4cfd0c9de363fceccebacf4cf9b0",
+          "fbcce661f92afbeb4eda2c3ecf23d991c7ff509cf59ee31bea7087088d8233a7"
+        ],
+        "Costs": [
+          {
+            "Observation": "005ed207a7a36d06d9f13102f3d6c6a0f04ec6713484a6bf9da6a73cfded5694",
+            "Tokens": 55
+          },
+          {
+            "Observation": "01b39773a51086bbcad49f7fd8953d23e8b77469952e6ec71826926b8f845efa",
+            "Tokens": 55
+          },
+          {
+            "Observation": "0296543ec62960d7e61719718e779d757a473078730d6e1b0c86ace6a59af8ec",
+            "Tokens": 55
+          },
+          {
+            "Observation": "042af20ec071f18a76dbbe7688285ac7fafe046f606232d6f710b561e847d121",
+            "Tokens": 55
+          },
+          {
+            "Observation": "083e7de0f9a9c754b2513f7cc1a4cece57218869c974ecfaaa5401a9f42cd329",
+            "Tokens": 55
+          },
+          {
+            "Observation": "11c9ca829bb6f08bf06411e99b804794a37c6654a54001cf104b088e23460c87",
+            "Tokens": 55
+          },
+          {
+            "Observation": "1346a9a3c8717b440be164cf717c76cc3844dc69485a6ab1f637fe32a71b387f",
+            "Tokens": 55
+          },
+          {
+            "Observation": "16a42f8c3c816a8006ac4a77c77c00cbd2f4902920bf46a6c5de805b98fdc26b",
+            "Tokens": 55
+          },
+          {
+            "Observation": "1e0377d3e8d8c78422632f063183cbfc1d0ef0aae84bda21488ff8d3368d3734",
+            "Tokens": 55
+          },
+          {
+            "Observation": "244b614b57e185b02d30857494f5688d5b6017730a052cd5390251497fe826c8",
+            "Tokens": 55
+          },
+          {
+            "Observation": "2a246b0f68bfe252e2f7c7892a25e6d37284b1a55d5ec8d168dae3aa425f50f8",
+            "Tokens": 55
+          },
+          {
+            "Observation": "2baa01bcd0b92448f56e8a800a1da90ed54c1bff2f7a612db02d4e36c6ced048",
+            "Tokens": 55
+          },
+          {
+            "Observation": "341a87a7252469d3f66c52c003a90446af7e4820dbd125898193a2f353071dc4",
+            "Tokens": 55
+          },
+          {
+            "Observation": "3430d31c3c617f4fdc1aa79bd05500b3aa9985c994293a96020488e652356801",
+            "Tokens": 55
+          },
+          {
+            "Observation": "344dfcb897625abe2753201ad1d125a75f98b4b9aedf6dc717e9ea82c989376e",
+            "Tokens": 50
+          },
+          {
+            "Observation": "3d8ac44787b635a8902038da9c9fc7c83af928c981df24eb8f22745c363982b3",
+            "Tokens": 55
+          },
+          {
+            "Observation": "3f9be87f305e98ce2fc2f1042391c8453f838107beadf007eab8fcef4b706d14",
+            "Tokens": 55
+          },
+          {
+            "Observation": "44f8a5e5e780f46207eb5f8eeab0115991df51bc7410fa1a5d51e6155b1690bf",
+            "Tokens": 55
+          },
+          {
+            "Observation": "47490f5bdb1f9b0b0d4567c1442a43f461732a3f5086cdb977e9cf79a2033205",
+            "Tokens": 55
+          },
+          {
+            "Observation": "49c140e230ade27c28dd561df759bb9ceff911a2a55763e5c7c9619412782dcb",
+            "Tokens": 55
+          },
+          {
+            "Observation": "52c648dc1a74878f8a8a56f8e107dc72bb4c6aebecf41594b37f36c32f342747",
+            "Tokens": 55
+          },
+          {
+            "Observation": "559ce9c6fa05b7974b1196287bbce5dfa68ab3a1d22554bf79c26794e2cc51e5",
+            "Tokens": 55
+          },
+          {
+            "Observation": "5971c71f11ff17607d12d17e6c842a2c32ee146441134a420f182bd267e4b1a0",
+            "Tokens": 55
+          },
+          {
+            "Observation": "5ac794586f4b1cb695a384fff81f3b51a8f05c40e3c6e4d6396318d3d589a3e1",
+            "Tokens": 55
+          },
+          {
+            "Observation": "5c1bfdc0853ba0600cd67a507963d3db8b0f4af5a716a836ccc310ac3e8ab60b",
+            "Tokens": 55
+          },
+          {
+            "Observation": "5dfbd04df1a5c7a785219bfc2224ed89dedd030f154fe8e81294d5ed9422c04c",
+            "Tokens": 44
+          },
+          {
+            "Observation": "6267acf9ba2ade41b3ddc371c5b7199a18c3fe3863fbe8bf1bf326817ffb03f2",
+            "Tokens": 55
+          },
+          {
+            "Observation": "66956d7f6be42a46c8b9c93ce95c136ee74b92ad2553485837f918f6647ef921",
+            "Tokens": 55
+          },
+          {
+            "Observation": "6a368ab3daa273b6eb8ec7f503613a02aacfb31ad5f2de31b35595fe0096b391",
+            "Tokens": 55
+          },
+          {
+            "Observation": "6a6c2aa498e93829aa9e790972d0a707c0277c75ce83eb7e29b49a44a9c82e2e",
+            "Tokens": 303
+          },
+          {
+            "Observation": "6ac1434918090177d312740025782d98739f4a236c6648dfab68759aba22576e",
+            "Tokens": 55
+          },
+          {
+            "Observation": "73b0acdc6a0dab21a9bc4560798939009b3c2e688f486b6a19bdb99520c40efa",
+            "Tokens": 55
+          },
+          {
+            "Observation": "740836509fa323560cb72e2d86e1e75fca2ab9a07481be02553eb2db95eb557d",
+            "Tokens": 55
+          },
+          {
+            "Observation": "75cc9f6c5ef8cb7632586bee0d1a38cecc459f5f6014252ee9a9cbc1a9135dcb",
+            "Tokens": 55
+          },
+          {
+            "Observation": "76fcecb3fa5e0b8f9ebc9f237e3b08f00e2ed5ef53a8a96500d557e899484286",
+            "Tokens": 55
+          },
+          {
+            "Observation": "770075bd972a6a1371c023d307d99da34e5217b77ccbc71bebb84e3639f66eee",
+            "Tokens": 299
+          },
+          {
+            "Observation": "77fa4e5f501314bbd065a6323e6c1126b0fc8a1101da9fce3e44b17394c07c1b",
+            "Tokens": 55
+          },
+          {
+            "Observation": "7b96e9fc0d88ac9532d0ffbc26500465429e3057dd6af8907ec1625cc681ae4c",
+            "Tokens": 55
+          },
+          {
+            "Observation": "822a2caf5936c410801ab75b34ee4a2a17eb2acb6a4d1aaa9225c33e8ddf0506",
+            "Tokens": 71
+          },
+          {
+            "Observation": "91f05cf6415c18363a54da7e68944634454b1021de2b2f835385af52af5a9550",
+            "Tokens": 55
+          },
+          {
+            "Observation": "9209bb35276bca46d1e65c2cb51050ef8061d8a5e1e95a4de0c32e30da7f0188",
+            "Tokens": 55
+          },
+          {
+            "Observation": "94820600d23235acefcc1d497e3fb72ad7a8f5c540bae3a5a906c600dc400feb",
+            "Tokens": 55
+          },
+          {
+            "Observation": "94ed0d1ccca40f1d316f2fc998e7e693f1d4a5dea932fc2e248ce33c4efb7515",
+            "Tokens": 55
+          },
+          {
+            "Observation": "9a3e9fca4f7ef55b78fb2da427e9d85fbf6dc3ac592440ede3ab931835842c7e",
+            "Tokens": 55
+          },
+          {
+            "Observation": "a02720b7184961e13f4dbb8a986e1f9fc4b153c92c0330ede72067b4be3e0f41",
+            "Tokens": 55
+          },
+          {
+            "Observation": "a165e4dbf5d33365b3be40069ec3d551b69648fb458d57c22e7f25b965e9be6d",
+            "Tokens": 55
+          },
+          {
+            "Observation": "a33b43e0673c0f66f368026cee0cd6bbde1fbfa3640ca2c59d1a6ffceac02c7e",
+            "Tokens": 55
+          },
+          {
+            "Observation": "a42a5e8b52f1f1576890ff1226dde4c03e7560086d1940ccf96171aed266e84e",
+            "Tokens": 55
+          },
+          {
+            "Observation": "a492f4539362f5d109a9657cf9653aae0c01d7647cbf8db7ce15544b1bb1590d",
+            "Tokens": 55
+          },
+          {
+            "Observation": "aa392afc320b91c2828ae2360c519a59b3450c1ee85d8af1bb9ff190f16fbea5",
+            "Tokens": 55
+          },
+          {
+            "Observation": "b04bc30187cb4f61cfa74495744ac2fc547006cbb9495d8e99e9534d3e7b1cb5",
+            "Tokens": 55
+          },
+          {
+            "Observation": "b21feb0fa0e5ed525682dac6089cf32006c29fae3d8e961ec2d5eccad696af03",
+            "Tokens": 55
+          },
+          {
+            "Observation": "b43111145d8baa02db792c2b4cafb2f7226769eefe87ebdfe43b9bcfc69d7ce3",
+            "Tokens": 55
+          },
+          {
+            "Observation": "b9c738c0da72dcf342b626c23d02ce00c61dbcbad4fbd19547bd11d1060f0c54",
+            "Tokens": 55
+          },
+          {
+            "Observation": "bd6de9df2fe1c2784727bed7c331891499c03aef629515d4e4f2dd772a93f911",
+            "Tokens": 55
+          },
+          {
+            "Observation": "bda0fd17a4ce92485285e1335983193bbb926dc9bb96122e4d846c5294e6685f",
+            "Tokens": 42
+          },
+          {
+            "Observation": "c0e23d8e687a3997c90515d489d57b94a79e95e24f286e9a7f8ad9a5ad6e4d92",
+            "Tokens": 55
+          },
+          {
+            "Observation": "c21ef5e1128667dccff440980fc916d2a51c4cfd0c9de363fceccebacf4cf9b0",
+            "Tokens": 38
+          },
+          {
+            "Observation": "c52ce37deaac9597892b29e7cdd6a7998091f92626db3ba547beed59f3eb3393",
+            "Tokens": 55
+          },
+          {
+            "Observation": "c772c19b0c54ffb6ae288750ea145ee3834bc6ec30823b78bb861f0c1e9ee3f2",
+            "Tokens": 55
+          },
+          {
+            "Observation": "cac7e3d732ec4c0b994be091e79eeaee668ad6c7dba26a03dc70b8516ef03cdf",
+            "Tokens": 55
+          },
+          {
+            "Observation": "d02e025cd0344447a1c19c5ad4f9e505f6aa3e42aa5a302ae0625d16b41aa2bd",
+            "Tokens": 55
+          },
+          {
+            "Observation": "d5da6f031697ae0383fbfae1458bbd9528b54ae5ce6cdde87f20d7221de7fbfa",
+            "Tokens": 55
+          },
+          {
+            "Observation": "d63d41935ddbc0a3fd6857b040236c5f45b1594ed95b42c910460e76fabc4b3d",
+            "Tokens": 55
+          },
+          {
+            "Observation": "d6d76bb9aac651f423d2c401fe6005772f333309989cbd1d7eec3fdaaea0e060",
+            "Tokens": 55
+          },
+          {
+            "Observation": "dd018b4aac3112b7d6fff6cf458f7912d475cf99f03d79263d2384c9ed3a86d8",
+            "Tokens": 55
+          },
+          {
+            "Observation": "ddf859ab8e33c76d6bd712740f7c8694ab013881eb429e17417dbfcec1dd50ac",
+            "Tokens": 47
+          },
+          {
+            "Observation": "e1a30c54540ca095413933f5598a385adc6847b13b735801fad6fa7b178aae68",
+            "Tokens": 55
+          },
+          {
+            "Observation": "e38dc297dfb0963e4a6cef82385cf719070e7e5b3a9f71d05570c64c10a044e2",
+            "Tokens": 55
+          },
+          {
+            "Observation": "e64f31a8c80757879b19ef1472eaf7e0fbc8e2ae5d2911694929d0cc7cf7cf59",
+            "Tokens": 55
+          },
+          {
+            "Observation": "e6bdb3fa923cde0567ccd8fa14db555941b40ff1ef74223f7ae66aef00ebc924",
+            "Tokens": 55
+          },
+          {
+            "Observation": "e7fd94057198d437dce465c11fb8732291ef5f8e6bf3d27008dc2e47ecad459c",
+            "Tokens": 55
+          },
+          {
+            "Observation": "ec09c28200f3bf8c6f3b1f09a4682ba2c72838e421f4ec2f5a5f3168d2f55317",
+            "Tokens": 55
+          },
+          {
+            "Observation": "f129d4a6eaf4bd02dff180cca6b265df38a3331d145ad8708ba34edeaadb6082",
+            "Tokens": 55
+          },
+          {
+            "Observation": "f261ebc3274295eaf997d3004eebd89a0e62bf78bbb6c152c2f59dbd7374bb98",
+            "Tokens": 55
+          },
+          {
+            "Observation": "f5da7fc9b6853cdcc9dd1f386e94d588cfa11036a059857eeab7237d192b0a74",
+            "Tokens": 55
+          },
+          {
+            "Observation": "f9c1972c1c1eb26854854a1bae88433c4809335adc34fe654f12c6c606d40dc9",
+            "Tokens": 55
+          },
+          {
+            "Observation": "fb738d7d1a31a9fe5e262c7e5d75f3bb3258b2c64189480bf018ed4421a8a921",
+            "Tokens": 55
+          },
+          {
+            "Observation": "fbcce661f92afbeb4eda2c3ecf23d991c7ff509cf59ee31bea7087088d8233a7",
+            "Tokens": 306
+          },
+          {
+            "Observation": "fcc56454fc4c305098ce7c1614b40aa4a406c64414873c8ecec952a96a1d012b",
+            "Tokens": 55
+          },
+          {
+            "Observation": "fe8c0407012ece66eca676a224db13e6a8c3c3f8dfa49120a99565bf551c24fc",
+            "Tokens": 55
+          }
+        ],
+        "Bundles": [
+          {
+            "ID": "2d4a126426e268b1132ef21424339f7126df38516ed8ee92a012e052ffe3552f",
+            "Conclusion": "ddf859ab8e33c76d6bd712740f7c8694ab013881eb429e17417dbfcec1dd50ac",
+            "Evidence": [
+              "bda0fd17a4ce92485285e1335983193bbb926dc9bb96122e4d846c5294e6685f"
+            ],
+            "Counterexamples": [
+              "822a2caf5936c410801ab75b34ee4a2a17eb2acb6a4d1aaa9225c33e8ddf0506"
+            ],
+            "Benefit": 10
+          }
+        ],
+        "Tokenizer": "utf8-quarter-estimate/v1",
+        "CountQuality": "estimated",
+        "PolicyVersion": "benefit_per_marginal_token/v1"
+      },
+      "Result": {
+        "Source": {
+          "Anchor": {
+            "Fence": {
+              "Store": "56edb172cad0f66f9288bacab950e426",
+              "LSN": 200,
+              "CommitDigest": "277b660c42182f41585086d52b3fe0c734a3f54d31b2411ed8438eb9b1654108"
+            },
+            "Space": "project",
+            "Cursor": {
+              "Store": "56edb172cad0f66f9288bacab950e426",
+              "Space": "project",
+              "Revision": "9491be72c69f35afb45696f12614eadbecc665b998606ad735099fd47d5e2332"
+            },
+            "Knowledge": {
+              "Actor": "worker",
+              "Execution": "execution"
+            }
+          },
+          "ViewDigest": "c15d6b17a581668bb98fe06e725e3da4dfc9c80e0bb3216949a9ec86dd31d0f3",
+          "Frontier": "610b536c5cd2ea260931468715fc7ac2ba6ae7f433c1446d404d14c1932c8b4e"
+        },
+        "Capacity": {
+          "Window": 4096,
+          "OutputReserve": 1024,
+          "FramingReserve": 256
+        },
+        "InputLimit": 2816,
+        "UsedTokens": 598,
+        "Mandatory": [
+          "344dfcb897625abe2753201ad1d125a75f98b4b9aedf6dc717e9ea82c989376e",
+          "5dfbd04df1a5c7a785219bfc2224ed89dedd030f154fe8e81294d5ed9422c04c",
+          "c21ef5e1128667dccff440980fc916d2a51c4cfd0c9de363fceccebacf4cf9b0",
+          "fbcce661f92afbeb4eda2c3ecf23d991c7ff509cf59ee31bea7087088d8233a7"
+        ],
+        "Selected": [
+          "344dfcb897625abe2753201ad1d125a75f98b4b9aedf6dc717e9ea82c989376e",
+          "5dfbd04df1a5c7a785219bfc2224ed89dedd030f154fe8e81294d5ed9422c04c",
+          "c21ef5e1128667dccff440980fc916d2a51c4cfd0c9de363fceccebacf4cf9b0",
+          "fbcce661f92afbeb4eda2c3ecf23d991c7ff509cf59ee31bea7087088d8233a7",
+          "822a2caf5936c410801ab75b34ee4a2a17eb2acb6a4d1aaa9225c33e8ddf0506",
+          "bda0fd17a4ce92485285e1335983193bbb926dc9bb96122e4d846c5294e6685f",
+          "ddf859ab8e33c76d6bd712740f7c8694ab013881eb429e17417dbfcec1dd50ac"
+        ],
+        "SelectedBundles": [
+          "2d4a126426e268b1132ef21424339f7126df38516ed8ee92a012e052ffe3552f"
+        ],
+        "Omitted": [
+          {
+            "Observation": "005ed207a7a36d06d9f13102f3d6c6a0f04ec6713484a6bf9da6a73cfded5694",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "01b39773a51086bbcad49f7fd8953d23e8b77469952e6ec71826926b8f845efa",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "0296543ec62960d7e61719718e779d757a473078730d6e1b0c86ace6a59af8ec",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "042af20ec071f18a76dbbe7688285ac7fafe046f606232d6f710b561e847d121",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "083e7de0f9a9c754b2513f7cc1a4cece57218869c974ecfaaa5401a9f42cd329",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "11c9ca829bb6f08bf06411e99b804794a37c6654a54001cf104b088e23460c87",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "1346a9a3c8717b440be164cf717c76cc3844dc69485a6ab1f637fe32a71b387f",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "16a42f8c3c816a8006ac4a77c77c00cbd2f4902920bf46a6c5de805b98fdc26b",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "1e0377d3e8d8c78422632f063183cbfc1d0ef0aae84bda21488ff8d3368d3734",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "244b614b57e185b02d30857494f5688d5b6017730a052cd5390251497fe826c8",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "2a246b0f68bfe252e2f7c7892a25e6d37284b1a55d5ec8d168dae3aa425f50f8",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "2baa01bcd0b92448f56e8a800a1da90ed54c1bff2f7a612db02d4e36c6ced048",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "341a87a7252469d3f66c52c003a90446af7e4820dbd125898193a2f353071dc4",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "3430d31c3c617f4fdc1aa79bd05500b3aa9985c994293a96020488e652356801",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "3d8ac44787b635a8902038da9c9fc7c83af928c981df24eb8f22745c363982b3",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "3f9be87f305e98ce2fc2f1042391c8453f838107beadf007eab8fcef4b706d14",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "44f8a5e5e780f46207eb5f8eeab0115991df51bc7410fa1a5d51e6155b1690bf",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "47490f5bdb1f9b0b0d4567c1442a43f461732a3f5086cdb977e9cf79a2033205",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "49c140e230ade27c28dd561df759bb9ceff911a2a55763e5c7c9619412782dcb",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "52c648dc1a74878f8a8a56f8e107dc72bb4c6aebecf41594b37f36c32f342747",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "559ce9c6fa05b7974b1196287bbce5dfa68ab3a1d22554bf79c26794e2cc51e5",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "5971c71f11ff17607d12d17e6c842a2c32ee146441134a420f182bd267e4b1a0",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "5ac794586f4b1cb695a384fff81f3b51a8f05c40e3c6e4d6396318d3d589a3e1",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "5c1bfdc0853ba0600cd67a507963d3db8b0f4af5a716a836ccc310ac3e8ab60b",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "6267acf9ba2ade41b3ddc371c5b7199a18c3fe3863fbe8bf1bf326817ffb03f2",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "66956d7f6be42a46c8b9c93ce95c136ee74b92ad2553485837f918f6647ef921",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "6a368ab3daa273b6eb8ec7f503613a02aacfb31ad5f2de31b35595fe0096b391",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "6a6c2aa498e93829aa9e790972d0a707c0277c75ce83eb7e29b49a44a9c82e2e",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "6ac1434918090177d312740025782d98739f4a236c6648dfab68759aba22576e",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "73b0acdc6a0dab21a9bc4560798939009b3c2e688f486b6a19bdb99520c40efa",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "740836509fa323560cb72e2d86e1e75fca2ab9a07481be02553eb2db95eb557d",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "75cc9f6c5ef8cb7632586bee0d1a38cecc459f5f6014252ee9a9cbc1a9135dcb",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "76fcecb3fa5e0b8f9ebc9f237e3b08f00e2ed5ef53a8a96500d557e899484286",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "770075bd972a6a1371c023d307d99da34e5217b77ccbc71bebb84e3639f66eee",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "77fa4e5f501314bbd065a6323e6c1126b0fc8a1101da9fce3e44b17394c07c1b",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "7b96e9fc0d88ac9532d0ffbc26500465429e3057dd6af8907ec1625cc681ae4c",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "91f05cf6415c18363a54da7e68944634454b1021de2b2f835385af52af5a9550",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "9209bb35276bca46d1e65c2cb51050ef8061d8a5e1e95a4de0c32e30da7f0188",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "94820600d23235acefcc1d497e3fb72ad7a8f5c540bae3a5a906c600dc400feb",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "94ed0d1ccca40f1d316f2fc998e7e693f1d4a5dea932fc2e248ce33c4efb7515",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "9a3e9fca4f7ef55b78fb2da427e9d85fbf6dc3ac592440ede3ab931835842c7e",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "a02720b7184961e13f4dbb8a986e1f9fc4b153c92c0330ede72067b4be3e0f41",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "a165e4dbf5d33365b3be40069ec3d551b69648fb458d57c22e7f25b965e9be6d",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "a33b43e0673c0f66f368026cee0cd6bbde1fbfa3640ca2c59d1a6ffceac02c7e",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "a42a5e8b52f1f1576890ff1226dde4c03e7560086d1940ccf96171aed266e84e",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "a492f4539362f5d109a9657cf9653aae0c01d7647cbf8db7ce15544b1bb1590d",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "aa392afc320b91c2828ae2360c519a59b3450c1ee85d8af1bb9ff190f16fbea5",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "b04bc30187cb4f61cfa74495744ac2fc547006cbb9495d8e99e9534d3e7b1cb5",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "b21feb0fa0e5ed525682dac6089cf32006c29fae3d8e961ec2d5eccad696af03",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "b43111145d8baa02db792c2b4cafb2f7226769eefe87ebdfe43b9bcfc69d7ce3",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "b9c738c0da72dcf342b626c23d02ce00c61dbcbad4fbd19547bd11d1060f0c54",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "bd6de9df2fe1c2784727bed7c331891499c03aef629515d4e4f2dd772a93f911",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "c0e23d8e687a3997c90515d489d57b94a79e95e24f286e9a7f8ad9a5ad6e4d92",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "c52ce37deaac9597892b29e7cdd6a7998091f92626db3ba547beed59f3eb3393",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "c772c19b0c54ffb6ae288750ea145ee3834bc6ec30823b78bb861f0c1e9ee3f2",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "cac7e3d732ec4c0b994be091e79eeaee668ad6c7dba26a03dc70b8516ef03cdf",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "d02e025cd0344447a1c19c5ad4f9e505f6aa3e42aa5a302ae0625d16b41aa2bd",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "d5da6f031697ae0383fbfae1458bbd9528b54ae5ce6cdde87f20d7221de7fbfa",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "d63d41935ddbc0a3fd6857b040236c5f45b1594ed95b42c910460e76fabc4b3d",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "d6d76bb9aac651f423d2c401fe6005772f333309989cbd1d7eec3fdaaea0e060",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "dd018b4aac3112b7d6fff6cf458f7912d475cf99f03d79263d2384c9ed3a86d8",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "e1a30c54540ca095413933f5598a385adc6847b13b735801fad6fa7b178aae68",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "e38dc297dfb0963e4a6cef82385cf719070e7e5b3a9f71d05570c64c10a044e2",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "e64f31a8c80757879b19ef1472eaf7e0fbc8e2ae5d2911694929d0cc7cf7cf59",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "e6bdb3fa923cde0567ccd8fa14db555941b40ff1ef74223f7ae66aef00ebc924",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "e7fd94057198d437dce465c11fb8732291ef5f8e6bf3d27008dc2e47ecad459c",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "ec09c28200f3bf8c6f3b1f09a4682ba2c72838e421f4ec2f5a5f3168d2f55317",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "f129d4a6eaf4bd02dff180cca6b265df38a3331d145ad8708ba34edeaadb6082",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "f261ebc3274295eaf997d3004eebd89a0e62bf78bbb6c152c2f59dbd7374bb98",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "f5da7fc9b6853cdcc9dd1f386e94d588cfa11036a059857eeab7237d192b0a74",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "f9c1972c1c1eb26854854a1bae88433c4809335adc34fe654f12c6c606d40dc9",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "fb738d7d1a31a9fe5e262c7e5d75f3bb3258b2c64189480bf018ed4421a8a921",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "fcc56454fc4c305098ce7c1614b40aa4a406c64414873c8ecec952a96a1d012b",
+            "Reason": "not_proposed"
+          },
+          {
+            "Observation": "fe8c0407012ece66eca676a224db13e6a8c3c3f8dfa49120a99565bf551c24fc",
+            "Reason": "not_proposed"
+          }
+        ],
+        "PolicyVersion": "benefit_per_marginal_token/v1",
+        "Tokenizer": "utf8-quarter-estimate/v1",
+        "CountQuality": "estimated",
+        "ProposalDigest": "1158f6d8c1ca86003e13f6a7b9d31cda9fa561ccfd20bf6fa002047bec2b8a60"
+      }
+    }
+  },
+  "Activity": {
+    "Activity": "final-evidence-recall",
+    "Execution": "execution",
+    "Query": "",
+    "Role": "aux_summary",
+    "Step": 0,
+    "Invocation": "",
+    "GoalEpoch": 1,
+    "InputFence": {
+      "Store": "56edb172cad0f66f9288bacab950e426",
+      "LSN": 202,
+      "CommitDigest": "08965723508a9be0ade0ccc0eddda0f49f799173610507ac1eada7a172480a86"
+    },
+    "ContextPacket": "8593c8b27ed926985a6517c3950d12a57368a0c0aaea3e8e71df1bea9fa5f635",
+    "RequestDigest": "6f6fdd6551805fa7d33acf3591de7adce3b12cb3e8f2f5a04a209edc9e6e564a",
+    "Request": "b3e9901c10ee9ed37599d7a3229212de79dfeb1becc3ab23e6003cb1dde9277d",
+    "Recipient": "gpt-6.1-sol",
+    "Effect": "pure",
+    "IdempotencyKey": "",
+    "ResourceScope": "evaluation"
+  },
+  "Result": {
+    "ID": "final-evidence-recall-result",
+    "Activity": "final-evidence-recall",
+    "Attempt": "final-evidence-recall-attempt",
+    "RequestDigest": "6f6fdd6551805fa7d33acf3591de7adce3b12cb3e8f2f5a04a209edc9e6e564a",
+    "Incarnation": 1,
+    "Outcome": "success",
+    "Payload": "ewogICJwcmVzZXJ2ZV9maWxlIjogIkNVUlJFTlQucHJlaW5jaWRlbnQtN1EiLAogICJyZXRyeV91bmtub3duIjogZmFsc2UsCiAgInJlY29uY2lsaWF0aW9uX2tleSI6ICJvcGFsLTM3LVoiLAogICJleHBlY3RlZF9jaGVja3N1bSI6ICI2ZDBiOGZBMiIsCiAgInNlbGVjdGVkX2JyYW5jaCI6ICJldmlkZW5jZS1maXJzdCIsCiAgInJlamVjdGVkX2JyYW5jaCI6ICJyZXRyeS1vbi10aW1lb3V0IiwKICAicmVqZWN0ZWRfcmVhc29uIjogIkluIGEgZGlzcG9zYWJsZS1maXh0dXJlIGV4cGVyaW1lbnQsIHJldHJ5aW5nIGFmdGVyIGEgdGltZW91dCBhcHBlbmRlZCB0aGUgc2VsZWN0ZWQgcmVzdWx0IHR3aWNlIGJlY2F1c2UgdGhlIHRpbWVvdXQgZGlkIG5vdCBlc3RhYmxpc2ggdGhhdCB0aGUgZmlyc3Qgbm9uLWlkZW1wb3RlbnQgd3JpdGUgaGFkIG5vIGVmZmVjdC4iLAogICJldmlkZW5jZV9pZHMiOiBbCiAgICAiQy11bmtub3duIiwKICAgICJFLWNoZWNrc3VtIiwKICAgICJDLXByZXNlcnZlIiwKICAgICJCLXNhZmUiLAogICAgIkItc3VwcG9ydCIsCiAgICAiQi1mYWlsdXJlIgogIF0KfQ=="
+  },
+  "Output": {
+    "Object": "664b39605aca15b71e56bfe351a0be9a1b4018101eba6126da4e02f273badb93",
+    "Anchor": {
+      "Fence": {
+        "Store": "56edb172cad0f66f9288bacab950e426",
+        "LSN": 208,
+        "CommitDigest": "570687a00b6ac24426688182c10cb746fd7cdfe25de94370e84eb61dd993705e"
+      },
+      "Space": "project",
+      "Cursor": null,
+      "Knowledge": null
+    },
+    "Encoding": "text/plain;charset=utf-8"
+  },
+  "Reply": {
+    "ID": "resp_025fca2c6f60efc5016ae9632a9df48191834bcbbf81c702e2",
+    "Model": "gpt-6.1-sol",
+    "Status": "completed",
+    "Output": [
+      {
+        "Type": "message",
+        "Content": [
+          {
+            "Type": "output_text",
+            "Text": "{\n  \"preserve_file\": \"CURRENT.preincident-7Q\",\n  \"retry_unknown\": false,\n  \"reconciliation_key\": \"opal-37-Z\",\n  \"expected_checksum\": \"6d0b8fA2\",\n  \"selected_branch\": \"evidence-first\",\n  \"rejected_branch\": \"retry-on-timeout\",\n  \"rejected_reason\": \"In a disposable-fixture experiment, retrying after a timeout appended the selected result twice because the timeout did not establish that the first non-idempotent write had no effect.\",\n  \"evidence_ids\": [\n    \"C-unknown\",\n    \"E-checksum\",\n    \"C-preserve\",\n    \"B-safe\",\n    \"B-support\",\n    \"B-failure\"\n  ]\n}"
+          }
+        ]
+      }
+    ],
+    "Usage": {
+      "input_tokens": 657,
+      "input_tokens_details": {
+        "cached_tokens": 0,
+        "cache_write_tokens": 0
+      },
+      "output_tokens": 161,
+      "output_tokens_details": {
+        "reasoning_tokens": 0
+      },
+      "total_tokens": 818,
+      "attribution": {
+        "items": {
+          "msg_025fca2c6f60efc5016ae9632a9e808191b3f4dd2cdb575cac": {
+            "input_tokens": 627,
+            "cached_tokens": 0,
+            "cache_write_tokens": 0,
+            "output_tokens": 0,
+            "content": [
+              {
+                "input_tokens": 627,
+                "cached_tokens": 0,
+                "cache_write_tokens": 0,
+                "output_tokens": 0
+              }
+            ]
+          },
+          "msg_025fca2c6f60efc5016ae9632b10c88191ad9e0bccb1941348": {
+            "input_tokens": 2,
+            "cached_tokens": 0,
+            "cache_write_tokens": 0,
+            "output_tokens": 161,
+            "content": [
+              {
+                "input_tokens": 2,
+                "cached_tokens": 0,
+                "cache_write_tokens": 0,
+                "output_tokens": 161
+              }
+            ]
+          }
+        },
+        "request_fields": {
+          "instructions": {
+            "input_tokens": 28,
+            "cached_tokens": 0,
+            "cache_write_tokens": 0,
+            "output_tokens": 0
+          }
+        }
+      }
+    },
+    "Error": null,
+    "incomplete_details": null
+  }
+}

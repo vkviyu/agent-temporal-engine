@@ -1,0 +1,90 @@
+{
+  "stage": "Annotation/Hide + explicit-provenance disclosure fixes; not strict V1 acceptance",
+  "source_fingerprint": "63818d87a7ca4662ebe30b8b416c8e5198f29f2017e8139459201ae37613b46c",
+  "fingerprint_algorithm": "SHA256(concat(BE64(path byte length), UTF8 relative path, BE64(content byte length), file bytes), sorted paths)",
+  "source_filter": "*.go,*.mod,*.sum,*.json,*.py,*.hex; exclude .git,docs,results path components",
+  "source_file_count": 475,
+  "go_version": "go version go1.27.0 darwin/arm64",
+  "platform": "Darwin arm64",
+  "suites": [
+    {
+      "name": "ordinary",
+      "command": "go test -json ./... -count=1 -timeout=480s",
+      "exit_code": 0,
+      "raw_log": "ordinary.jsonl.gz",
+      "raw_sha256": "281e2f3efe74af596d1868f73f7bf0f9b6c17ccca5107fed46327d573deb0da3",
+      "packages": {
+        "pass": 28,
+        "skip": 1
+      },
+      "tests": {
+        "pass": 2161,
+        "skip": 3
+      },
+      "skipped": [
+        {
+          "package": "github.com/vkviyu/agent-temporal-engine/tests/evaluation",
+          "test": "TestRealModelRecursiveSummaryAndEvidenceRecall"
+        },
+        {
+          "package": "github.com/vkviyu/agent-temporal-engine/tests/evaluation",
+          "test": "TestRealModelTypedSummaryReviewAndEvidenceRecallV2"
+        },
+        {
+          "package": "github.com/vkviyu/agent-temporal-engine/transfer",
+          "test": null
+        },
+        {
+          "package": "github.com/vkviyu/agent-temporal-engine/tests/evaluation",
+          "test": "TestRealModelCrossProjectMemoryApplicability"
+        }
+      ]
+    },
+    {
+      "name": "race",
+      "command": "go test -race -json ./... -count=1 -timeout=540s",
+      "exit_code": 0,
+      "raw_log": "race.jsonl.gz",
+      "raw_sha256": "ccd7849ad5a9b2d951849c92cd91a0854cf8d0d0af8f60e1b511e93855255f59",
+      "packages": {
+        "pass": 28,
+        "skip": 1
+      },
+      "tests": {
+        "pass": 2161,
+        "skip": 3
+      },
+      "skipped": [
+        {
+          "package": "github.com/vkviyu/agent-temporal-engine/tests/evaluation",
+          "test": "TestRealModelRecursiveSummaryAndEvidenceRecall"
+        },
+        {
+          "package": "github.com/vkviyu/agent-temporal-engine/tests/evaluation",
+          "test": "TestRealModelTypedSummaryReviewAndEvidenceRecallV2"
+        },
+        {
+          "package": "github.com/vkviyu/agent-temporal-engine/transfer",
+          "test": null
+        },
+        {
+          "package": "github.com/vkviyu/agent-temporal-engine/tests/evaluation",
+          "test": "TestRealModelCrossProjectMemoryApplicability"
+        }
+      ]
+    }
+  ],
+  "additional_checks": {
+    "go vet ./...": "exit 0",
+    "go build ./...": "exit 0",
+    "gofmt -l .": "empty output"
+  },
+  "environment": "GOCACHE=/tmp/ate-gocache GOPATH=/tmp/ate-gopath GOTOOLCHAIN=local; native Unix socket suites executed outside managed bind restriction",
+  "unclosed": [
+    "C-01 Emission execution contract/atomic dispatch",
+    "C-02 public bypass of atomic Work",
+    "C-03 versioned effect contract and bounded retry guarantee",
+    "C-06 mandatory structured context responsibility",
+    "final document cross-audit and engineering refactor"
+  ]
+}

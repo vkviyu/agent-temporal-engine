@@ -1,0 +1,57 @@
+{
+  "estimated_window": 4096,
+  "final_max_output_tokens": 1024,
+  "limitations": [
+    "controlled task, not autonomous coding",
+    "independently model-reviewed typed summaries, no automatic memory promotion",
+    "review permits omissions and is not a proof of factual truth",
+    "review adds model calls shared by both final arms",
+    "small sample, no significance or universal quality claim",
+    "same capacity caps, actual input tokens may differ",
+    "proxy upstream framing is not controlled"
+  ],
+  "model": "gpt-6.1-sol",
+  "relevance": "host-declared mandatory IDs and one branch evidence/counterexample bundle",
+  "request_byte_cap": 20000,
+  "review_policy": "factual-summary-review/v1",
+  "scorer_version": "journal-recovery-evidence/v1",
+  "scores": [
+    {
+      "arm": "reviewed-typed-notes-plus-recent-8",
+      "criteria": {
+        "explain-source-coverage": false,
+        "identify-rejected-branch": true,
+        "never-retry-unknown": true,
+        "preserve-exact-file": true,
+        "recall-checksum": true,
+        "recall-reconciliation-key": true,
+        "select-evidence-first": true,
+        "use-failure-counterexample": true
+      },
+      "Earned": 7,
+      "Possible": 8,
+      "Response": "{\"preserve_file\":\"CURRENT.preincident-7Q\",\"retry_unknown\":false,\"reconciliation_key\":\"opal-37-Z\",\"expected_checksum\":\"6d0b8fA2\",\"selected_branch\":\"evidence-first\",\"rejected_branch\":\"retry-on-timeout\",\"rejected_reason\":\"In a disposable fixture, retrying after a timeout appended the selected result twice; the timeout did not establish that the first write had no effect.\",\"evidence_ids\":[\"summary-3-validated-notes\"]}"
+    },
+    {
+      "arm": "same-reviewed-typed-notes-plus-explicit-ate-evidence",
+      "criteria": {
+        "explain-source-coverage": true,
+        "identify-rejected-branch": true,
+        "never-retry-unknown": true,
+        "preserve-exact-file": true,
+        "recall-checksum": true,
+        "recall-reconciliation-key": true,
+        "select-evidence-first": true,
+        "use-failure-counterexample": true
+      },
+      "Earned": 8,
+      "Possible": 8,
+      "Response": "{\"preserve_file\":\"CURRENT.preincident-7Q\",\"retry_unknown\":false,\"reconciliation_key\":\"opal-37-Z\",\"expected_checksum\":\"6d0b8fA2\",\"selected_branch\":\"evidence-first\",\"rejected_branch\":\"retry-on-timeout\",\"rejected_reason\":\"In a disposable fixture, retrying after a network timeout appended the selected result twice because the timeout did not establish that the first non-idempotent write had no effect.\",\"evidence_ids\":[\"C-preserve\",\"C-unknown\",\"E-checksum\",\"B-safe\",\"B-failure\",\"B-support\"]}"
+    }
+  ],
+  "summary_rounds": 3,
+  "task_version": "journal-recovery-evidence/v2",
+  "token_quality": "estimated; provider actual usage in raw responses",
+  "trial": 1,
+  "trial_status": "completed"
+}

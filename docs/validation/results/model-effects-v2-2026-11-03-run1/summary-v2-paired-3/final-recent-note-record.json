@@ -1,0 +1,219 @@
+{
+  "Packet": {
+    "ID": "039c03cc7ed52311794f3679c19304658bb263b40f2d0accbfc2051d0c6e22ae",
+    "Space": "project",
+    "Key": {
+      "Actor": "worker",
+      "Execution": "execution"
+    },
+    "Source": {
+      "Anchor": {
+        "Fence": {
+          "Store": "d3900ddee2dd5aa3c10626e7d0a1f348",
+          "LSN": 226,
+          "CommitDigest": "b5d698177c55b2fb9a6fd96f304f769f7fb143fa02302cf55c5db8780bfab060"
+        },
+        "Space": "project",
+        "Cursor": {
+          "Store": "d3900ddee2dd5aa3c10626e7d0a1f348",
+          "Space": "project",
+          "Revision": "eb677ad701fb67f8dd9d663f347dd56a40e4e10f9489c29ebb294f2a0e365ae7"
+        },
+        "Knowledge": {
+          "Actor": "worker",
+          "Execution": "execution"
+        }
+      },
+      "ViewDigest": "1a9e7e689e96317e43fcb94e2416c4fa0457166fff237083b7b9e2fdf89f9c10",
+      "Frontier": "37ab4d3137f1307f484eeaaea2eb31662f0d19afeb35769dda2e859d0589864e"
+    },
+    "GoalRef": "f254f72152f973cc9de42c95afee9c74912385b7d3d3cc8e1149d305b2f681b5",
+    "Items": [
+      {
+        "Ordinal": 0,
+        "Observation": "05cc3839e26cd4b82c03c95c478df06095237389d58c570125e01bcb552bae85",
+        "Content": "f254f72152f973cc9de42c95afee9c74912385b7d3d3cc8e1149d305b2f681b5",
+        "Label": "summary-3-validated-notes"
+      },
+      {
+        "Ordinal": 1,
+        "Observation": "96f4a4559d11fc2c2b23b50ddf9dc2f1ceb62af27698692aa0e33be42152acfa",
+        "Content": "a3d3abf47dbe6826db71653576c82641e5f60cc32c2dda302ef8ecfdbdf83e16",
+        "Label": "round-3-health-16"
+      },
+      {
+        "Ordinal": 2,
+        "Observation": "664b9eb71b055debcf4a8c926bc45a5e74fc69093be676202dcd5144956a90e1",
+        "Content": "063b17eecd960a246ec678f4139cc046fea304566762da59f23ac6f01d10b586",
+        "Label": "round-3-health-17"
+      },
+      {
+        "Ordinal": 3,
+        "Observation": "861d04b5d2d03358f0df8330bff8f330700d1f8e798b06912f4eea01c11df162",
+        "Content": "3b5cc04730a608d4e4255facbaf8d529f0b0a24323fb25d6dd5350a8d1ed06c8",
+        "Label": "round-3-health-18"
+      },
+      {
+        "Ordinal": 4,
+        "Observation": "1bf905f09ce58cf3a47a937d65c838efd67fa86eceb0b030c54f278fcafa92e5",
+        "Content": "08dfb14a292ddd165a275a2067926ee762002cc289bfae3795f88ec63be0de15",
+        "Label": "round-3-health-19"
+      },
+      {
+        "Ordinal": 5,
+        "Observation": "990fd95fd6764ce9cffbe9f1699c0a6e766688bf687a5c5bbe7eaa2274caca71",
+        "Content": "896efd661fd3acb4ee64672e4a9254134639605990960c238c088b30a97ed93a",
+        "Label": "round-3-health-20"
+      },
+      {
+        "Ordinal": 6,
+        "Observation": "ae5ae1029c45001fe647155b0ec61d0f1d26ece6459d6ec00477df66ff0acd36",
+        "Content": "dead1f863c4c2cd860f254b7eb9f53822f4cba5d029e7cf82c95f30b4c7980f1",
+        "Label": "round-3-health-21"
+      },
+      {
+        "Ordinal": 7,
+        "Observation": "7f545ea2e146376914c7c9aadae271d12c230fa47906fb9c31bf59d1ff8d6805",
+        "Content": "bad1fcb7b77a4e1f6f928bef18c537f04361fb4554f0624b5a0e309fe0bfbed5",
+        "Label": "round-3-health-22"
+      },
+      {
+        "Ordinal": 8,
+        "Observation": "016687a87e79d43d35a265950ee873b19bb5b58a8c62de5d0ef6ffbb35864b94",
+        "Content": "12e44096f5c78cd6d41117129793664a3a45de2d74df1fa23d1b089269d12c7b",
+        "Label": "round-3-health-23"
+      }
+    ],
+    "Renderer": "ate-effect-evidence-json/v1",
+    "Tokenizer": "utf8-quarter-estimate/v1",
+    "EstimatedTokens": 0,
+    "Input": {
+      "Object": "89dca27f944febf917a3df745aac1d691f7afdedb5a516678d38a03f74744f6c",
+      "Anchor": {
+        "Fence": {
+          "Store": "d3900ddee2dd5aa3c10626e7d0a1f348",
+          "LSN": 226,
+          "CommitDigest": "b5d698177c55b2fb9a6fd96f304f769f7fb143fa02302cf55c5db8780bfab060"
+        },
+        "Space": "project",
+        "Cursor": null,
+        "Knowledge": null
+      },
+      "Encoding": "application/json"
+    }
+  },
+  "Activity": {
+    "Activity": "final-recent-note",
+    "Execution": "execution",
+    "Query": "",
+    "Role": "aux_summary",
+    "Step": 0,
+    "Invocation": "",
+    "GoalEpoch": 1,
+    "InputFence": {
+      "Store": "d3900ddee2dd5aa3c10626e7d0a1f348",
+      "LSN": 227,
+      "CommitDigest": "e57b4a52d687ed7d5e3f2134992f5fea394da42f8ba1ed90ccd0b5405e74fb42"
+    },
+    "ContextPacket": "039c03cc7ed52311794f3679c19304658bb263b40f2d0accbfc2051d0c6e22ae",
+    "RequestDigest": "4dfb976b8e1f08b0a41cf1902f56de1ecf13a435197338c82cb1ae7028a5ffb5",
+    "Request": "89dca27f944febf917a3df745aac1d691f7afdedb5a516678d38a03f74744f6c",
+    "Recipient": "gpt-6.1-sol",
+    "Effect": "pure",
+    "IdempotencyKey": "",
+    "ResourceScope": "evaluation"
+  },
+  "Result": {
+    "ID": "final-recent-note-result",
+    "Activity": "final-recent-note",
+    "Attempt": "final-recent-note-attempt",
+    "RequestDigest": "4dfb976b8e1f08b0a41cf1902f56de1ecf13a435197338c82cb1ae7028a5ffb5",
+    "Incarnation": 1,
+    "Outcome": "success",
+    "Payload": "ewogICJwcmVzZXJ2ZV9maWxlIjogIkNVUlJFTlQucHJlaW5jaWRlbnQtN1EiLAogICJyZXRyeV91bmtub3duIjogZmFsc2UsCiAgInJlY29uY2lsaWF0aW9uX2tleSI6ICJvcGFsLTM3LVoiLAogICJleHBlY3RlZF9jaGVja3N1bSI6ICI2ZDBiOGZBMiIsCiAgInNlbGVjdGVkX2JyYW5jaCI6ICJldmlkZW5jZS1maXJzdCIsCiAgInJlamVjdGVkX2JyYW5jaCI6ICJyZXRyeS1vbi10aW1lb3V0IiwKICAicmVqZWN0ZWRfcmVhc29uIjogIkEgZGlzcG9zYWJsZS1maXh0dXJlIGV4cGVyaW1lbnQgYXBwZW5kZWQgdHdpY2U7IGEgdGltZW91dCBkb2VzIG5vdCBlc3RhYmxpc2ggdGhhdCB0aGUgZmlyc3Qgbm9uLWlkZW1wb3RlbnQgd3JpdGUgaGFkIG5vIGVmZmVjdCwgc28gcmV0cnlpbmcgY291bGQgZHVwbGljYXRlIHRoZSBhcHBlbmQuIiwKICAiZXZpZGVuY2VfaWRzIjogWyJzdW1tYXJ5LTMtdmFsaWRhdGVkLW5vdGVzIl0KfQ=="
+  },
+  "Output": {
+    "Object": "bf830c940ec891f263cb6f4357f2768131f70a548bedaa98e562eaf65ca805a0",
+    "Anchor": {
+      "Fence": {
+        "Store": "d3900ddee2dd5aa3c10626e7d0a1f348",
+        "LSN": 233,
+        "CommitDigest": "1b7fbb3f26aaa0d83c4fc2950ca4594cf60da8d4131a8257b88846ac6e7a19c9"
+      },
+      "Space": "project",
+      "Cursor": null,
+      "Knowledge": null
+    },
+    "Encoding": "text/plain;charset=utf-8"
+  },
+  "Reply": {
+    "ID": "resp_00e0b7c7bb435aa3016ae9a88fce048191aef4d412e5c3fa40",
+    "Model": "gpt-6.1-sol",
+    "Status": "completed",
+    "Output": [
+      {
+        "Type": "message",
+        "Content": [
+          {
+            "Type": "output_text",
+            "Text": "{\n  \"preserve_file\": \"CURRENT.preincident-7Q\",\n  \"retry_unknown\": false,\n  \"reconciliation_key\": \"opal-37-Z\",\n  \"expected_checksum\": \"6d0b8fA2\",\n  \"selected_branch\": \"evidence-first\",\n  \"rejected_branch\": \"retry-on-timeout\",\n  \"rejected_reason\": \"A disposable-fixture experiment appended twice; a timeout does not establish that the first non-idempotent write had no effect, so retrying could duplicate the append.\",\n  \"evidence_ids\": [\"summary-3-validated-notes\"]\n}"
+          }
+        ]
+      }
+    ],
+    "Usage": {
+      "input_tokens": 819,
+      "input_tokens_details": {
+        "cached_tokens": 0,
+        "cache_write_tokens": 0
+      },
+      "output_tokens": 131,
+      "output_tokens_details": {
+        "reasoning_tokens": 0
+      },
+      "total_tokens": 950,
+      "attribution": {
+        "items": {
+          "msg_00e0b7c7bb435aa3016ae9a88fcf1c8191a67696f604572dbd": {
+            "input_tokens": 789,
+            "cached_tokens": 0,
+            "cache_write_tokens": 0,
+            "output_tokens": 0,
+            "content": [
+              {
+                "input_tokens": 789,
+                "cached_tokens": 0,
+                "cache_write_tokens": 0,
+                "output_tokens": 0
+              }
+            ]
+          },
+          "msg_00e0b7c7bb435aa3016ae9a8915b088191a5ad77dd0d48cc6c": {
+            "input_tokens": 2,
+            "cached_tokens": 0,
+            "cache_write_tokens": 0,
+            "output_tokens": 131,
+            "content": [
+              {
+                "input_tokens": 2,
+                "cached_tokens": 0,
+                "cache_write_tokens": 0,
+                "output_tokens": 131
+              }
+            ]
+          }
+        },
+        "request_fields": {
+          "instructions": {
+            "input_tokens": 28,
+            "cached_tokens": 0,
+            "cache_write_tokens": 0,
+            "output_tokens": 0
+          }
+        }
+      }
+    },
+    "Error": null,
+    "incomplete_details": null
+  }
+}

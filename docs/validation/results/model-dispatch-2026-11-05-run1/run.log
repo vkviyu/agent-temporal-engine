@@ -1,0 +1,49 @@
+=== RUN   TestRealModelTypedSummaryReviewAndEvidenceRecallV2
+=== RUN   TestRealModelTypedSummaryReviewAndEvidenceRecallV2/paired-1
+    effects_test.go:203: summary-1 completed by gpt-6.1-sol, status=completed
+    effects_test.go:207: summary-1-review completed by gpt-6.1-sol, status=completed
+    effects_test.go:203: summary-2 completed by gpt-6.1-sol, status=completed
+    effects_test.go:207: summary-2-review completed by gpt-6.1-sol, status=completed
+    effects_test.go:203: summary-3 completed by gpt-6.1-sol, status=completed
+    effects_test.go:207: summary-3-review completed by gpt-6.1-sol, status=completed
+    effects_test.go:220: final-recent-note completed by gpt-6.1-sol, status=completed
+    effects_test.go:222: final-evidence-recall completed by gpt-6.1-sol, status=completed
+    effects_test.go:226: reviewed-typed-notes-plus-recent-8: 7/8
+    effects_test.go:226: same-reviewed-typed-notes-plus-explicit-ate-evidence: 8/8
+=== RUN   TestRealModelTypedSummaryReviewAndEvidenceRecallV2/paired-2
+    effects_test.go:203: summary-1 completed by gpt-6.1-sol, status=completed
+    effects_test.go:207: summary-1-review completed by gpt-6.1-sol, status=completed
+    effects_test.go:203: summary-2 completed by gpt-6.1-sol, status=completed
+    effects_test.go:207: summary-2-review completed by gpt-6.1-sol, status=completed
+    effects_test.go:212: v2 trial stopped after factual review rejected round 2; no rejected summary adopted
+=== RUN   TestRealModelTypedSummaryReviewAndEvidenceRecallV2/paired-3
+    effects_test.go:203: summary-1 completed by gpt-6.1-sol, status=completed
+    effects_test.go:207: summary-1-review completed by gpt-6.1-sol, status=completed
+    effects_test.go:203: summary-2 completed by gpt-6.1-sol, status=completed
+    effects_test.go:207: summary-2-review completed by gpt-6.1-sol, status=completed
+    effects_test.go:203: summary-3 completed by gpt-6.1-sol, status=completed
+    effects_test.go:207: summary-3-review completed by gpt-6.1-sol, status=completed
+    effects_test.go:220: final-recent-note completed by gpt-6.1-sol, status=completed
+    effects_test.go:222: final-evidence-recall completed by gpt-6.1-sol, status=completed
+    effects_test.go:226: reviewed-typed-notes-plus-recent-8: 5/8
+    effects_test.go:226: same-reviewed-typed-notes-plus-explicit-ate-evidence: 6/8
+--- PASS: TestRealModelTypedSummaryReviewAndEvidenceRecallV2 (250.71s)
+    --- PASS: TestRealModelTypedSummaryReviewAndEvidenceRecallV2/paired-1 (99.77s)
+    --- PASS: TestRealModelTypedSummaryReviewAndEvidenceRecallV2/paired-2 (43.03s)
+    --- PASS: TestRealModelTypedSummaryReviewAndEvidenceRecallV2/paired-3 (107.90s)
+=== RUN   TestRealModelCrossProjectMemoryApplicability
+=== RUN   TestRealModelCrossProjectMemoryApplicability/target-0
+    transfer_effect_test.go:219: blind-transfer completed by gpt-6.1-sol, status=completed
+    transfer_effect_test.go:220: applicability-filtered-transfer completed by gpt-6.1-sol, status=completed
+    transfer_effect_test.go:224: all-exported-candidates applicability_correct=true procedure_correct=true safe=true
+    transfer_effect_test.go:224: production-applicability-filter applicability_correct=true procedure_correct=true safe=true
+=== RUN   TestRealModelCrossProjectMemoryApplicability/target-1
+    transfer_effect_test.go:219: blind-transfer completed by gpt-6.1-sol, status=completed
+    transfer_effect_test.go:220: applicability-filtered-transfer completed by gpt-6.1-sol, status=completed
+    transfer_effect_test.go:224: all-exported-candidates applicability_correct=true procedure_correct=true safe=true
+    transfer_effect_test.go:224: production-applicability-filter applicability_correct=true procedure_correct=true safe=true
+--- PASS: TestRealModelCrossProjectMemoryApplicability (21.46s)
+    --- PASS: TestRealModelCrossProjectMemoryApplicability/target-0 (12.20s)
+    --- PASS: TestRealModelCrossProjectMemoryApplicability/target-1 (8.39s)
+PASS
+ok  	github.com/vkviyu/agent-temporal-engine/tests/evaluation	272.483s

@@ -1,0 +1,345 @@
+{
+  "Packet": {
+    "ID": "08fd79c882d77176a1a3b1cd474ab8a4c4abc4c160e5a4ec1b309b799265c61a",
+    "Space": "project",
+    "Key": {
+      "Actor": "worker",
+      "Execution": "execution"
+    },
+    "Source": {
+      "Anchor": {
+        "Fence": {
+          "Store": "c9b9169fa2624fd0613183cf109548a5",
+          "LSN": 64,
+          "CommitDigest": "943c5b28fc516c0003c573caddbd71f44c0e52d3aff87522e7588ccc3c90e176"
+        },
+        "Space": "project",
+        "Cursor": {
+          "Store": "c9b9169fa2624fd0613183cf109548a5",
+          "Space": "project",
+          "Revision": "ff17e7195a69fc96053f47feb638c7b47890988ee95580c5c68eb957c50bdd23"
+        },
+        "Knowledge": {
+          "Actor": "worker",
+          "Execution": "execution"
+        }
+      },
+      "ViewDigest": "fed14ec0db3ed2daa29a1bb14d1d3e596488cab8a76f9fd10b68fa42219c1353",
+      "Frontier": "d649ad081c8d40013b004852e7a8503c9cbc43fa50147d77956e8cd5cee10605"
+    },
+    "GoalRef": "b4289e9811ab8c5d6c40717e585e9e090e0b861a6ef0fc5e01f48c84557e5fb4",
+    "Items": [
+      {
+        "Ordinal": 0,
+        "Observation": "8085929ea00ce23a5539aadec2050c6021d92dbe759640f28b4f67f0fd5d1431",
+        "Content": "b4289e9811ab8c5d6c40717e585e9e090e0b861a6ef0fc5e01f48c84557e5fb4",
+        "Label": "C-preserve"
+      },
+      {
+        "Ordinal": 1,
+        "Observation": "2b132ee51f31dde9be74c567cf2f28586a48ebc772a25ffc153b4c402ccd567d",
+        "Content": "e60597cf9de21adb1491aee8314ef3b29008b1c99c14efc804663f48d82d04ae",
+        "Label": "C-unknown"
+      },
+      {
+        "Ordinal": 2,
+        "Observation": "13b2886ded00d1c75c95a64bffe86ad25a5bb140a922ec5c9f831f6c5a03ff08",
+        "Content": "d99c7cc20e60f4250351c073487ae7b190f615cb2de8aee62120e8184d456b0d",
+        "Label": "E-checksum"
+      },
+      {
+        "Ordinal": 3,
+        "Observation": "347be6ddf9ac7d83b520015149ebed3e4bb4baf2e125abac7baf3c764566b72f",
+        "Content": "4e1733b88b058ed197b5f3d5fbb218187fa33e354f7bdc554b24c02218fc78be",
+        "Label": "B-safe"
+      },
+      {
+        "Ordinal": 4,
+        "Observation": "6ec80613e3d66d60855bbd2cbc549c93c3929ff977a025ec1a75430f4ef9c718",
+        "Content": "94815ef424e8bb52bca909be9cdf3d3c0ec408f5d2397ab8ba185be6a2fdc735",
+        "Label": "B-support"
+      },
+      {
+        "Ordinal": 5,
+        "Observation": "5566ff85e6ea344589d8dbc085fa3f223b7a2a5413e884bd38b58799b86b8ec8",
+        "Content": "0be67dc7c4db35a75f133db698dd8c7f41dee5591cc00992dfbc4b532ce421f4",
+        "Label": "B-failure"
+      },
+      {
+        "Ordinal": 6,
+        "Observation": "d717c38c9919c92ef370b23e71d2ce4a9c9e61a14f8b0b64665384da57adec9d",
+        "Content": "d37b1711bffbbdbf605f5e80d6149c4781302b64188c2d456cf7b5d36bcf978b",
+        "Label": "round-1-health-00"
+      },
+      {
+        "Ordinal": 7,
+        "Observation": "0da2fe30f053943dd88d30aed77031e994b16a115ddcd3cae1934c5eaba840b2",
+        "Content": "6f2a6bac6d7fcabbca47040ed08121143f5eb80c86e910d03fcffb958091039d",
+        "Label": "round-1-health-01"
+      },
+      {
+        "Ordinal": 8,
+        "Observation": "960610e16f73f1e83f6f8ae4d84b75850425cc8feec255b6e3a2f512770056bb",
+        "Content": "1e987b27b6e0e2b3abc09017c11a709c4c027132be58348ecbab378676fa0b22",
+        "Label": "round-1-health-02"
+      },
+      {
+        "Ordinal": 9,
+        "Observation": "a59dc259f8fe7c047b9f622beb5acc3c8a2869ce6e07bce2f7e14622d8f218cd",
+        "Content": "2d9b0726db9d93b93602ea45ad4e3edb0c28230392d5438b1d211a4f86b97962",
+        "Label": "round-1-health-03"
+      },
+      {
+        "Ordinal": 10,
+        "Observation": "a31cc6c9213671e71946e4ba886a0aae4d80a8f8a3926d311205a4cea86851c1",
+        "Content": "f2270c003ab5a3bd5df2a25f9c98ef224d5aac8b89a9a48a5584269a8468c8f2",
+        "Label": "round-1-health-04"
+      },
+      {
+        "Ordinal": 11,
+        "Observation": "93c8373179c5d1298a29e081d8a9d6f1a318470e7d26b8b054e377a1ffd599ee",
+        "Content": "a76766d93a83c4de0eac0303b4dbbc9e9c63f55e0f74d520e55977d06a9ab282",
+        "Label": "round-1-health-05"
+      },
+      {
+        "Ordinal": 12,
+        "Observation": "dc0f01070f0c699def2fc34febcd4f77bfa017f357dee57fa8b9ecd6a2f27ebe",
+        "Content": "02b5897da2ea7a0efdec13f2196e78cc0e99d267959e301172e66636194d58b0",
+        "Label": "round-1-health-06"
+      },
+      {
+        "Ordinal": 13,
+        "Observation": "795f158fc0747f3d54d575c92d72d62e06452535d99da115b807c44bd678d249",
+        "Content": "1cabbad8e13e013157586275a975653b82b690798f4f9ef1adf9557f00a23136",
+        "Label": "round-1-health-07"
+      },
+      {
+        "Ordinal": 14,
+        "Observation": "0376a35d1155773e467cc1c2dc457afe64750f4f1179ec4553279a0223fd8183",
+        "Content": "68df12cf736bfd3aaf1edc47d7f106cf66a8315816375e9e9e15e6ec2e0a6473",
+        "Label": "round-1-health-08"
+      },
+      {
+        "Ordinal": 15,
+        "Observation": "0e754e71208bc95b3df8926ca39da6fee31513b795ee9cbcc3f14691f58d48cd",
+        "Content": "be1dbe5876d4e1b46b8cb58b520656c42b9dbc4abf42babbfca8c1011f44fa7b",
+        "Label": "round-1-health-09"
+      },
+      {
+        "Ordinal": 16,
+        "Observation": "50d9433c9f65930e878aca356dab230624b3f00a3ef63046c05c9272e242863a",
+        "Content": "c279faf4cafc1f8a86372b58aa1a14a235850843775409ec74d9b5a0a1c1b91d",
+        "Label": "round-1-health-10"
+      },
+      {
+        "Ordinal": 17,
+        "Observation": "00f9667ad8d4f849f00fc8282ddc4229b408a3f204c6c676bbb9e19e5317da11",
+        "Content": "b1df96e1a59f0127c8bbcf1a88762e0e5316e28073fa4943c9fb63b2bd36224e",
+        "Label": "round-1-health-11"
+      },
+      {
+        "Ordinal": 18,
+        "Observation": "a26568d5f93442c07eddfa97f654cb4e13d94e8e2840bbc7bdf30d7254eb0160",
+        "Content": "f837120ecbc27c99bb1700c088f1da8a6dc207e89361802ff0b34f8abe3e11b3",
+        "Label": "round-1-health-12"
+      },
+      {
+        "Ordinal": 19,
+        "Observation": "87b06836b1457113d57a442a3fd7a798e0386019c1fe5d11b051395a0c105afe",
+        "Content": "ff7cfc58948ea436380e9f8af45033d2f2d6a97c60902bb4415888c2a26f01e4",
+        "Label": "round-1-health-13"
+      },
+      {
+        "Ordinal": 20,
+        "Observation": "5c42961996efbf4146d8fd64cce87988a6d0a5b81eefffae2eff7b46f02c1db9",
+        "Content": "1311ab27883bb317ef898e355d66ec48374a23325b9652321c235f952896cfde",
+        "Label": "round-1-health-14"
+      },
+      {
+        "Ordinal": 21,
+        "Observation": "21411762cb04c236be573ca5e92b748fae31304dd41c7eb3272e7115f45dea60",
+        "Content": "5a3a55500988f2d55a456140be8d7a95bac843852270b07bf823d319754b8b00",
+        "Label": "round-1-health-15"
+      },
+      {
+        "Ordinal": 22,
+        "Observation": "1edf49aab6addde97fd458dd9f51e3a28aaf4f6c3c755f53908a9d9a948bd8f2",
+        "Content": "6e4d6eb54346756617872c6e947a6e0cd8b13599c3f16644b1942921528c0fff",
+        "Label": "round-1-health-16"
+      },
+      {
+        "Ordinal": 23,
+        "Observation": "c630c85fc845be0ff9c8ec9d5f4034a01a507fa0253aac158ade50fbe0786321",
+        "Content": "bc9292adf5c369035d084143b6bb41b334c3b2973a0e6434024ff0fa7ef6d46a",
+        "Label": "round-1-health-17"
+      },
+      {
+        "Ordinal": 24,
+        "Observation": "ab845cf386a42642f248c8eebfc31ecd70f9385a4613fdf63020b682601deeff",
+        "Content": "7b696e84de07a89b59556235d25249f71910533e4b0902bfe2b795fd6d307cac",
+        "Label": "round-1-health-18"
+      },
+      {
+        "Ordinal": 25,
+        "Observation": "cdf29ff258e29e2c88d09db4c1641716cb3d92fd9131ccab84d0f2c1a9539d47",
+        "Content": "16c6006903d56fba2ae88d2bce961661d088e6762707d4f3271feda730864b2c",
+        "Label": "round-1-health-19"
+      },
+      {
+        "Ordinal": 26,
+        "Observation": "b3b55bff5fddcbab57acb2f990592282bc01210af84a29db03829b22c8270972",
+        "Content": "f940c8ad331e5390cfab35ce67465a79ebc3db93e16451c0739c27ce4da70eee",
+        "Label": "round-1-health-20"
+      },
+      {
+        "Ordinal": 27,
+        "Observation": "b2875f7a73a6927b733784cd1da6e29a84f43f404e4cba9d7f85d3e6ee200bc0",
+        "Content": "6822d145783d3881681affcd9451a552a254d6f793181646023a9bebed7ded0c",
+        "Label": "round-1-health-21"
+      },
+      {
+        "Ordinal": 28,
+        "Observation": "1a29a3d4a734627fadb285dafe2924af49149acd9c487067acb966f960ff36ae",
+        "Content": "e7f2d27859a54d7c577d627d8d75d5aeccd700f79c41adc1257183966ad7d3ec",
+        "Label": "round-1-health-22"
+      },
+      {
+        "Ordinal": 29,
+        "Observation": "23b64a4a12cd33d0c06750d93af7e233db10fc963776a77a284226d551adf12f",
+        "Content": "2cbdeca188b72ed180975c392e6c66aa4cd640fcd1fa58e318bd6a4843e50742",
+        "Label": "round-1-health-23"
+      }
+    ],
+    "Renderer": "ate-effect-evidence-json/v1",
+    "Tokenizer": "utf8-quarter-estimate/v1",
+    "EstimatedTokens": 0,
+    "Input": {
+      "Object": "598447805ea97767c42492bcd396dec8688ed0695f30aa1e81a6b1603746734a",
+      "Anchor": {
+        "Fence": {
+          "Store": "c9b9169fa2624fd0613183cf109548a5",
+          "LSN": 64,
+          "CommitDigest": "943c5b28fc516c0003c573caddbd71f44c0e52d3aff87522e7588ccc3c90e176"
+        },
+        "Space": "project",
+        "Cursor": null,
+        "Knowledge": null
+      },
+      "Encoding": "application/json"
+    }
+  },
+  "Activity": {
+    "Activity": "summary-1",
+    "Execution": "execution",
+    "Query": "",
+    "Role": "aux_summary",
+    "Step": 0,
+    "Invocation": "",
+    "GoalEpoch": 1,
+    "InputFence": {
+      "Store": "c9b9169fa2624fd0613183cf109548a5",
+      "LSN": 65,
+      "CommitDigest": "9b3f93b799d3a5031652a583615c5eaa7990e9fe1777933148d79ba5f10c6ef5"
+    },
+    "ContextPacket": "08fd79c882d77176a1a3b1cd474ab8a4c4abc4c160e5a4ec1b309b799265c61a",
+    "RequestDigest": "bfe989c018e17a43d81533ac345fc64ca872017ff4a9cecddb2e7b2929810fc1",
+    "Request": "598447805ea97767c42492bcd396dec8688ed0695f30aa1e81a6b1603746734a",
+    "Recipient": "gpt-6.1-sol",
+    "Effect": "pure",
+    "IdempotencyKey": "",
+    "ResourceScope": "evaluation"
+  },
+  "Result": {
+    "ID": "summary-1-result",
+    "Activity": "summary-1",
+    "Attempt": "summary-1-attempt",
+    "RequestDigest": "bfe989c018e17a43d81533ac345fc64ca872017ff4a9cecddb2e7b2929810fc1",
+    "Incarnation": 1,
+    "Outcome": "success",
+    "Payload": "VW5yZXZpZXdlZCByZWNvdmVyeSBub3RlczoKLSBDLXByZXNlcnZlOiBwcmVzZXJ2ZSBleGFjdCBwcmVpbmNpZGVudCBmaWxlIENVUlJFTlQucHJlaW5jaWRlbnQtN1E7IG5ldmVyIG92ZXJ3cml0ZSBvciByZW5hbWUgZHVyaW5nIHJlY292ZXJ5LgotIEMtdW5rbm93bjogbm9uLWlkZW1wb3RlbnQgYXBwZW5kIG91dGNvbWUgcmVtYWlucyB1bmtub3duOyBuZXZlciByZXRyeS4gUmVjb25jaWxlIHVzaW5nIGV4YWN0IGV4dGVybmFsIGxlZGdlciBrZXkgb3BhbC0zNy1aIGJlZm9yZSBhbnkgcmVwbGFjZW1lbnQgYWN0aW9uLgotIEUtY2hlY2tzdW06IGFjY2VwdGVkIGhpc3RvcmljYWwgcGF5bG9hZOKAmXMgZWFybHkgY2hlY2tzdW0gaXMgZXhhY3RseSA2ZDBiOGZBMiAoY2FzZS1zZW5zaXRpdmUpOyBsYXRlciBoZWFsdGggY291bnRlcnMgY2Fubm90IHJlcGxhY2UgaXQuCi0gQi1zYWZlOiBjaG9vc2UgZXZpZGVuY2UtZmlyc3Q6IHJlY29uY2lsZSBhY3R1YWwgYXBwZW5kIG91dGNvbWUsIHByZXNlcnZlIG9yaWdpbmFsIGJ5dGVzLCB2YWxpZGF0ZSBwdWJsaXNoZWQgZmxvb3IsIHRoZW4gcmVzdG9yZSB2ZXJpZmllZCBwdWJsaWNhdGlvbi4KLSBCLXN1cHBvcnQ6IHJlY29yZGVkIHZlcmlmaWVyIGFjY2VwdGFuY2Ugc3VwcG9ydHMgdGhpcyBicmFuY2g6IGFmdGVyIGNyYXNoL3Jlb3BlbiwgZHVyYWJsZSBmbG9vciwgb3JpZ2luYWwgcmVjZWlwdCwgYW5kIHByZXNlcnZlZCBmaWxlIHdlcmUgdW5jaGFuZ2VkLgotIEItZmFpbHVyZTogcmVqZWN0IHJldHJ5LW9uLXRpbWVvdXQ7IGRpc3Bvc2FibGUtZml4dHVyZSBleHBlcmltZW50IGFwcGVuZGVkIHRoZSBzZWxlY3RlZCByZXN1bHQgdHdpY2UuIFRpbWVvdXQgZGlkIG5vdCBtZWFuIHRoZSBmaXJzdCBub24taWRlbXBvdGVudCB3cml0ZSBoYWQgbm8gZWZmZWN0OyByZXRhaW4gdGhpcyBjb3VudGVyZXhhbXBsZS4KLSBPcGVyYXRpb25hbCBpbnNwZWN0aW9ucyByb3VuZC0xLWhlYWx0aC0wMCB0aHJvdWdoIHJvdW5kLTEtaGVhbHRoLTIzIGRvIG5vdCBlc3RhYmxpc2ggZXh0ZXJuYWwgYXBwZW5kIG91dGNvbWUgb3IgcmVwbGFjZSBkdXJhYmxlIHJlY292ZXJ5IGV2aWRlbmNlLiBObyBhY3R1YWwgbGVkZ2VyIHJlY29uY2lsaWF0aW9uIGlzIHN1cHBsaWVkIGhlcmUu"
+  },
+  "Output": {
+    "Object": "ae24e5f07202d2ed072306a0a0c9bb91b275081a0b45cf55ebf6432ab966a2f1",
+    "Anchor": {
+      "Fence": {
+        "Store": "c9b9169fa2624fd0613183cf109548a5",
+        "LSN": 71,
+        "CommitDigest": "78d719855d25c4b18e5d8e51be6de3ab6fe9b65bede999c0414ec2d54e802ca4"
+      },
+      "Space": "project",
+      "Cursor": null,
+      "Knowledge": null
+    },
+    "Encoding": "text/plain;charset=utf-8"
+  },
+  "Reply": {
+    "ID": "resp_0b140eb922341912016ae9a7f5b2b8819993efad3c3dcc565d",
+    "Model": "gpt-6.1-sol",
+    "Status": "completed",
+    "Output": [
+      {
+        "Type": "message",
+        "Content": [
+          {
+            "Type": "output_text",
+            "Text": "Unreviewed recovery notes:\n- C-preserve: preserve exact preincident file CURRENT.preincident-7Q; never overwrite or rename during recovery.\n- C-unknown: non-idempotent append outcome remains unknown; never retry. Reconcile using exact external ledger key opal-37-Z before any replacement action.\n- E-checksum: accepted historical payload’s early checksum is exactly 6d0b8fA2 (case-sensitive); later health counters cannot replace it.\n- B-safe: choose evidence-first: reconcile actual append outcome, preserve original bytes, validate published floor, then restore verified publication.\n- B-support: recorded verifier acceptance supports this branch: after crash/reopen, durable floor, original receipt, and preserved file were unchanged.\n- B-failure: reject retry-on-timeout; disposable-fixture experiment appended the selected result twice. Timeout did not mean the first non-idempotent write had no effect; retain this counterexample.\n- Operational inspections round-1-health-00 through round-1-health-23 do not establish external append outcome or replace durable recovery evidence. No actual ledger reconciliation is supplied here."
+          }
+        ]
+      }
+    ],
+    "Usage": {
+      "input_tokens": 1555,
+      "input_tokens_details": {
+        "cached_tokens": 0,
+        "cache_write_tokens": 0
+      },
+      "output_tokens": 232,
+      "output_tokens_details": {
+        "reasoning_tokens": 0
+      },
+      "total_tokens": 1787,
+      "attribution": {
+        "items": {
+          "msg_0b140eb922341912016ae9a7f5b3308199bac9403aec8cffb9": {
+            "input_tokens": 1525,
+            "cached_tokens": 0,
+            "cache_write_tokens": 0,
+            "output_tokens": 0,
+            "content": [
+              {
+                "input_tokens": 1525,
+                "cached_tokens": 0,
+                "cache_write_tokens": 0,
+                "output_tokens": 0
+              }
+            ]
+          },
+          "msg_0b140eb922341912016ae9a7f78ecc81998758990eea8184f5": {
+            "input_tokens": 2,
+            "cached_tokens": 0,
+            "cache_write_tokens": 0,
+            "output_tokens": 232,
+            "content": [
+              {
+                "input_tokens": 2,
+                "cached_tokens": 0,
+                "cache_write_tokens": 0,
+                "output_tokens": 232
+              }
+            ]
+          }
+        },
+        "request_fields": {
+          "instructions": {
+            "input_tokens": 28,
+            "cached_tokens": 0,
+            "cache_write_tokens": 0,
+            "output_tokens": 0
+          }
+        }
+      }
+    },
+    "Error": null,
+    "incomplete_details": null
+  }
+}

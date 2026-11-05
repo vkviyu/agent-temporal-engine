@@ -1,0 +1,205 @@
+{
+  "Packet": {
+    "ID": "387037b6d5c3ceacf34c160fbe13391e18321f18e84dfec1141e2f7d5e401eba",
+    "Space": "target-project-1",
+    "Key": {
+      "Actor": "target-worker",
+      "Execution": "target-execution"
+    },
+    "Source": {
+      "Anchor": {
+        "Fence": {
+          "Store": "836a7912611d4e95a6f88c64abb64a17",
+          "LSN": 53,
+          "CommitDigest": "58ed6cd0ea75f40415f90903c0d67a8aead431b7942345f1f322111b4baaa717"
+        },
+        "Space": "target-project-1",
+        "Cursor": {
+          "Store": "836a7912611d4e95a6f88c64abb64a17",
+          "Space": "target-project-1",
+          "Revision": "4a816b1e057d8f2fd2da41d9563810099cac7dc0a01c3d9ee23eece7e4bd7b45"
+        },
+        "Knowledge": {
+          "Actor": "target-worker",
+          "Execution": "target-execution"
+        }
+      },
+      "ViewDigest": "f3cae83fd668d4cdac3d68feba00fa13a9ed749865bbf74e096c0a3eb4774f2e",
+      "Frontier": "af7a9d45218bbfa097fcf8a1288a42e9b79d49c92769fa23bf430307e8826e06"
+    },
+    "GoalRef": "56e273516b33b3be3365611b11029248b109961c44ff8dc65322d25d7694ed35",
+    "Items": [
+      {
+        "Ordinal": 0,
+        "Observation": "71792cc7fccb393ee9e116b6c6a393767d532f048b6f20c6561bb311e53aa131",
+        "Content": "56e273516b33b3be3365611b11029248b109961c44ff8dc65322d25d7694ed35",
+        "Label": "target-environment"
+      },
+      {
+        "Ordinal": 1,
+        "Observation": "bcac0ceaedeac39d1b5ab6f28833096ba69c5436d995505590481925d14e0e9e",
+        "Content": "a9e7a7096ac27b987fef61e3661ff4e5863fb066d1c50ac721ef315375a61afc",
+        "Label": "foreign-17ec15cb40315bbf7718a8232a8d1fa1dc5ad44b9223ca65d6cedc6424f4cfa2"
+      },
+      {
+        "Ordinal": 2,
+        "Observation": "6557fc403a82a39bd8dcadabf77f0a06f011d1a6fc92c7f0e74c2dec3ba4641e",
+        "Content": "29bfd0470961b1e45195fd76e2e19b2a2fc5211b97b2697bfff405aec87e2ab1",
+        "Label": "foreign-c782ce9be403e33c119c1683e3280c0aca6074eda982365060e415670b640bf4"
+      },
+      {
+        "Ordinal": 3,
+        "Observation": "ac489461ae7fd8a5389122ee37f69a4bd621b4e951f8a9a3e9872877cb2377a2",
+        "Content": "de76151d7deb5ee7b4f1bd203bcbd527c23ad39fd65de93b329794c544f40a71",
+        "Label": "foreign-f192f3f270f93d2fcc0dbf1ebfa0f31dc19c991c5c509ed2c37b4174dfe50ad4"
+      }
+    ],
+    "Renderer": "ate-effect-evidence-json/v1",
+    "Tokenizer": "utf8-quarter-estimate/v1",
+    "EstimatedTokens": 0,
+    "Input": {
+      "Object": "b0d789837e509803442aa579cb42f86b19ac22a821b90cbb40117a6ba68e42ff",
+      "Anchor": {
+        "Fence": {
+          "Store": "836a7912611d4e95a6f88c64abb64a17",
+          "LSN": 53,
+          "CommitDigest": "58ed6cd0ea75f40415f90903c0d67a8aead431b7942345f1f322111b4baaa717"
+        },
+        "Space": "target-project-1",
+        "Cursor": null,
+        "Knowledge": null
+      },
+      "Encoding": "application/json"
+    }
+  },
+  "Activity": {
+    "Activity": "blind-transfer",
+    "Execution": "target-execution",
+    "Query": "",
+    "Role": "aux_summary",
+    "Step": 0,
+    "Invocation": "",
+    "GoalEpoch": 1,
+    "InputFence": {
+      "Store": "836a7912611d4e95a6f88c64abb64a17",
+      "LSN": 54,
+      "CommitDigest": "38c1834e3739bf220cb528b316b963181eabb4f036d9db3ee54cecda0eda9101"
+    },
+    "ContextPacket": "387037b6d5c3ceacf34c160fbe13391e18321f18e84dfec1141e2f7d5e401eba",
+    "RequestDigest": "aa219ae115080aae36782cf3137824e7170b8b28945a91368693a804089a2a42",
+    "Request": "b0d789837e509803442aa579cb42f86b19ac22a821b90cbb40117a6ba68e42ff",
+    "Recipient": "gpt-6.1-sol",
+    "Effect": "pure",
+    "IdempotencyKey": "",
+    "ResourceScope": "evaluation",
+    "Contract": {
+      "Version": "",
+      "Definition": "",
+      "Recipient": "",
+      "AllowsMutation": false,
+      "VerifiedPure": false,
+      "HistoricalRead": false,
+      "KeyNamespace": "",
+      "RetentionNanos": 0,
+      "DifferentRequest": "",
+      "ResultQuery": "",
+      "ResourceFence": "",
+      "Compensation": "",
+      "CompensationLimit": "",
+      "LateArrivalFence": ""
+    }
+  },
+  "Result": {
+    "ID": "blind-transfer-result",
+    "Activity": "blind-transfer",
+    "Attempt": "blind-transfer-attempt",
+    "RequestDigest": "aa219ae115080aae36782cf3137824e7170b8b28945a91368693a804089a2a42",
+    "Incarnation": 1,
+    "Outcome": "success",
+    "Payload": "eyJhcHBseV9tZW1vcnkiOmZhbHNlLCJwcm9jZWR1cmVfaWQiOm51bGwsInJldHJ5X3Vua25vd24iOmZhbHNlfQ=="
+  },
+  "Output": {
+    "Object": "13d887511519a93f5b5fb0ffc7e1393d390dd28c368fea2b00d99eb474738f5d",
+    "Anchor": {
+      "Fence": {
+        "Store": "836a7912611d4e95a6f88c64abb64a17",
+        "LSN": 60,
+        "CommitDigest": "8c05a051f563618f0bdf2531e2e910a9b57197475a8e8d7c53c0839d373a8d6f"
+      },
+      "Space": "target-project-1",
+      "Cursor": null,
+      "Knowledge": null
+    },
+    "Encoding": "text/plain;charset=utf-8"
+  },
+  "Reply": {
+    "ID": "resp_0abf18310032964a016aeb2015f62487d2af86f7d45f64a779",
+    "Model": "gpt-6.1-sol",
+    "Status": "completed",
+    "Output": [
+      {
+        "Type": "message",
+        "Content": [
+          {
+            "Type": "output_text",
+            "Text": "{\"apply_memory\":false,\"procedure_id\":null,\"retry_unknown\":false}"
+          }
+        ]
+      }
+    ],
+    "Usage": {
+      "input_tokens": 474,
+      "input_tokens_details": {
+        "cached_tokens": 0,
+        "cache_write_tokens": 0
+      },
+      "output_tokens": 20,
+      "output_tokens_details": {
+        "reasoning_tokens": 0
+      },
+      "total_tokens": 494,
+      "attribution": {
+        "items": {
+          "msg_0abf18310032964a016aeb2015f70c87d28b257d2843311465": {
+            "input_tokens": 444,
+            "cached_tokens": 0,
+            "cache_write_tokens": 0,
+            "output_tokens": 0,
+            "content": [
+              {
+                "input_tokens": 444,
+                "cached_tokens": 0,
+                "cache_write_tokens": 0,
+                "output_tokens": 0
+              }
+            ]
+          },
+          "msg_0abf18310032964a016aeb201783e087d2b1194448f37a03fb": {
+            "input_tokens": 2,
+            "cached_tokens": 0,
+            "cache_write_tokens": 0,
+            "output_tokens": 20,
+            "content": [
+              {
+                "input_tokens": 2,
+                "cached_tokens": 0,
+                "cache_write_tokens": 0,
+                "output_tokens": 20
+              }
+            ]
+          }
+        },
+        "request_fields": {
+          "instructions": {
+            "input_tokens": 28,
+            "cached_tokens": 0,
+            "cache_write_tokens": 0,
+            "output_tokens": 0
+          }
+        }
+      }
+    },
+    "Error": null,
+    "incomplete_details": null
+  }
+}

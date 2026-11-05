@@ -1,0 +1,270 @@
+{
+  "ID": "f55624ebd45e29db94c72e299248c2ac447e705d35f33f37d974ccab6bde545c",
+  "Space": "project",
+  "Source": {
+    "Anchor": {
+      "Fence": {
+        "Store": "c21710361d4aec0c1e12c51921c366f2",
+        "LSN": 134,
+        "CommitDigest": "d8245dba622159dba4f66eb4b2e3b0ba1d442c61c91bff508eaef0d0cbafc032"
+      },
+      "Space": "project",
+      "Cursor": {
+        "Store": "c21710361d4aec0c1e12c51921c366f2",
+        "Space": "project",
+        "Revision": "993555defa0e1e43a4c0fa094bcee868955c328880c611fb075fcee5df444b8e"
+      },
+      "Knowledge": {
+        "Actor": "worker",
+        "Execution": "execution"
+      }
+    },
+    "ViewDigest": "621cf4fee6fbcae50eb4d6f7d895ec0fea3b19f908bbc01d9de05e087eabe16f",
+    "Frontier": "36cf598d6b3f9bf1397a0167988e016f2af5d2c893b403f7f1868f292afe29c6"
+  },
+  "Sources": [
+    {
+      "Observation": "19c5ec2b1dc4a26f8193a14505c861ca45b0b1bd5876693556fa76a0ac8f7f30",
+      "Content": "77faf5365dad985f4e734d2cc10d602c99b5ee3162c61ba082994441cbf530ec",
+      "PayloadKind": "summary"
+    },
+    {
+      "Observation": "b1e756f4faf1a4123dbcc7c0395d2dbc4bdc8aa889834a5f8a3575f4e32f262f",
+      "Content": "a15da9f74af46f28206c14ccf491740f2dc97cc44da4b1be58273de169bc6535",
+      "PayloadKind": ""
+    },
+    {
+      "Observation": "d4f6c8acf05cfd5e955faca5b6df45fbe83fb4200818466471f78c8f8f48948d",
+      "Content": "e2877fea2ead67991043b32e3065bffea890aa02e73d477337ba96221792b25a",
+      "PayloadKind": ""
+    },
+    {
+      "Observation": "a350d09baedcd0f9774833f081379db293c61c1a2effb0761ba270ee82296f72",
+      "Content": "abdb9b7589254adc55c08a31580c6e23bf7cd5ca5a19a4feca8502605b4a8119",
+      "PayloadKind": ""
+    },
+    {
+      "Observation": "c42f17290aa420c90671808947724bd134e229759a39389e8526948c25885136",
+      "Content": "b1bf0ea84ae96ccf8307fc7c79efd5d37612b3603812fd00c6d5863594133bf1",
+      "PayloadKind": ""
+    },
+    {
+      "Observation": "b33e334960c712829d035698658a91b8c7533d801b479bb2f8fe576d20739283",
+      "Content": "e5f9dd00d8148e408adce1f19250396347e65664ff402273bcfb92c85c145586",
+      "PayloadKind": ""
+    },
+    {
+      "Observation": "39154f5fe583b3608310a34d32d108ed6e8247a5fd4a1e9fe125e5f88547cebc",
+      "Content": "8b0b00c3e38475ab5f1b19fd56567c9ac34e5f7b03dda4c9d264b4c71f0072a2",
+      "PayloadKind": ""
+    },
+    {
+      "Observation": "178783167095b0cb6a19971df6879960d2faaf2c68a45f6169220790ed61078e",
+      "Content": "587441536b2e5ab7359b23128409b07eba53447355e4c459bee5878cf9c5c96f",
+      "PayloadKind": ""
+    },
+    {
+      "Observation": "5032f8440757d7c240bfd9c14ed8176c3405b7cf18da448d4705d2cad0ca0215",
+      "Content": "7e16f1bbac4e702513a2368f9dc6b9c548c7e2f937576f2af972016867829c44",
+      "PayloadKind": ""
+    },
+    {
+      "Observation": "76dbce17671520ac3d9af1317554cc4319a2bbb750152b4166b8ab0666402b7e",
+      "Content": "e2b078217c49e8eed2da917a27c6f92b53962ec7b9cd72265684a4384ecd0796",
+      "PayloadKind": ""
+    },
+    {
+      "Observation": "f9dde2f77a5dd531c11abd6b0ec81b09c14ce43a13af15b201eb96d3fe8dd8b1",
+      "Content": "629ad3d98cd032c5ca729f8952c91ab427a9d528fe5675401d0acba56f47b1a9",
+      "PayloadKind": ""
+    },
+    {
+      "Observation": "71e8e22f5291b4905239285b3404c20129e889e75ecd6b551f1c4ec9f4d40cb1",
+      "Content": "46ef84761f353dd8ea7062468167b884ebebe13fef1b189e317a20c879432add",
+      "PayloadKind": ""
+    },
+    {
+      "Observation": "39cc9e16c399e7d7d253eebd3823d6d74948b49334b787dfeac3ea58f2ceb6de",
+      "Content": "081dc5d11d03b945555a1a87e0ef54f7bd34919a33c0829a1d01d82ef28f9dcc",
+      "PayloadKind": ""
+    },
+    {
+      "Observation": "d1a0dca3ae53626c4286514aa9812a68c62f88a46d83247a2b68ac511a498d58",
+      "Content": "727daad1e35161180faa12bbc9906d732953dcf5df419385fc82a6b36c951898",
+      "PayloadKind": ""
+    },
+    {
+      "Observation": "d5fa57658fe3b4c8dd643c8d19fe6ca1298d747c51dd4ebaf4c978ff848dfa88",
+      "Content": "cf6691cce592e8dd53832e96db1811cb3026df0c2b99c0d8f0137d6c5474d0ec",
+      "PayloadKind": ""
+    },
+    {
+      "Observation": "3086c86dc24268822708629eb170cae2a98961f9a50d715dae94bf8951c1c32b",
+      "Content": "24e7a8c2830ba7e173d177185703b546861cc4b760d524bb4f6582f168dafae0",
+      "PayloadKind": ""
+    },
+    {
+      "Observation": "8e31a9add3f92f3f610aff312eb1e0a2db37d2d48a5320a36fdf46dbf54ca963",
+      "Content": "7091606de4a97bbf9fb934a652d24a0801385dcb93ef70774c486d77f63565a4",
+      "PayloadKind": ""
+    },
+    {
+      "Observation": "a0d9eb7eee87b5f9a7b6c3e699f5755f049a46dee5c62a70404d64bab39854ae",
+      "Content": "c28fb97cac50b46ee78311c5b00318fac591e0d6d209e2d5f840fef35f7ac791",
+      "PayloadKind": ""
+    },
+    {
+      "Observation": "16e6d6d327fa3166ddcb67b3dc0391a567c9142ebdf644851401c698f0cd2be8",
+      "Content": "0f877f1469dad7d72cc706c76a804f4b7c388b9591de782178a3598b340d328f",
+      "PayloadKind": ""
+    },
+    {
+      "Observation": "76553dd40cb30b0746a83fb2e9377ec984a6bf5fab4897628186bdcb5761e13e",
+      "Content": "e0fcfb07fb740c7291fe4a0d41d008be0574c86b1b05484872843a77ec7e66c4",
+      "PayloadKind": ""
+    },
+    {
+      "Observation": "453fb3b0e4328cca94a85da1cb4fff9684c1368e364d4232e8e9404e6bc267c9",
+      "Content": "c929502bd69c6e52210a387641393c7440dda8a3c3f394dbbf6cefe39bd4b605",
+      "PayloadKind": ""
+    },
+    {
+      "Observation": "0b13a01c29ef55b025e0f66562b53d7b12b094831ff61437d5098714bf8553db",
+      "Content": "f8e5e5c0499bcf03370696e410f195145c64e613edca925528d3b12842da54e0",
+      "PayloadKind": ""
+    },
+    {
+      "Observation": "d359528ee2c77d0f316abe9b254f7c554221b87bb3822672bda2cca83ae37eff",
+      "Content": "d167078d07dd19e9efaffe3d78a5768c30bd43183376eab2f7914fb7fb9dc31b",
+      "PayloadKind": ""
+    },
+    {
+      "Observation": "e7916f45f06f31c577283c1dafa2d226e24d2efe669a3752d24af91e13ffd27f",
+      "Content": "78c050ee62084ec55c87c8a9e35af5acc8ada896e3092a350274b3fbf8dbb4fd",
+      "PayloadKind": ""
+    },
+    {
+      "Observation": "1c4a2ce236fbec5306cbb8bffd9f695388fa4465bdda7f908b73414f9c4cdcf8",
+      "Content": "e41b027db8a8eb101cd7e9d951e4d69ee05af5626678aeaed3a2a85b3e1afc83",
+      "PayloadKind": ""
+    }
+  ],
+  "SourceSetDigest": "93457a1a3c67c62c6a23ede54bb0b893a3413bac53a33ac40215becab6bf566d",
+  "Topics": [
+    {
+      "Name": "summary-2",
+      "Observations": [
+        "19c5ec2b1dc4a26f8193a14505c861ca45b0b1bd5876693556fa76a0ac8f7f30",
+        "b1e756f4faf1a4123dbcc7c0395d2dbc4bdc8aa889834a5f8a3575f4e32f262f",
+        "d4f6c8acf05cfd5e955faca5b6df45fbe83fb4200818466471f78c8f8f48948d",
+        "a350d09baedcd0f9774833f081379db293c61c1a2effb0761ba270ee82296f72",
+        "c42f17290aa420c90671808947724bd134e229759a39389e8526948c25885136",
+        "b33e334960c712829d035698658a91b8c7533d801b479bb2f8fe576d20739283",
+        "39154f5fe583b3608310a34d32d108ed6e8247a5fd4a1e9fe125e5f88547cebc",
+        "178783167095b0cb6a19971df6879960d2faaf2c68a45f6169220790ed61078e",
+        "5032f8440757d7c240bfd9c14ed8176c3405b7cf18da448d4705d2cad0ca0215",
+        "76dbce17671520ac3d9af1317554cc4319a2bbb750152b4166b8ab0666402b7e",
+        "f9dde2f77a5dd531c11abd6b0ec81b09c14ce43a13af15b201eb96d3fe8dd8b1",
+        "71e8e22f5291b4905239285b3404c20129e889e75ecd6b551f1c4ec9f4d40cb1",
+        "39cc9e16c399e7d7d253eebd3823d6d74948b49334b787dfeac3ea58f2ceb6de",
+        "d1a0dca3ae53626c4286514aa9812a68c62f88a46d83247a2b68ac511a498d58",
+        "d5fa57658fe3b4c8dd643c8d19fe6ca1298d747c51dd4ebaf4c978ff848dfa88",
+        "3086c86dc24268822708629eb170cae2a98961f9a50d715dae94bf8951c1c32b",
+        "8e31a9add3f92f3f610aff312eb1e0a2db37d2d48a5320a36fdf46dbf54ca963",
+        "a0d9eb7eee87b5f9a7b6c3e699f5755f049a46dee5c62a70404d64bab39854ae",
+        "16e6d6d327fa3166ddcb67b3dc0391a567c9142ebdf644851401c698f0cd2be8",
+        "76553dd40cb30b0746a83fb2e9377ec984a6bf5fab4897628186bdcb5761e13e",
+        "453fb3b0e4328cca94a85da1cb4fff9684c1368e364d4232e8e9404e6bc267c9",
+        "0b13a01c29ef55b025e0f66562b53d7b12b094831ff61437d5098714bf8553db",
+        "d359528ee2c77d0f316abe9b254f7c554221b87bb3822672bda2cca83ae37eff",
+        "e7916f45f06f31c577283c1dafa2d226e24d2efe669a3752d24af91e13ffd27f",
+        "1c4a2ce236fbec5306cbb8bffd9f695388fa4465bdda7f908b73414f9c4cdcf8"
+      ]
+    }
+  ],
+  "Omissions": null,
+  "Applicability": {
+    "Goal": "journal-recovery",
+    "Environment": "synthetic-linux-fsync",
+    "SchemaVersion": 1,
+    "Tags": [
+      "evaluation",
+      "factual-review"
+    ]
+  },
+  "Confidence": 0,
+  "Generation": {
+    "Activity": "summary-2",
+    "Attempt": "summary-2-attempt",
+    "Result": "summary-2-result",
+    "Model": "gpt-6.1-sol",
+    "PromptVersion": "recursive-notes-160-words/v1",
+    "PolicyVersion": "factual-summary-review/v1",
+    "Input": {
+      "Object": "d6af3485e6bd30feeb980a27d39ced751e87d73062dd4d90211acd10fb7e712e",
+      "Anchor": {
+        "Fence": {
+          "Store": "c21710361d4aec0c1e12c51921c366f2",
+          "LSN": 134,
+          "CommitDigest": "d8245dba622159dba4f66eb4b2e3b0ba1d442c61c91bff508eaef0d0cbafc032"
+        },
+        "Space": "project",
+        "Cursor": null,
+        "Knowledge": null
+      },
+      "Encoding": "application/json"
+    },
+    "Output": {
+      "Object": "bb0c9b63321408edba3bffc25f32b51b01cfef6cc7aa97a174ab6c265251c2e4",
+      "Anchor": {
+        "Fence": {
+          "Store": "c21710361d4aec0c1e12c51921c366f2",
+          "LSN": 141,
+          "CommitDigest": "76bad1e4d1c21fc3d2207d7af97bc2c0e116a8ce385e01251e7b16192f620b1c"
+        },
+        "Space": "project",
+        "Cursor": null,
+        "Knowledge": null
+      },
+      "Encoding": "text/plain;charset=utf-8"
+    }
+  },
+  "GeneratedAt": "2026-11-04T12:06:58.76271Z",
+  "VisibleAt": "2026-11-04T12:06:58.76271Z",
+  "Validation": {
+    "Status": "rejected",
+    "Reviewer": "summary-2-review",
+    "PolicyVersion": "factual-summary-review/v1",
+    "Evidence": [
+      {
+        "Object": "90c998df7793d9c313ca45ff9e3ce74225e9e50b63503a10f134d9d28e1a02ee",
+        "Anchor": {
+          "Fence": {
+            "Store": "c21710361d4aec0c1e12c51921c366f2",
+            "LSN": 144,
+            "CommitDigest": "a7b2364df97ecae630ecd6497fcb204e67a50529036cb0416a58543741c25623"
+          },
+          "Space": "project",
+          "Cursor": null,
+          "Knowledge": null
+        },
+        "Encoding": "application/json"
+      },
+      {
+        "Object": "cf1719dbdfe61dfb430362feffe11d0e7170f2b1b2e27cdf9cbee4975c54eca7",
+        "Anchor": {
+          "Fence": {
+            "Store": "c21710361d4aec0c1e12c51921c366f2",
+            "LSN": 151,
+            "CommitDigest": "ba318256b3d928d6d67e7678ca8e6dc34807cd8145657a16ca15313280cce38b"
+          },
+          "Space": "project",
+          "Cursor": null,
+          "Knowledge": null
+        },
+        "Encoding": "text/plain;charset=utf-8"
+      }
+    ]
+  },
+  "Replaces": ""
+}

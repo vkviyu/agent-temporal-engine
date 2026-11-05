@@ -1,0 +1,395 @@
+{
+  "policy": "factual-summary-review/v1",
+  "review_record": {
+    "Packet": {
+      "ID": "531f1afe5ee437cd7e550eb11d78a24209aa6450f6424f4fae38987e16c84e8a",
+      "Space": "project",
+      "Key": {
+        "Actor": "worker",
+        "Execution": "execution"
+      },
+      "Source": {
+        "Anchor": {
+          "Fence": {
+            "Store": "734dabfa1be818a2c306846a403220ab",
+            "LSN": 147,
+            "CommitDigest": "b06370b005b325ca4e1ec88def82569fad5d88329e7a67f4da89278544d15745"
+          },
+          "Space": "project",
+          "Cursor": {
+            "Store": "734dabfa1be818a2c306846a403220ab",
+            "Space": "project",
+            "Revision": "e7fd166638f5c740bb906e24e47d93ca62a8647eb22113d5ca7e099bd95a1772"
+          },
+          "Knowledge": {
+            "Actor": "worker",
+            "Execution": "execution"
+          }
+        },
+        "ViewDigest": "1fea0975a15e3447ba806a4e4d437bac605aba173796e938d5e327ccaaace6de",
+        "Frontier": "447bca197955d17d14ec90cf5d0b283f933bd9a5ed865aa02e126931c4acd2d9"
+      },
+      "GoalRef": "db2a8822dc298e6678cccb19455f307a404a0fcbdf4fbe513c7d2fabdba14f5e",
+      "Items": [
+        {
+          "Ordinal": 0,
+          "Observation": "51dafe46b8250995fe61ecd08d44cec4622f13fb4187befcc60b9f2e918a0184",
+          "Content": "db2a8822dc298e6678cccb19455f307a404a0fcbdf4fbe513c7d2fabdba14f5e",
+          "Label": "summary-1-validated-notes"
+        },
+        {
+          "Ordinal": 1,
+          "Observation": "5fa5a7b600bdc3cd9c915907a6406843fc0f961e9cab73fe1aa6c74f9922dd57",
+          "Content": "a15da9f74af46f28206c14ccf491740f2dc97cc44da4b1be58273de169bc6535",
+          "Label": "round-2-health-00"
+        },
+        {
+          "Ordinal": 2,
+          "Observation": "7964ca812fcfd9ca8489ebc309b6ff3e22769ea1d55ef593d7330852bbd2d64c",
+          "Content": "e2877fea2ead67991043b32e3065bffea890aa02e73d477337ba96221792b25a",
+          "Label": "round-2-health-01"
+        },
+        {
+          "Ordinal": 3,
+          "Observation": "6a5ef09a2b3a75b3cddd3b7b08b83e443cc1b87a5e3ff1365109efe128ba7b57",
+          "Content": "abdb9b7589254adc55c08a31580c6e23bf7cd5ca5a19a4feca8502605b4a8119",
+          "Label": "round-2-health-02"
+        },
+        {
+          "Ordinal": 4,
+          "Observation": "e78e4496d3265e83f7b1b6b22532cccd181f87b4146bfb7b04e1391bb5f7ecb6",
+          "Content": "b1bf0ea84ae96ccf8307fc7c79efd5d37612b3603812fd00c6d5863594133bf1",
+          "Label": "round-2-health-03"
+        },
+        {
+          "Ordinal": 5,
+          "Observation": "428a97cbb71e9c4ec8567a7bedcc07b4a678c54a607f43c07a10598bf0979a73",
+          "Content": "e5f9dd00d8148e408adce1f19250396347e65664ff402273bcfb92c85c145586",
+          "Label": "round-2-health-04"
+        },
+        {
+          "Ordinal": 6,
+          "Observation": "ad4831a45217ade374f5ca7b57e7126c7e9ac41831eaab53a69db68f5659ad24",
+          "Content": "8b0b00c3e38475ab5f1b19fd56567c9ac34e5f7b03dda4c9d264b4c71f0072a2",
+          "Label": "round-2-health-05"
+        },
+        {
+          "Ordinal": 7,
+          "Observation": "5990b7607dcaa97af0c949058326a04ca83d3c19ec4e8663f63405ab75700fa9",
+          "Content": "587441536b2e5ab7359b23128409b07eba53447355e4c459bee5878cf9c5c96f",
+          "Label": "round-2-health-06"
+        },
+        {
+          "Ordinal": 8,
+          "Observation": "98761e3ddd244060258d503547fb2a69823bf351734ec4bdf3888eb765e387ae",
+          "Content": "7e16f1bbac4e702513a2368f9dc6b9c548c7e2f937576f2af972016867829c44",
+          "Label": "round-2-health-07"
+        },
+        {
+          "Ordinal": 9,
+          "Observation": "ff0a4f67e0ee69ed1aa882e58a083a2b48f6ae7dca060c02e20ec9c1ce9c12a6",
+          "Content": "e2b078217c49e8eed2da917a27c6f92b53962ec7b9cd72265684a4384ecd0796",
+          "Label": "round-2-health-08"
+        },
+        {
+          "Ordinal": 10,
+          "Observation": "fae8b7e8f212f172f22784e39f468cba5bccc2debf4653d6fc3e1b43c97ca23b",
+          "Content": "629ad3d98cd032c5ca729f8952c91ab427a9d528fe5675401d0acba56f47b1a9",
+          "Label": "round-2-health-09"
+        },
+        {
+          "Ordinal": 11,
+          "Observation": "9d316c84107a480f8683335c6c777056e8522362f0c0ddd5654fb9dd9268e0d0",
+          "Content": "46ef84761f353dd8ea7062468167b884ebebe13fef1b189e317a20c879432add",
+          "Label": "round-2-health-10"
+        },
+        {
+          "Ordinal": 12,
+          "Observation": "62bb7eb89e3f87a3da95576062b19673cc15bb4faf79a64fa78e8f5b0b808d95",
+          "Content": "081dc5d11d03b945555a1a87e0ef54f7bd34919a33c0829a1d01d82ef28f9dcc",
+          "Label": "round-2-health-11"
+        },
+        {
+          "Ordinal": 13,
+          "Observation": "422ccaa4beff12a5e7f28b37d1afa53c62a49d2b45bbf1566ec91e0354ae64a5",
+          "Content": "727daad1e35161180faa12bbc9906d732953dcf5df419385fc82a6b36c951898",
+          "Label": "round-2-health-12"
+        },
+        {
+          "Ordinal": 14,
+          "Observation": "d74c6d9fb76d12f819013647392c7012c0f620f0819a9966272413bb0b5585d9",
+          "Content": "cf6691cce592e8dd53832e96db1811cb3026df0c2b99c0d8f0137d6c5474d0ec",
+          "Label": "round-2-health-13"
+        },
+        {
+          "Ordinal": 15,
+          "Observation": "6950b4c7936ac68c3e9acecc382a61c9fa07a8d3b26b2b4a4a38a4cdc7e6fe4d",
+          "Content": "24e7a8c2830ba7e173d177185703b546861cc4b760d524bb4f6582f168dafae0",
+          "Label": "round-2-health-14"
+        },
+        {
+          "Ordinal": 16,
+          "Observation": "44659f02bdaf492d1aedfe52056dbe488fd98b9e4e94d53933a1808ef0cdcfbf",
+          "Content": "7091606de4a97bbf9fb934a652d24a0801385dcb93ef70774c486d77f63565a4",
+          "Label": "round-2-health-15"
+        },
+        {
+          "Ordinal": 17,
+          "Observation": "088d500734ac0fa8a82d036e77381a9dd84cd94c4862579325cd10eb57743d0a",
+          "Content": "c28fb97cac50b46ee78311c5b00318fac591e0d6d209e2d5f840fef35f7ac791",
+          "Label": "round-2-health-16"
+        },
+        {
+          "Ordinal": 18,
+          "Observation": "3ce1bec2b881dd0864c12f39dda19ee61d62c170dbe2b34347af8f9fe7aa0266",
+          "Content": "0f877f1469dad7d72cc706c76a804f4b7c388b9591de782178a3598b340d328f",
+          "Label": "round-2-health-17"
+        },
+        {
+          "Ordinal": 19,
+          "Observation": "3af14c32d0fb488908f9c1f1cfc57214ceddb44900e9de0b2af069fca60567ea",
+          "Content": "e0fcfb07fb740c7291fe4a0d41d008be0574c86b1b05484872843a77ec7e66c4",
+          "Label": "round-2-health-18"
+        },
+        {
+          "Ordinal": 20,
+          "Observation": "77935bd61363a2311d94d52310718e6855e541034de40dff2d18d9c3d8a702a8",
+          "Content": "c929502bd69c6e52210a387641393c7440dda8a3c3f394dbbf6cefe39bd4b605",
+          "Label": "round-2-health-19"
+        },
+        {
+          "Ordinal": 21,
+          "Observation": "ba71be2490fba5a6810bb5735d73dbc9d843862a46780451c3fd67dbfbdd074a",
+          "Content": "f8e5e5c0499bcf03370696e410f195145c64e613edca925528d3b12842da54e0",
+          "Label": "round-2-health-20"
+        },
+        {
+          "Ordinal": 22,
+          "Observation": "785bc8ac6af03ce50c0d9cfc0d22ae874d9ec6c49012bea9760559e51435917f",
+          "Content": "d167078d07dd19e9efaffe3d78a5768c30bd43183376eab2f7914fb7fb9dc31b",
+          "Label": "round-2-health-21"
+        },
+        {
+          "Ordinal": 23,
+          "Observation": "da11537056896ad949b8b428cc6e123180969ef7ac74a709fcc79040be3937d8",
+          "Content": "78c050ee62084ec55c87c8a9e35af5acc8ada896e3092a350274b3fbf8dbb4fd",
+          "Label": "round-2-health-22"
+        },
+        {
+          "Ordinal": 24,
+          "Observation": "288742ec441e5b170dc6b0e25df4a397f981933e66aef6c743019c6d9accbf45",
+          "Content": "e41b027db8a8eb101cd7e9d951e4d69ee05af5626678aeaed3a2a85b3e1afc83",
+          "Label": "round-2-health-23"
+        },
+        {
+          "Ordinal": 25,
+          "Observation": "075e8cbed925010530c2924d668777a0636832d9a676d96cb0766a54688a2f1e",
+          "Content": "1993361e6c54daa027e54c27c028e4422ec78c1a459e95aaa710c6981627b1eb",
+          "Label": "summary-2-review-candidate"
+        }
+      ],
+      "Renderer": "ate-effect-evidence-json/v1",
+      "Tokenizer": "utf8-quarter-estimate/v1",
+      "EstimatedTokens": 0,
+      "Input": {
+        "Object": "1ea3ec03906bc40c0e950b57533f68c9f3cf27d18ca658e66ad01dfd5b2694de",
+        "Anchor": {
+          "Fence": {
+            "Store": "734dabfa1be818a2c306846a403220ab",
+            "LSN": 147,
+            "CommitDigest": "b06370b005b325ca4e1ec88def82569fad5d88329e7a67f4da89278544d15745"
+          },
+          "Space": "project",
+          "Cursor": null,
+          "Knowledge": null
+        },
+        "Encoding": "application/json"
+      }
+    },
+    "Activity": {
+      "Activity": "summary-2-review",
+      "Execution": "execution",
+      "Query": "",
+      "Role": "aux_summary",
+      "Step": 0,
+      "Invocation": "",
+      "GoalEpoch": 1,
+      "InputFence": {
+        "Store": "734dabfa1be818a2c306846a403220ab",
+        "LSN": 148,
+        "CommitDigest": "b0b4b21561686d8fa759c9db77a6463bf74d0451cba335e640e08d47abcec53d"
+      },
+      "ContextPacket": "531f1afe5ee437cd7e550eb11d78a24209aa6450f6424f4fae38987e16c84e8a",
+      "RequestDigest": "c13bfa7460dee4866661d94c631a77731211108eedf90c158e02f1ef7ef82a62",
+      "Request": "1ea3ec03906bc40c0e950b57533f68c9f3cf27d18ca658e66ad01dfd5b2694de",
+      "Recipient": "gpt-6.1-sol",
+      "Effect": "pure",
+      "IdempotencyKey": "",
+      "ResourceScope": "evaluation",
+      "Contract": {
+        "Version": "",
+        "Definition": "",
+        "Recipient": "",
+        "AllowsMutation": false,
+        "VerifiedPure": false,
+        "HistoricalRead": false,
+        "KeyNamespace": "",
+        "RetentionNanos": 0,
+        "DifferentRequest": "",
+        "ResultQuery": "",
+        "ResourceFence": "",
+        "Compensation": "",
+        "CompensationLimit": "",
+        "LateArrivalFence": ""
+      }
+    },
+    "Grant": {
+      "id": "summary-2-review-grant",
+      "execution": "execution",
+      "task": "task",
+      "goal_epoch": 1,
+      "authority": {
+        "Deployment": "evaluation",
+        "OwnerEpoch": 1,
+        "Incarnation": 1,
+        "Holder": "host"
+      },
+      "authority_version": 1,
+      "content": "531f1afe5ee437cd7e550eb11d78a24209aa6450f6424f4fae38987e16c84e8a",
+      "anchor": {
+        "Fence": {
+          "Store": "734dabfa1be818a2c306846a403220ab",
+          "LSN": 148,
+          "CommitDigest": "b0b4b21561686d8fa759c9db77a6463bf74d0451cba335e640e08d47abcec53d"
+        },
+        "Space": "project",
+        "Cursor": null,
+        "Knowledge": null
+      },
+      "offset": 0,
+      "length": 8902,
+      "destination": "gpt-6.1-sol",
+      "activity": "summary-2-review",
+      "attempt": "summary-2-review-attempt",
+      "request_digest": "c13bfa7460dee4866661d94c631a77731211108eedf90c158e02f1ef7ef82a62",
+      "content_kind": "packet"
+    },
+    "Dispatch": {
+      "Code": "durable_ack",
+      "RequestID": "eval-000152",
+      "TxID": "7f1873e99bad2ef2144046fe6b35a275",
+      "Fence": {
+        "Store": "734dabfa1be818a2c306846a403220ab",
+        "LSN": 152,
+        "CommitDigest": "1a8d0626a35bc8d37d3ed55346310be198cb10cd815358d9c2fc2f6f979d5903"
+      },
+      "RequestDigest": "eca562ea13d4af500c973ae6dd58db3e6c96f8eb8ed521cdc6e903e528d4d50c",
+      "ResultDigest": "651a6f59d24ecacd703eb73e98241faf10b4816492ef1a4422e356b0ef68fc26",
+      "Conflict": "",
+      "StateRoot": "54c4b196a80be0aa0eeae54ca856bbc3875b07401d7bb3559635363287fcbbd0",
+      "RootSet": "1763d8ed41042d603c1940d33d80ce7736bce105a3a1ea399ad42c9474ce6e7a"
+    },
+    "Result": {
+      "ID": "summary-2-review-result",
+      "Activity": "summary-2-review",
+      "Attempt": "summary-2-review-attempt",
+      "RequestDigest": "c13bfa7460dee4866661d94c631a77731211108eedf90c158e02f1ef7ef82a62",
+      "Incarnation": 1,
+      "Outcome": "success",
+      "Payload": "eyJzdXBwb3J0ZWQiOmZhbHNlLCJjb250cmFkaWN0aW9ucyI6W10sInVuc3VwcG9ydGVkX2NsYWltcyI6WyJUaGUgY2FuZGlkYXRlIHNheXMgdGhlIGNsYWltcyBpbiBgc3VtbWFyeS0xLXZhbGlkYXRlZC1ub3Rlc2AgYXJlIHVudmVyaWZpZWQgYW5kIHRoYXQgdGhlIHJlY292ZXJ5IHRlc3QgcmVzdWx0cyBhcmUg4oCcbm90IHZlcmlmaWVkIGhlcmUu4oCdIFRoZSBzb3VyY2UgcmVjb3JkIGxhYmVscyB0aGUgbm90ZXMgdmFsaWRhdGVkIGFuZCBzdGF0ZXMgdGhhdCB0aGUgdmVyaWZpZXIgYWNjZXB0ZWQgdGhlIGJyYW5jaCBhbmQgY29uZmlybWVkIHRoZSBkdXJhYmxlIGZsb29yLCBvcmlnaW5hbCByZWNlaXB0LCBhbmQgcHJlc2VydmVkIGZpbGUgd2VyZSB1bmNoYW5nZWQgYWZ0ZXIgY3Jhc2gvcmVvcGVuLiBUaGlzIGZhbHNlbHkgZG93bmdyYWRlcyB2ZXJpZmllZCBldmlkZW5jZS4iXSwicmVhc29uIjoiVGhlIGNhbmRpZGF0ZSBvdGhlcndpc2UgcmVmbGVjdHMgdGhlIHNvdXJjZSByZWNvcmQsIGJ1dCBpdCBjb250cmFkaWN0cyB0aGUgc291cmNl4oCZcyB2ZXJpZmllZCBzdGF0dXMgZm9yIHRoZSByZWNvdmVyeSBicmFuY2ggYW5kIGl0cyByZXN1bHRzLiJ9"
+    },
+    "Output": {
+      "Object": "f7309281daedce703ffeb856a38b75bc4aa2b63dda65645f67651d68ef35ff5e",
+      "Anchor": {
+        "Fence": {
+          "Store": "734dabfa1be818a2c306846a403220ab",
+          "LSN": 155,
+          "CommitDigest": "f0e5dff921d460e6ad65fd71defb65f7443d7d98a289ec6836c834e7fdbf9cb8"
+        },
+        "Space": "project",
+        "Cursor": null,
+        "Knowledge": null
+      },
+      "Encoding": "text/plain;charset=utf-8"
+    },
+    "Reply": {
+      "ID": "resp_0a7a4be826a8fe2d016aeb9d5682a487d28e79c44d870d3225",
+      "Model": "gpt-6.1-sol",
+      "Status": "completed",
+      "Output": [
+        {
+          "Type": "message",
+          "Content": [
+            {
+              "Type": "output_text",
+              "Text": "{\"supported\":false,\"contradictions\":[],\"unsupported_claims\":[\"The candidate says the claims in `summary-1-validated-notes` are unverified and that the recovery test results are “not verified here.” The source record labels the notes validated and states that the verifier accepted the branch and confirmed the durable floor, original receipt, and preserved file were unchanged after crash/reopen. This falsely downgrades verified evidence.\"],\"reason\":\"The candidate otherwise reflects the source record, but it contradicts the source’s verified status for the recovery branch and its results.\"}"
+            }
+          ]
+        }
+      ],
+      "Usage": {
+        "input_tokens": 1910,
+        "input_tokens_details": {
+          "cached_tokens": 0,
+          "cache_write_tokens": 0
+        },
+        "output_tokens": 119,
+        "output_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "total_tokens": 2029,
+        "attribution": {
+          "items": {
+            "msg_0a7a4be826a8fe2d016aeb9d5683cc87d2bf072fd5ba93c8eb": {
+              "input_tokens": 1880,
+              "cached_tokens": 0,
+              "cache_write_tokens": 0,
+              "output_tokens": 0,
+              "content": [
+                {
+                  "input_tokens": 1880,
+                  "cached_tokens": 0,
+                  "cache_write_tokens": 0,
+                  "output_tokens": 0
+                }
+              ]
+            },
+            "msg_0a7a4be826a8fe2d016aeb9d57027c87d29fe559d88b5cb7a9": {
+              "input_tokens": 2,
+              "cached_tokens": 0,
+              "cache_write_tokens": 0,
+              "output_tokens": 119,
+              "content": [
+                {
+                  "input_tokens": 2,
+                  "cached_tokens": 0,
+                  "cache_write_tokens": 0,
+                  "output_tokens": 119
+                }
+              ]
+            }
+          },
+          "request_fields": {
+            "instructions": {
+              "input_tokens": 28,
+              "cached_tokens": 0,
+              "cache_write_tokens": 0,
+              "output_tokens": 0
+            }
+          }
+        }
+      },
+      "Error": null,
+      "incomplete_details": null
+    }
+  },
+  "status": "rejected",
+  "verdict": {
+    "supported": false,
+    "contradictions": [],
+    "unsupported_claims": [
+      "The candidate says the claims in `summary-1-validated-notes` are unverified and that the recovery test results are “not verified here.” The source record labels the notes validated and states that the verifier accepted the branch and confirmed the durable floor, original receipt, and preserved file were unchanged after crash/reopen. This falsely downgrades verified evidence."
+    ],
+    "reason": "The candidate otherwise reflects the source record, but it contradicts the source’s verified status for the recovery branch and its results."
+  }
+}

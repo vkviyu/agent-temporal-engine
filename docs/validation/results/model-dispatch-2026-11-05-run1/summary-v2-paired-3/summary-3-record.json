@@ -1,0 +1,341 @@
+{
+  "Packet": {
+    "ID": "aa5a311b0dec8bbb5be2d5653d737fa094b7cc61682592ef761c28c26ed76667",
+    "Space": "project",
+    "Key": {
+      "Actor": "worker",
+      "Execution": "execution"
+    },
+    "Source": {
+      "Anchor": {
+        "Fence": {
+          "Store": "1beb10998be892433832d0c3a337372f",
+          "LSN": 208,
+          "CommitDigest": "2182feee1f4d671d6c6b081d319ec315c79e9bdd36ab79040265f65e5fd9364e"
+        },
+        "Space": "project",
+        "Cursor": {
+          "Store": "1beb10998be892433832d0c3a337372f",
+          "Space": "project",
+          "Revision": "879e93e92834268e096d4488cc68f3db6ece0b7b67bac0bc53c12fecbe2f4406"
+        },
+        "Knowledge": {
+          "Actor": "worker",
+          "Execution": "execution"
+        }
+      },
+      "ViewDigest": "98e44f4cb279e3edcef3de80c6b82d252b154fe16ec8485621a853c2496be1b7",
+      "Frontier": "87c1a8cdf13f5a7018ba2ac6bfa3299feb37a999c7be0889a133bd45104ef4e3"
+    },
+    "GoalRef": "fc77533ec621a7f7429cf4d3bbb4cc74c04c6d96141f239ad352f3986133bce8",
+    "Items": [
+      {
+        "Ordinal": 0,
+        "Observation": "93943763b99342d42113909e383a961a24c06b5c7d6a97db39df204fc40e6442",
+        "Content": "fc77533ec621a7f7429cf4d3bbb4cc74c04c6d96141f239ad352f3986133bce8",
+        "Label": "summary-2-validated-notes"
+      },
+      {
+        "Ordinal": 1,
+        "Observation": "f853cfd03743b018d02c648467746f1fdebb33b10728bc58926a4524d66fd633",
+        "Content": "65919098809a9a090ea4286cd0b6bc5222cb0a57b36979d6d9e91c156add9bcf",
+        "Label": "round-3-health-00"
+      },
+      {
+        "Ordinal": 2,
+        "Observation": "3ba4268daa802303bb608a014cc1cc575ecf4ae9cc5dd2d092848e2faa776d32",
+        "Content": "89e5a182f6e213c0ebb0bcb7c3ca73ff221aeff9bcb69f9513f68c0fb03bb5d2",
+        "Label": "round-3-health-01"
+      },
+      {
+        "Ordinal": 3,
+        "Observation": "21dfbe262e58d72619e22d891d9b8c5bedd76c5a88ac53f12fde5d65cbd3e0a7",
+        "Content": "89acda9ffdc5cdde7bb4ca72a42e1caebf5009e8637a2bf349d7d0134f454acb",
+        "Label": "round-3-health-02"
+      },
+      {
+        "Ordinal": 4,
+        "Observation": "d182ae5ae28f4ca4cfad1c1c4ffd87e367423539525a4240270c49848178f85f",
+        "Content": "69cffa54dc18cba1d209064402d889b7bdb33355dc15cd6b9f64ba7dfef68340",
+        "Label": "round-3-health-03"
+      },
+      {
+        "Ordinal": 5,
+        "Observation": "eebddde50acafc9000bdff2da7188ffc6b925623a026acd2afe0008287baf416",
+        "Content": "df00da50f1d051fb4f6dcd1e76dde307c153d7c04cc96267b68e3f3c81500eee",
+        "Label": "round-3-health-04"
+      },
+      {
+        "Ordinal": 6,
+        "Observation": "f5673e34c6e1c9eeb05d2343c0a95f66cea195da590f4f1864e642c0eafbe7dd",
+        "Content": "71c5ee035f5673ee34db934bdaea043610c308be723376d1a4a5c547aff5cb49",
+        "Label": "round-3-health-05"
+      },
+      {
+        "Ordinal": 7,
+        "Observation": "9be0c108af9680196bfd053a679c3c38f12d9a325599e54f75929c2de01933c5",
+        "Content": "3fd17abb392c0188a4ea6c0a3632b1af406d6ca91293a6131a3496ce261db26c",
+        "Label": "round-3-health-06"
+      },
+      {
+        "Ordinal": 8,
+        "Observation": "21ec3ce94a8408a69421b108f67ef42e564de5694a122bf4356a0e21b1f2d4ab",
+        "Content": "86fd65b28810e8c20c38b178db480fa421238226e34c81ce997fadcad72cb218",
+        "Label": "round-3-health-07"
+      },
+      {
+        "Ordinal": 9,
+        "Observation": "54117ccb4b1cda0145f5c58f25324a97d5bd11807270721302ed53f2a8fad5ba",
+        "Content": "c15a59c686ba08fdac85ae06d298834716175a8b7637cf1cbadcf9e058403bc6",
+        "Label": "round-3-health-08"
+      },
+      {
+        "Ordinal": 10,
+        "Observation": "c13882dd58782ffb9f32079510ca8f519ca79d57371fb24fe25b6637a85222f8",
+        "Content": "788ab04aff514f645f6d14b0250f473f1409728b55361769037b103ee7931c9f",
+        "Label": "round-3-health-09"
+      },
+      {
+        "Ordinal": 11,
+        "Observation": "654fb294ed16bc7317c0fcaca21e44ff3ae74df80950d1341faa7c19c18502d1",
+        "Content": "15e7c62aeac8d3f18dde9292853e8716d14f467fcc4184cd09751a790cf8ab15",
+        "Label": "round-3-health-10"
+      },
+      {
+        "Ordinal": 12,
+        "Observation": "76598fdb8b8ee377be35a7ff9355ed379d258d01b4c90d75c7ad807b5818231c",
+        "Content": "3890e293d851710dc8cc3ead536c47537827624724e3b4104152dcf77f655fd4",
+        "Label": "round-3-health-11"
+      },
+      {
+        "Ordinal": 13,
+        "Observation": "201843ecdfba97d1a1a40fa4ae34600d563a96d3722b1f899b498c3197f4fddd",
+        "Content": "6a3ee6735af2fefb8baeec4cd7b306053d8bbd46a0afebb090433ab2b122877c",
+        "Label": "round-3-health-12"
+      },
+      {
+        "Ordinal": 14,
+        "Observation": "6df5733e3e810cd6f1c06e56f06dc393e095a980ac51fe7e159d80de361897ab",
+        "Content": "931e2e1592c04c7f76cc339e5ce20c3a66b59ce30ac0afcddda6a1f61720087c",
+        "Label": "round-3-health-13"
+      },
+      {
+        "Ordinal": 15,
+        "Observation": "416cf807ae3a61d7f99a086d2ae6041ee99a09d6564761451a42a203fc4a9806",
+        "Content": "e2351b59c6bc1f470080bc9ede06ad953edcb03b6852426528c0d6d28d39ca99",
+        "Label": "round-3-health-14"
+      },
+      {
+        "Ordinal": 16,
+        "Observation": "6d96a22bdf98e2dc273a20a6fa0ee4933b2b738cec06f304ed7f3ade5a9c25eb",
+        "Content": "929c40801056b4007ab88e9730425f737ea0fab58ee01fc25c8e168b19fd846a",
+        "Label": "round-3-health-15"
+      },
+      {
+        "Ordinal": 17,
+        "Observation": "1a9860f4067e6e18605fba9cd725d4dde62576e6514b2a8a9e11a135e5b4937f",
+        "Content": "a3d3abf47dbe6826db71653576c82641e5f60cc32c2dda302ef8ecfdbdf83e16",
+        "Label": "round-3-health-16"
+      },
+      {
+        "Ordinal": 18,
+        "Observation": "0521693502636effbdffeb46bcb66c756a0dfc9d57bfef279ae5ac12f175dcd9",
+        "Content": "063b17eecd960a246ec678f4139cc046fea304566762da59f23ac6f01d10b586",
+        "Label": "round-3-health-17"
+      },
+      {
+        "Ordinal": 19,
+        "Observation": "1720e9d6cedb1fcd8c6637915707f88bd529568e102b0a6ddd588473bcd07e73",
+        "Content": "3b5cc04730a608d4e4255facbaf8d529f0b0a24323fb25d6dd5350a8d1ed06c8",
+        "Label": "round-3-health-18"
+      },
+      {
+        "Ordinal": 20,
+        "Observation": "6d2071510a5dd6846d5eadc1965115000fa3127cea878bf0a9f3f8225804ffb3",
+        "Content": "08dfb14a292ddd165a275a2067926ee762002cc289bfae3795f88ec63be0de15",
+        "Label": "round-3-health-19"
+      },
+      {
+        "Ordinal": 21,
+        "Observation": "16e4f00146547f4a232037dfbc3edfed1954496c4425c96090b65ca040668a81",
+        "Content": "896efd661fd3acb4ee64672e4a9254134639605990960c238c088b30a97ed93a",
+        "Label": "round-3-health-20"
+      },
+      {
+        "Ordinal": 22,
+        "Observation": "0bf2f7554186240427316f168cc0c44c44be4bfbf73a446ad0130da287744a05",
+        "Content": "dead1f863c4c2cd860f254b7eb9f53822f4cba5d029e7cf82c95f30b4c7980f1",
+        "Label": "round-3-health-21"
+      },
+      {
+        "Ordinal": 23,
+        "Observation": "2de78773a897482adab9830d28d8014ae75fb08e9ebc1439839d530794d10f49",
+        "Content": "bad1fcb7b77a4e1f6f928bef18c537f04361fb4554f0624b5a0e309fe0bfbed5",
+        "Label": "round-3-health-22"
+      },
+      {
+        "Ordinal": 24,
+        "Observation": "163b933144eba689792f2996ba1e293c7e0efc6a05797460e02b43873f01736f",
+        "Content": "12e44096f5c78cd6d41117129793664a3a45de2d74df1fa23d1b089269d12c7b",
+        "Label": "round-3-health-23"
+      }
+    ],
+    "Renderer": "ate-effect-evidence-json/v1",
+    "Tokenizer": "utf8-quarter-estimate/v1",
+    "EstimatedTokens": 0,
+    "Input": {
+      "Object": "fec7987d21ccb3479ac75be8b7e9968b5e40cda187edd06d2c479f3471851568",
+      "Anchor": {
+        "Fence": {
+          "Store": "1beb10998be892433832d0c3a337372f",
+          "LSN": 208,
+          "CommitDigest": "2182feee1f4d671d6c6b081d319ec315c79e9bdd36ab79040265f65e5fd9364e"
+        },
+        "Space": "project",
+        "Cursor": null,
+        "Knowledge": null
+      },
+      "Encoding": "application/json"
+    }
+  },
+  "Activity": {
+    "Activity": "summary-3",
+    "Execution": "execution",
+    "Query": "",
+    "Role": "aux_summary",
+    "Step": 0,
+    "Invocation": "",
+    "GoalEpoch": 1,
+    "InputFence": {
+      "Store": "1beb10998be892433832d0c3a337372f",
+      "LSN": 209,
+      "CommitDigest": "2b8edc82071920e3b32cb5da77eb87f2e7cd1d28a554d87d4d90e72e28840b20"
+    },
+    "ContextPacket": "aa5a311b0dec8bbb5be2d5653d737fa094b7cc61682592ef761c28c26ed76667",
+    "RequestDigest": "829efa0fc672319fd8d500243cf0fffaecf9ed9d3c36a15a0bc7995d550d3c71",
+    "Request": "fec7987d21ccb3479ac75be8b7e9968b5e40cda187edd06d2c479f3471851568",
+    "Recipient": "gpt-6.1-sol",
+    "Effect": "pure",
+    "IdempotencyKey": "",
+    "ResourceScope": "evaluation",
+    "Contract": {
+      "Version": "",
+      "Definition": "",
+      "Recipient": "",
+      "AllowsMutation": false,
+      "VerifiedPure": false,
+      "HistoricalRead": false,
+      "KeyNamespace": "",
+      "RetentionNanos": 0,
+      "DifferentRequest": "",
+      "ResultQuery": "",
+      "ResourceFence": "",
+      "Compensation": "",
+      "CompensationLimit": "",
+      "LateArrivalFence": ""
+    }
+  },
+  "Grant": {
+    "id": "summary-3-grant",
+    "execution": "execution",
+    "task": "task",
+    "goal_epoch": 1,
+    "authority": {
+      "Deployment": "evaluation",
+      "OwnerEpoch": 1,
+      "Incarnation": 1,
+      "Holder": "host"
+    },
+    "authority_version": 1,
+    "content": "aa5a311b0dec8bbb5be2d5653d737fa094b7cc61682592ef761c28c26ed76667",
+    "anchor": {
+      "Fence": {
+        "Store": "1beb10998be892433832d0c3a337372f",
+        "LSN": 209,
+        "CommitDigest": "2b8edc82071920e3b32cb5da77eb87f2e7cd1d28a554d87d4d90e72e28840b20"
+      },
+      "Space": "project",
+      "Cursor": null,
+      "Knowledge": null
+    },
+    "offset": 0,
+    "length": 7186,
+    "destination": "gpt-6.1-sol",
+    "activity": "summary-3",
+    "attempt": "summary-3-attempt",
+    "request_digest": "829efa0fc672319fd8d500243cf0fffaecf9ed9d3c36a15a0bc7995d550d3c71",
+    "content_kind": "packet"
+  },
+  "Dispatch": {
+    "Code": "durable_ack",
+    "RequestID": "eval-000213",
+    "TxID": "d0e7c13f964dae82b96b5e8bb13aa104",
+    "Fence": {
+      "Store": "1beb10998be892433832d0c3a337372f",
+      "LSN": 213,
+      "CommitDigest": "ab02c837a6e4e3cf0e21e44eee4910b1862482566329362d989e44986a5f4e36"
+    },
+    "RequestDigest": "5634ff57762c8c04fa0e3583e94a5767cd0fad6945b9b4235927fc9c5268a841",
+    "ResultDigest": "572985fb8ad2cc9763f806572e5b23b6d955fdcf34f74a036d881e77ab369726",
+    "Conflict": "",
+    "StateRoot": "abe04c842fec4780d254aafe01226bc55d6c7bb4e29ad9986e79a045ea796062",
+    "RootSet": "d1d99c053977b33d8fa4fa8c7360c4ff661cf63aebcbc381ddaab4e7d306cb37"
+  },
+  "Result": {
+    "ID": "summary-3-result",
+    "Activity": "summary-3",
+    "Attempt": "summary-3-attempt",
+    "RequestDigest": "829efa0fc672319fd8d500243cf0fffaecf9ed9d3c36a15a0bc7995d550d3c71",
+    "Incarnation": 1,
+    "Outcome": "success",
+    "Payload": "TW9kZWwgbm90ZSAobm90IHZlcmlmaWVkIGV2aWRlbmNlKSwgYHN1bW1hcnktMi12YWxpZGF0ZWQtbm90ZXNgLCByZWNvcmRzOiBwcmVzZXJ2ZSBleGFjdCBwcmVpbmNpZGVudCBmaWxlIGBDVVJSRU5ULnByZWluY2lkZW50LTdRYDsgbmV2ZXIgb3ZlcndyaXRlIG9yIHJlbmFtZSBpdC4gQXBwZW5kIG91dGNvbWUgaXMgdW5rbm93biBhbmQgbm9uLWlkZW1wb3RlbnQ6IG5ldmVyIHJldHJ5OyByZWNvbmNpbGUgZXh0ZXJuYWwgbGVkZ2VyIGtleSBgb3BhbC0zNy1aYCBiZWZvcmUgcmVwbGFjZW1lbnQuIEFjY2VwdGVkIGhpc3RvcmljYWwtcGF5bG9hZCBjaGVja3N1bSBpcyBjYXNlLXNlbnNpdGl2ZSBgNmQwYjhmQTJgOyBoZWFsdGggY291bnRlcnMgY2Fubm90IHJlcGxhY2UgaXQuIFNlbGVjdGVkIGBCLXNhZmVgOiByZWNvbmNpbGUgYXBwZW5kLCBwcmVzZXJ2ZSBvcmlnaW5hbCBieXRlcywgdmFsaWRhdGUgcHVibGlzaGVkIGZsb29yLCB0aGVuIHJlc3RvcmUgdmVyaWZpZWQgcHVibGljYXRpb24uIGBCLXN1cHBvcnRgIHJlcG9ydHMgZHVyYWJsZSBmbG9vciwgb3JpZ2luYWwgcmVjZWlwdCwgYW5kIHVuY2hhbmdlZCBmaWxlIGFmdGVyIGNyYXNoL3Jlb3Blbi4gUmVqZWN0ZWQgcmV0cnktb24tdGltZW91dCAoYEItZmFpbHVyZWApOiBkaXNwb3NhYmxlLWZpeHR1cmUgZXhwZXJpbWVudCBhcHBlbmRlZCB0d2ljZTsgdGltZW91dCBkb2VzIG5vdCBwcm92ZSBubyBlZmZlY3QuIFVuY2VydGFpbnR5IHJlbWFpbnMuIGByb3VuZC0xLWhlYWx0aC0wMGDigJNgcm91bmQtMS1oZWFsdGgtMjNgLCBgcm91bmQtMi1oZWFsdGgtMDBg4oCTYHJvdW5kLTItaGVhbHRoLTIzYCwgYW5kIGByb3VuZC0zLWhlYWx0aC0wMGDigJNgcm91bmQtMy1oZWFsdGgtMjNgIGFyZSBvcGVyYXRpb25hbC9jYWNoZSBtZXRyaWNzIG9ubHkgKHJvdW5kIDM6IGhpdCByYXRpbyA3MOKAkzg2JSwgcXVldWUgMOKAkzQsIGxhdGVuY3kgMuKAkzggbXMpOyBub25lIGVzdGFibGlzaGVzIGV4dGVybmFsIGFwcGVuZCBvdXRjb21lIG9yIHN1cGVyc2VkZXMgZHVyYWJsZSByZWNvdmVyeSBldmlkZW5jZS4="
+  },
+  "Output": {
+    "Object": "84d18abb13d744b9cafa6ad3440fd7abc458e639181b946c37f82b45792a8d4a",
+    "Anchor": {
+      "Fence": {
+        "Store": "1beb10998be892433832d0c3a337372f",
+        "LSN": 216,
+        "CommitDigest": "fa26d1a23342c372c42bdced412b7f9d6cddf78b377c573dbf2ffc5b789e5e88"
+      },
+      "Space": "project",
+      "Cursor": null,
+      "Knowledge": null
+    },
+    "Encoding": "text/plain;charset=utf-8"
+  },
+  "Reply": {
+    "ID": "resp_0b164b18a24bb814016aeb9d81304487d18ff68e9dc205b04a",
+    "Model": "gpt-6.1-sol",
+    "Status": "completed",
+    "Output": [
+      {
+        "Type": "reasoning",
+        "Content": []
+      },
+      {
+        "Type": "message",
+        "Content": [
+          {
+            "Type": "output_text",
+            "Text": "Model note (not verified evidence), `summary-2-validated-notes`, records: preserve exact preincident file `CURRENT.preincident-7Q`; never overwrite or rename it. Append outcome is unknown and non-idempotent: never retry; reconcile external ledger key `opal-37-Z` before replacement. Accepted historical-payload checksum is case-sensitive `6d0b8fA2`; health counters cannot replace it. Selected `B-safe`: reconcile append, preserve original bytes, validate published floor, then restore verified publication. `B-support` reports durable floor, original receipt, and unchanged file after crash/reopen. Rejected retry-on-timeout (`B-failure`): disposable-fixture experiment appended twice; timeout does not prove no effect. Uncertainty remains. `round-1-health-00`–`round-1-health-23`, `round-2-health-00`–`round-2-health-23`, and `round-3-health-00`–`round-3-health-23` are operational/cache metrics only (round 3: hit ratio 70–86%, queue 0–4, latency 2–8 ms); none establishes external append outcome or supersedes durable recovery evidence."
+          }
+        ]
+      }
+    ],
+    "Usage": {
+      "input_tokens": 1563,
+      "input_tokens_details": {
+        "cached_tokens": 0,
+        "cache_write_tokens": 0
+      },
+      "output_tokens": 773,
+      "output_tokens_details": {
+        "reasoning_tokens": 516
+      },
+      "total_tokens": 2336
+    },
+    "Error": null,
+    "incomplete_details": null
+  }
+}

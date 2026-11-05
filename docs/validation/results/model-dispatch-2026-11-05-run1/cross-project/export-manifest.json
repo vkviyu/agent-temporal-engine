@@ -1,0 +1,557 @@
+{
+  "schema": 1,
+  "id": "1f9b3f6899b49c7f9d119497e6ca44a5154125c82f526e6a7717bca60afdb534",
+  "source": {
+    "Fence": {
+      "Store": "2e449dfc24118cc3aeb0cdfd1657ed66",
+      "LSN": 18,
+      "CommitDigest": "c642406436d25ba91937b3090fec4d91d31a7b62436598444cde2db07c8cb899"
+    },
+    "Space": "project",
+    "Cursor": null,
+    "Knowledge": null
+  },
+  "principal": "owner",
+  "policy": {
+    "id": "whole-record-omission",
+    "version": "1"
+  },
+  "policy_fence": {
+    "Store": "2e449dfc24118cc3aeb0cdfd1657ed66",
+    "LSN": 18,
+    "CommitDigest": "c642406436d25ba91937b3090fec4d91d31a7b62436598444cde2db07c8cb899"
+  },
+  "policy_root": "67b8789063e6d86d81a3b1c5f303db896587e3390831bc28a805f18922f7d8dc",
+  "roots": [
+    {
+      "kind": "memory",
+      "id": "0bf65f119378039e8db690b6116a806d537a39109aa5f92d23c0c4d318aecbf8",
+      "anchor": {
+        "Fence": {
+          "Store": "2e449dfc24118cc3aeb0cdfd1657ed66",
+          "LSN": 18,
+          "CommitDigest": "c642406436d25ba91937b3090fec4d91d31a7b62436598444cde2db07c8cb899"
+        },
+        "Space": "project",
+        "Cursor": null,
+        "Knowledge": null
+      }
+    },
+    {
+      "kind": "memory",
+      "id": "9de369827bc41c7e4f3e6e4c4581b79576479607ac1b62e82ca624e12d283231",
+      "anchor": {
+        "Fence": {
+          "Store": "2e449dfc24118cc3aeb0cdfd1657ed66",
+          "LSN": 18,
+          "CommitDigest": "c642406436d25ba91937b3090fec4d91d31a7b62436598444cde2db07c8cb899"
+        },
+        "Space": "project",
+        "Cursor": null,
+        "Knowledge": null
+      }
+    },
+    {
+      "kind": "memory",
+      "id": "fc86a60cf4474729f3b5544a07e4c75cdccabc64761bceb8bb90673c88123aec",
+      "anchor": {
+        "Fence": {
+          "Store": "2e449dfc24118cc3aeb0cdfd1657ed66",
+          "LSN": 18,
+          "CommitDigest": "c642406436d25ba91937b3090fec4d91d31a7b62436598444cde2db07c8cb899"
+        },
+        "Space": "project",
+        "Cursor": null,
+        "Knowledge": null
+      }
+    }
+  ],
+  "entries": [
+    {
+      "source": {
+        "kind": "memory",
+        "id": "0bf65f119378039e8db690b6116a806d537a39109aa5f92d23c0c4d318aecbf8",
+        "anchor": {
+          "Fence": {
+            "Store": "2e449dfc24118cc3aeb0cdfd1657ed66",
+            "LSN": 18,
+            "CommitDigest": "c642406436d25ba91937b3090fec4d91d31a7b62436598444cde2db07c8cb899"
+          },
+          "Space": "project",
+          "Cursor": null,
+          "Knowledge": null
+        }
+      },
+      "encoding": "memory",
+      "data": "QVRFLU1FTU9SWQACB3Byb2plY3QJcHJvY2VkdXJldVByb2NlZHVyZSByZXRyeS1sZWdhY3ktTDI6IHByb3RvY29sIHYyIHdpdGggcmVjaXBpZW50IGlkZW1wb3RlbmN5IGtleXMgcGVybWl0cyByZXRyeSB3aXRoIHRoZSBzYW1lIGRlZHVwbGljYXRpb24ga2V5LgFAMzk2ZWQwY2I4NDk0ZTY0NzZjMDkyMzdkOWE4NmRjZGZjNDlmY2VkZWFhNDQ3MzNkOWI5NTZmYjQ5ZDBiZmYwZSAyZTQ0OWRmYzI0MTE4Y2MzYWViMGNkZmQxNjU3ZWQ2NglAZTUxYTA1MWY2MjFmZTkzZTI1ZTI4MjI4ODFlM2YxOWVjOWZhOTZkODUwN2I1ZmM4N2Q3Y2ZlMzcyZDk4OTgwMQdwcm9qZWN0AAAAEGpvdXJuYWwtcmVjb3ZlcnkUYXBwZW5kLXYyL2lkZW1wb3RlbnQBAQdqb3VybmFsCHByb21vdGVkAAEAAAAAAkBiMzg5ZWNjMDQ0YzJkZTlhM2I5MDAzZGI1N2E3Mjk5NDlkMjE1ZGEwNzUzYmMxOTQyZjZlMGQzZDhlZDNmNzQxQGRiZTIxNjM0MmExOWQzZTFlNDlmNzIyNDdmYzYwY2U2NTUzZTFjM2YwZmQwOWNhZjQ5MDllNGRkZGY3NmU1YWEAAAEBAQFAMzk2ZWQwY2I4NDk0ZTY0NzZjMDkyMzdkOWE4NmRjZGZjNDlmY2VkZWFhNDQ3MzNkOWI5NTZmYjQ5ZDBiZmYwZSAyZTQ0OWRmYzI0MTE4Y2MzYWViMGNkZmQxNjU3ZWQ2NglAZTUxYTA1MWY2MjFmZTkzZTI1ZTI4MjI4ODFlM2YxOWVjOWZhOTZkODUwN2I1ZmM4N2Q3Y2ZlMzcyZDk4OTgwMQdwcm9qZWN0AAAAAA==",
+      "dependencies": [
+        {
+          "kind": "source",
+          "id": "396ed0cb8494e6476c09237d9a86dcdfc49fcedeaa44733d9b956fb49d0bff0e",
+          "anchor": {
+            "Fence": {
+              "Store": "2e449dfc24118cc3aeb0cdfd1657ed66",
+              "LSN": 9,
+              "CommitDigest": "e51a051f621fe93e25e2822881e3f19ec9fa96d8507b5fc87d7cfe372d989801"
+            },
+            "Space": "project",
+            "Cursor": null,
+            "Knowledge": null
+          }
+        },
+        {
+          "kind": "source",
+          "id": "b389ecc044c2de9a3b9003db57a729949d215da0753bc1942f6e0d3d8ed3f741",
+          "anchor": {
+            "Fence": {
+              "Store": "2e449dfc24118cc3aeb0cdfd1657ed66",
+              "LSN": 18,
+              "CommitDigest": "c642406436d25ba91937b3090fec4d91d31a7b62436598444cde2db07c8cb899"
+            },
+            "Space": "project",
+            "Cursor": null,
+            "Knowledge": null
+          }
+        },
+        {
+          "kind": "source",
+          "id": "dbe216342a19d3e1e49f72247fc60ce6553e1c3f0fd09caf4909e4dddf76e5aa",
+          "anchor": {
+            "Fence": {
+              "Store": "2e449dfc24118cc3aeb0cdfd1657ed66",
+              "LSN": 18,
+              "CommitDigest": "c642406436d25ba91937b3090fec4d91d31a7b62436598444cde2db07c8cb899"
+            },
+            "Space": "project",
+            "Cursor": null,
+            "Knowledge": null
+          }
+        }
+      ]
+    },
+    {
+      "source": {
+        "kind": "memory",
+        "id": "9de369827bc41c7e4f3e6e4c4581b79576479607ac1b62e82ca624e12d283231",
+        "anchor": {
+          "Fence": {
+            "Store": "2e449dfc24118cc3aeb0cdfd1657ed66",
+            "LSN": 18,
+            "CommitDigest": "c642406436d25ba91937b3090fec4d91d31a7b62436598444cde2db07c8cb899"
+          },
+          "Space": "project",
+          "Cursor": null,
+          "Knowledge": null
+        }
+      },
+      "encoding": "memory",
+      "data": "QVRFLU1FTU9SWQACB3Byb2plY3QJcHJvY2VkdXJliQFQcm9jZWR1cmUgbGVkZ2VyLVpYODogZm9yIGFuIHVua25vd24gbm9uLWlkZW1wb3RlbnQgYXBwZW5kIG91dGNvbWUsIHJlY29uY2lsZSB0aGUgZXh0ZXJuYWwgbGVkZ2VyIGJlZm9yZSBjb250aW51aW5nOyBuZXZlciBibGluZGx5IHJldHJ5LgFAMjE2ZDRkZDZjZjUzOGFhNDUwYWE4ZjBjZDQ2MmVkNWQ3OWZiZDM3MWIxZjE1MjQ1ZTQwNTlmYjM1OTQ1Y2NkMCAyZTQ0OWRmYzI0MTE4Y2MzYWViMGNkZmQxNjU3ZWQ2NgRAZTVjNjY5ZWY1MDY1MzBiZDBkYzA3ZTQ2OTBmMzJlMGQ3NDFkNTZiYTBlNTMxYmJkM2Y1ZjM5YmVlMGE3M2M1Nwdwcm9qZWN0AAAAEGpvdXJuYWwtcmVjb3ZlcnkVYXBwZW5kLXYzL2xpbnV4LWZzeW5jAQEHam91cm5hbAhwcm9tb3RlZAABAAAAAAJAMGU4MDljM2Y3MWZiMDk1MTgyNmQ5NWM1N2JiOGFmMmNlYjI1ZjNiZDJkMmJhYzM0OWFhOTk4NGQxZjI1MzVkYkA1OWNkOGYxYzM2NGM1YmJhMjYwNGFiMWEwOTQ2NGZiZDBmODM0OTgzZTFkMjY3NjRlODM0YWJkYTM3NWYzNzVkAAABAQEBQDIxNmQ0ZGQ2Y2Y1MzhhYTQ1MGFhOGYwY2Q0NjJlZDVkNzlmYmQzNzFiMWYxNTI0NWU0MDU5ZmIzNTk0NWNjZDAgMmU0NDlkZmMyNDExOGNjM2FlYjBjZGZkMTY1N2VkNjYEQGU1YzY2OWVmNTA2NTMwYmQwZGMwN2U0NjkwZjMyZTBkNzQxZDU2YmEwZTUzMWJiZDNmNWYzOWJlZTBhNzNjNTcHcHJvamVjdAAAAAA=",
+      "dependencies": [
+        {
+          "kind": "source",
+          "id": "0e809c3f71fb0951826d95c57bb8af2ceb25f3bd2d2bac349aa9984d1f2535db",
+          "anchor": {
+            "Fence": {
+              "Store": "2e449dfc24118cc3aeb0cdfd1657ed66",
+              "LSN": 18,
+              "CommitDigest": "c642406436d25ba91937b3090fec4d91d31a7b62436598444cde2db07c8cb899"
+            },
+            "Space": "project",
+            "Cursor": null,
+            "Knowledge": null
+          }
+        },
+        {
+          "kind": "source",
+          "id": "216d4dd6cf538aa450aa8f0cd462ed5d79fbd371b1f15245e4059fb35945ccd0",
+          "anchor": {
+            "Fence": {
+              "Store": "2e449dfc24118cc3aeb0cdfd1657ed66",
+              "LSN": 4,
+              "CommitDigest": "e5c669ef506530bd0dc07e4690f32e0d741d56ba0e531bbd3f5f39bee0a73c57"
+            },
+            "Space": "project",
+            "Cursor": null,
+            "Knowledge": null
+          }
+        },
+        {
+          "kind": "source",
+          "id": "59cd8f1c364c5bba2604ab1a09464fbd0f834983e1d26764e834abda375f375d",
+          "anchor": {
+            "Fence": {
+              "Store": "2e449dfc24118cc3aeb0cdfd1657ed66",
+              "LSN": 18,
+              "CommitDigest": "c642406436d25ba91937b3090fec4d91d31a7b62436598444cde2db07c8cb899"
+            },
+            "Space": "project",
+            "Cursor": null,
+            "Knowledge": null
+          }
+        }
+      ]
+    },
+    {
+      "source": {
+        "kind": "memory",
+        "id": "fc86a60cf4474729f3b5544a07e4c75cdccabc64761bceb8bb90673c88123aec",
+        "anchor": {
+          "Fence": {
+            "Store": "2e449dfc24118cc3aeb0cdfd1657ed66",
+            "LSN": 18,
+            "CommitDigest": "c642406436d25ba91937b3090fec4d91d31a7b62436598444cde2db07c8cb899"
+          },
+          "Space": "project",
+          "Cursor": null,
+          "Knowledge": null
+        }
+      },
+      "encoding": "memory",
+      "data": "QVRFLU1FTU9SWQACB3Byb2plY3QJcHJvY2VkdXJlUFByb2NlZHVyZSBkZXBsb3ktUjk6IHJlc3RhcnQgYSBzdGF0ZWxlc3MgZGVwbG95bWVudCBhZnRlciByb2xsb3V0IGhlYWx0aCBjaGVja3MuAUBkMjM1ZmNlZDk3NGZlY2FiODcyYzVkMWU3ZjM1OTAxZjkxYjc1Y2Q5OGQ5YjZkZGMxMmRhMDY0MTNmMjE1MTRlIDJlNDQ5ZGZjMjQxMThjYzNhZWIwY2RmZDE2NTdlZDY2DkAxYmVhZTQ3OWIxMDIyZDlmYzY3ODQ5ZDBjMDM1MTQxNTI4OWFiYzc5MDYxYTBmODZkMGNmYWNmMjg1Yzg3NmMzB3Byb2plY3QAAAAGZGVwbG95FWFwcGVuZC12My9saW51eC1mc3luYwEBB2pvdXJuYWwIcHJvbW90ZWQAAQAAAAACQDk4NzRhNjc0NDAxMTY5MDkwYWY3M2E4NDg5Yjg3MjhjMmMwNWExM2U1ZDFkMzFkMGJlMzU3NTlmNjI2Y2FlNjJAYjVmMTg0NTlkN2NmZDE1NDU2N2JjOWU0NmE4Yzg0Y2I3MzY0MGJiNDhiYWEyYjNkYWIyODA3YzJkYjkyN2U4NAAAAQEBAUBkMjM1ZmNlZDk3NGZlY2FiODcyYzVkMWU3ZjM1OTAxZjkxYjc1Y2Q5OGQ5YjZkZGMxMmRhMDY0MTNmMjE1MTRlIDJlNDQ5ZGZjMjQxMThjYzNhZWIwY2RmZDE2NTdlZDY2DkAxYmVhZTQ3OWIxMDIyZDlmYzY3ODQ5ZDBjMDM1MTQxNTI4OWFiYzc5MDYxYTBmODZkMGNmYWNmMjg1Yzg3NmMzB3Byb2plY3QAAAAA",
+      "dependencies": [
+        {
+          "kind": "source",
+          "id": "9874a674401169090af73a8489b8728c2c05a13e5d1d31d0be35759f626cae62",
+          "anchor": {
+            "Fence": {
+              "Store": "2e449dfc24118cc3aeb0cdfd1657ed66",
+              "LSN": 18,
+              "CommitDigest": "c642406436d25ba91937b3090fec4d91d31a7b62436598444cde2db07c8cb899"
+            },
+            "Space": "project",
+            "Cursor": null,
+            "Knowledge": null
+          }
+        },
+        {
+          "kind": "source",
+          "id": "b5f18459d7cfd154567bc9e46a8c84cb73640bb48baa2b3dab2807c2db927e84",
+          "anchor": {
+            "Fence": {
+              "Store": "2e449dfc24118cc3aeb0cdfd1657ed66",
+              "LSN": 18,
+              "CommitDigest": "c642406436d25ba91937b3090fec4d91d31a7b62436598444cde2db07c8cb899"
+            },
+            "Space": "project",
+            "Cursor": null,
+            "Knowledge": null
+          }
+        },
+        {
+          "kind": "source",
+          "id": "d235fced974fecab872c5d1e7f35901f91b75cd98d9b6ddc12da06413f21514e",
+          "anchor": {
+            "Fence": {
+              "Store": "2e449dfc24118cc3aeb0cdfd1657ed66",
+              "LSN": 14,
+              "CommitDigest": "1beae479b1022d9fc67849d0c0351415289abc79061a0f86d0cfacf285c876c3"
+            },
+            "Space": "project",
+            "Cursor": null,
+            "Knowledge": null
+          }
+        }
+      ]
+    },
+    {
+      "source": {
+        "kind": "source",
+        "id": "0e809c3f71fb0951826d95c57bb8af2ceb25f3bd2d2bac349aa9984d1f2535db",
+        "anchor": {
+          "Fence": {
+            "Store": "2e449dfc24118cc3aeb0cdfd1657ed66",
+            "LSN": 18,
+            "CommitDigest": "c642406436d25ba91937b3090fec4d91d31a7b62436598444cde2db07c8cb899"
+          },
+          "Space": "project",
+          "Cursor": null,
+          "Knowledge": null
+        }
+      },
+      "encoding": "memory",
+      "data": "QVRFLU1FTU9SWQACB3Byb2plY3QJcHJvY2VkdXJliQFQcm9jZWR1cmUgbGVkZ2VyLVpYODogZm9yIGFuIHVua25vd24gbm9uLWlkZW1wb3RlbnQgYXBwZW5kIG91dGNvbWUsIHJlY29uY2lsZSB0aGUgZXh0ZXJuYWwgbGVkZ2VyIGJlZm9yZSBjb250aW51aW5nOyBuZXZlciBibGluZGx5IHJldHJ5LgFAMjE2ZDRkZDZjZjUzOGFhNDUwYWE4ZjBjZDQ2MmVkNWQ3OWZiZDM3MWIxZjE1MjQ1ZTQwNTlmYjM1OTQ1Y2NkMCAyZTQ0OWRmYzI0MTE4Y2MzYWViMGNkZmQxNjU3ZWQ2NgRAZTVjNjY5ZWY1MDY1MzBiZDBkYzA3ZTQ2OTBmMzJlMGQ3NDFkNTZiYTBlNTMxYmJkM2Y1ZjM5YmVlMGE3M2M1Nwdwcm9qZWN0AAAAEGpvdXJuYWwtcmVjb3ZlcnkVYXBwZW5kLXYzL2xpbnV4LWZzeW5jAQEHam91cm5hbAljYW5kaWRhdGUAAAAAAAAAAAAA",
+      "dependencies": [
+        {
+          "kind": "source",
+          "id": "216d4dd6cf538aa450aa8f0cd462ed5d79fbd371b1f15245e4059fb35945ccd0",
+          "anchor": {
+            "Fence": {
+              "Store": "2e449dfc24118cc3aeb0cdfd1657ed66",
+              "LSN": 4,
+              "CommitDigest": "e5c669ef506530bd0dc07e4690f32e0d741d56ba0e531bbd3f5f39bee0a73c57"
+            },
+            "Space": "project",
+            "Cursor": null,
+            "Knowledge": null
+          }
+        }
+      ]
+    },
+    {
+      "source": {
+        "kind": "source",
+        "id": "216d4dd6cf538aa450aa8f0cd462ed5d79fbd371b1f15245e4059fb35945ccd0",
+        "anchor": {
+          "Fence": {
+            "Store": "2e449dfc24118cc3aeb0cdfd1657ed66",
+            "LSN": 4,
+            "CommitDigest": "e5c669ef506530bd0dc07e4690f32e0d741d56ba0e531bbd3f5f39bee0a73c57"
+          },
+          "Space": "project",
+          "Cursor": null,
+          "Knowledge": null
+        }
+      },
+      "encoding": "object",
+      "data": "QVRFT0JKMDEBAAlhdGUudmFsdWUHcHJvamVjdAEA6gMBAAHlA3siaWQiOiJzb3VyY2UtdmFsaWRhdGlvbi0zIiwidGV4dCI6IntcImNsYWltXCI6XCJQcm9jZWR1cmUgbGVkZ2VyLVpYODogZm9yIGFuIHVua25vd24gbm9uLWlkZW1wb3RlbnQgYXBwZW5kIG91dGNvbWUsIHJlY29uY2lsZSB0aGUgZXh0ZXJuYWwgbGVkZ2VyIGJlZm9yZSBjb250aW51aW5nOyBuZXZlciBibGluZGx5IHJldHJ5LlwiLFwiZW52aXJvbm1lbnRcIjpcImFwcGVuZC12My9saW51eC1mc3luY1wiLFwiZml4dHVyZVwiOlwic291cmNlLXByb3RvY29sL3YxXCIsXCJvYnNlcnZlZFwiOntcImFwcGVuZF9pbnZvY2F0aW9uc1wiOjIsXCJwaHlzaWNhbF9hcHBlbmRfcmVjb3Jkc1wiOjIsXCJwcm9jZXNzX2xvY2FsX2RlZHVwbGljYXRpb25cIjpmYWxzZSxcInNhbWVfcmVjaXBpZW50X3JlcXVlc3Rfa2V5XCI6dHJ1ZX0sXCJzY29wZVwiOlwiY29udHJvbGxlZCBmaXh0dXJlLCBub3QgYSBwcm9kdWN0aW9uIGRlcGxveW1lbnQgdmFsaWRhdGlvblwifSJ9"
+    },
+    {
+      "source": {
+        "kind": "source",
+        "id": "396ed0cb8494e6476c09237d9a86dcdfc49fcedeaa44733d9b956fb49d0bff0e",
+        "anchor": {
+          "Fence": {
+            "Store": "2e449dfc24118cc3aeb0cdfd1657ed66",
+            "LSN": 9,
+            "CommitDigest": "e51a051f621fe93e25e2822881e3f19ec9fa96d8507b5fc87d7cfe372d989801"
+          },
+          "Space": "project",
+          "Cursor": null,
+          "Knowledge": null
+        }
+      },
+      "encoding": "object",
+      "data": "QVRFT0JKMDEBAAlhdGUudmFsdWUHcHJvamVjdAEA1AMBAAHPA3siaWQiOiJzb3VyY2UtdmFsaWRhdGlvbi04IiwidGV4dCI6IntcImNsYWltXCI6XCJQcm9jZWR1cmUgcmV0cnktbGVnYWN5LUwyOiBwcm90b2NvbCB2MiB3aXRoIHJlY2lwaWVudCBpZGVtcG90ZW5jeSBrZXlzIHBlcm1pdHMgcmV0cnkgd2l0aCB0aGUgc2FtZSBkZWR1cGxpY2F0aW9uIGtleS5cIixcImVudmlyb25tZW50XCI6XCJhcHBlbmQtdjIvaWRlbXBvdGVudFwiLFwiZml4dHVyZVwiOlwic291cmNlLXByb3RvY29sL3YxXCIsXCJvYnNlcnZlZFwiOntcImFwcGVuZF9pbnZvY2F0aW9uc1wiOjIsXCJwaHlzaWNhbF9hcHBlbmRfcmVjb3Jkc1wiOjEsXCJwcm9jZXNzX2xvY2FsX2RlZHVwbGljYXRpb25cIjp0cnVlLFwic2FtZV9yZWNpcGllbnRfcmVxdWVzdF9rZXlcIjp0cnVlfSxcInNjb3BlXCI6XCJjb250cm9sbGVkIGZpeHR1cmUsIG5vdCBhIHByb2R1Y3Rpb24gZGVwbG95bWVudCB2YWxpZGF0aW9uXCJ9In0="
+    },
+    {
+      "source": {
+        "kind": "source",
+        "id": "59cd8f1c364c5bba2604ab1a09464fbd0f834983e1d26764e834abda375f375d",
+        "anchor": {
+          "Fence": {
+            "Store": "2e449dfc24118cc3aeb0cdfd1657ed66",
+            "LSN": 18,
+            "CommitDigest": "c642406436d25ba91937b3090fec4d91d31a7b62436598444cde2db07c8cb899"
+          },
+          "Space": "project",
+          "Cursor": null,
+          "Knowledge": null
+        }
+      },
+      "encoding": "memory",
+      "data": "QVRFLU1FTU9SWQACB3Byb2plY3QJcHJvY2VkdXJliQFQcm9jZWR1cmUgbGVkZ2VyLVpYODogZm9yIGFuIHVua25vd24gbm9uLWlkZW1wb3RlbnQgYXBwZW5kIG91dGNvbWUsIHJlY29uY2lsZSB0aGUgZXh0ZXJuYWwgbGVkZ2VyIGJlZm9yZSBjb250aW51aW5nOyBuZXZlciBibGluZGx5IHJldHJ5LgFAMjE2ZDRkZDZjZjUzOGFhNDUwYWE4ZjBjZDQ2MmVkNWQ3OWZiZDM3MWIxZjE1MjQ1ZTQwNTlmYjM1OTQ1Y2NkMCAyZTQ0OWRmYzI0MTE4Y2MzYWViMGNkZmQxNjU3ZWQ2NgRAZTVjNjY5ZWY1MDY1MzBiZDBkYzA3ZTQ2OTBmMzJlMGQ3NDFkNTZiYTBlNTMxYmJkM2Y1ZjM5YmVlMGE3M2M1Nwdwcm9qZWN0AAAAEGpvdXJuYWwtcmVjb3ZlcnkVYXBwZW5kLXYzL2xpbnV4LWZzeW5jAQEHam91cm5hbAl2YWxpZGF0ZWQAAQAAAAABQDBlODA5YzNmNzFmYjA5NTE4MjZkOTVjNTdiYjhhZjJjZWIyNWYzYmQyZDJiYWMzNDlhYTk5ODRkMWYyNTM1ZGIAAAEBAQFAMjE2ZDRkZDZjZjUzOGFhNDUwYWE4ZjBjZDQ2MmVkNWQ3OWZiZDM3MWIxZjE1MjQ1ZTQwNTlmYjM1OTQ1Y2NkMCAyZTQ0OWRmYzI0MTE4Y2MzYWViMGNkZmQxNjU3ZWQ2NgRAZTVjNjY5ZWY1MDY1MzBiZDBkYzA3ZTQ2OTBmMzJlMGQ3NDFkNTZiYTBlNTMxYmJkM2Y1ZjM5YmVlMGE3M2M1Nwdwcm9qZWN0AAAAAA==",
+      "dependencies": [
+        {
+          "kind": "source",
+          "id": "0e809c3f71fb0951826d95c57bb8af2ceb25f3bd2d2bac349aa9984d1f2535db",
+          "anchor": {
+            "Fence": {
+              "Store": "2e449dfc24118cc3aeb0cdfd1657ed66",
+              "LSN": 18,
+              "CommitDigest": "c642406436d25ba91937b3090fec4d91d31a7b62436598444cde2db07c8cb899"
+            },
+            "Space": "project",
+            "Cursor": null,
+            "Knowledge": null
+          }
+        },
+        {
+          "kind": "source",
+          "id": "216d4dd6cf538aa450aa8f0cd462ed5d79fbd371b1f15245e4059fb35945ccd0",
+          "anchor": {
+            "Fence": {
+              "Store": "2e449dfc24118cc3aeb0cdfd1657ed66",
+              "LSN": 4,
+              "CommitDigest": "e5c669ef506530bd0dc07e4690f32e0d741d56ba0e531bbd3f5f39bee0a73c57"
+            },
+            "Space": "project",
+            "Cursor": null,
+            "Knowledge": null
+          }
+        }
+      ]
+    },
+    {
+      "source": {
+        "kind": "source",
+        "id": "9874a674401169090af73a8489b8728c2c05a13e5d1d31d0be35759f626cae62",
+        "anchor": {
+          "Fence": {
+            "Store": "2e449dfc24118cc3aeb0cdfd1657ed66",
+            "LSN": 18,
+            "CommitDigest": "c642406436d25ba91937b3090fec4d91d31a7b62436598444cde2db07c8cb899"
+          },
+          "Space": "project",
+          "Cursor": null,
+          "Knowledge": null
+        }
+      },
+      "encoding": "memory",
+      "data": "QVRFLU1FTU9SWQACB3Byb2plY3QJcHJvY2VkdXJlUFByb2NlZHVyZSBkZXBsb3ktUjk6IHJlc3RhcnQgYSBzdGF0ZWxlc3MgZGVwbG95bWVudCBhZnRlciByb2xsb3V0IGhlYWx0aCBjaGVja3MuAUBkMjM1ZmNlZDk3NGZlY2FiODcyYzVkMWU3ZjM1OTAxZjkxYjc1Y2Q5OGQ5YjZkZGMxMmRhMDY0MTNmMjE1MTRlIDJlNDQ5ZGZjMjQxMThjYzNhZWIwY2RmZDE2NTdlZDY2DkAxYmVhZTQ3OWIxMDIyZDlmYzY3ODQ5ZDBjMDM1MTQxNTI4OWFiYzc5MDYxYTBmODZkMGNmYWNmMjg1Yzg3NmMzB3Byb2plY3QAAAAGZGVwbG95FWFwcGVuZC12My9saW51eC1mc3luYwEBB2pvdXJuYWwJY2FuZGlkYXRlAAAAAAAAAAAAAA==",
+      "dependencies": [
+        {
+          "kind": "source",
+          "id": "d235fced974fecab872c5d1e7f35901f91b75cd98d9b6ddc12da06413f21514e",
+          "anchor": {
+            "Fence": {
+              "Store": "2e449dfc24118cc3aeb0cdfd1657ed66",
+              "LSN": 14,
+              "CommitDigest": "1beae479b1022d9fc67849d0c0351415289abc79061a0f86d0cfacf285c876c3"
+            },
+            "Space": "project",
+            "Cursor": null,
+            "Knowledge": null
+          }
+        }
+      ]
+    },
+    {
+      "source": {
+        "kind": "source",
+        "id": "b389ecc044c2de9a3b9003db57a729949d215da0753bc1942f6e0d3d8ed3f741",
+        "anchor": {
+          "Fence": {
+            "Store": "2e449dfc24118cc3aeb0cdfd1657ed66",
+            "LSN": 18,
+            "CommitDigest": "c642406436d25ba91937b3090fec4d91d31a7b62436598444cde2db07c8cb899"
+          },
+          "Space": "project",
+          "Cursor": null,
+          "Knowledge": null
+        }
+      },
+      "encoding": "memory",
+      "data": "QVRFLU1FTU9SWQACB3Byb2plY3QJcHJvY2VkdXJldVByb2NlZHVyZSByZXRyeS1sZWdhY3ktTDI6IHByb3RvY29sIHYyIHdpdGggcmVjaXBpZW50IGlkZW1wb3RlbmN5IGtleXMgcGVybWl0cyByZXRyeSB3aXRoIHRoZSBzYW1lIGRlZHVwbGljYXRpb24ga2V5LgFAMzk2ZWQwY2I4NDk0ZTY0NzZjMDkyMzdkOWE4NmRjZGZjNDlmY2VkZWFhNDQ3MzNkOWI5NTZmYjQ5ZDBiZmYwZSAyZTQ0OWRmYzI0MTE4Y2MzYWViMGNkZmQxNjU3ZWQ2NglAZTUxYTA1MWY2MjFmZTkzZTI1ZTI4MjI4ODFlM2YxOWVjOWZhOTZkODUwN2I1ZmM4N2Q3Y2ZlMzcyZDk4OTgwMQdwcm9qZWN0AAAAEGpvdXJuYWwtcmVjb3ZlcnkUYXBwZW5kLXYyL2lkZW1wb3RlbnQBAQdqb3VybmFsCWNhbmRpZGF0ZQAAAAAAAAAAAAA=",
+      "dependencies": [
+        {
+          "kind": "source",
+          "id": "396ed0cb8494e6476c09237d9a86dcdfc49fcedeaa44733d9b956fb49d0bff0e",
+          "anchor": {
+            "Fence": {
+              "Store": "2e449dfc24118cc3aeb0cdfd1657ed66",
+              "LSN": 9,
+              "CommitDigest": "e51a051f621fe93e25e2822881e3f19ec9fa96d8507b5fc87d7cfe372d989801"
+            },
+            "Space": "project",
+            "Cursor": null,
+            "Knowledge": null
+          }
+        }
+      ]
+    },
+    {
+      "source": {
+        "kind": "source",
+        "id": "b5f18459d7cfd154567bc9e46a8c84cb73640bb48baa2b3dab2807c2db927e84",
+        "anchor": {
+          "Fence": {
+            "Store": "2e449dfc24118cc3aeb0cdfd1657ed66",
+            "LSN": 18,
+            "CommitDigest": "c642406436d25ba91937b3090fec4d91d31a7b62436598444cde2db07c8cb899"
+          },
+          "Space": "project",
+          "Cursor": null,
+          "Knowledge": null
+        }
+      },
+      "encoding": "memory",
+      "data": "QVRFLU1FTU9SWQACB3Byb2plY3QJcHJvY2VkdXJlUFByb2NlZHVyZSBkZXBsb3ktUjk6IHJlc3RhcnQgYSBzdGF0ZWxlc3MgZGVwbG95bWVudCBhZnRlciByb2xsb3V0IGhlYWx0aCBjaGVja3MuAUBkMjM1ZmNlZDk3NGZlY2FiODcyYzVkMWU3ZjM1OTAxZjkxYjc1Y2Q5OGQ5YjZkZGMxMmRhMDY0MTNmMjE1MTRlIDJlNDQ5ZGZjMjQxMThjYzNhZWIwY2RmZDE2NTdlZDY2DkAxYmVhZTQ3OWIxMDIyZDlmYzY3ODQ5ZDBjMDM1MTQxNTI4OWFiYzc5MDYxYTBmODZkMGNmYWNmMjg1Yzg3NmMzB3Byb2plY3QAAAAGZGVwbG95FWFwcGVuZC12My9saW51eC1mc3luYwEBB2pvdXJuYWwJdmFsaWRhdGVkAAEAAAAAAUA5ODc0YTY3NDQwMTE2OTA5MGFmNzNhODQ4OWI4NzI4YzJjMDVhMTNlNWQxZDMxZDBiZTM1NzU5ZjYyNmNhZTYyAAABAQEBQGQyMzVmY2VkOTc0ZmVjYWI4NzJjNWQxZTdmMzU5MDFmOTFiNzVjZDk4ZDliNmRkYzEyZGEwNjQxM2YyMTUxNGUgMmU0NDlkZmMyNDExOGNjM2FlYjBjZGZkMTY1N2VkNjYOQDFiZWFlNDc5YjEwMjJkOWZjNjc4NDlkMGMwMzUxNDE1Mjg5YWJjNzkwNjFhMGY4NmQwY2ZhY2YyODVjODc2YzMHcHJvamVjdAAAAAA=",
+      "dependencies": [
+        {
+          "kind": "source",
+          "id": "9874a674401169090af73a8489b8728c2c05a13e5d1d31d0be35759f626cae62",
+          "anchor": {
+            "Fence": {
+              "Store": "2e449dfc24118cc3aeb0cdfd1657ed66",
+              "LSN": 18,
+              "CommitDigest": "c642406436d25ba91937b3090fec4d91d31a7b62436598444cde2db07c8cb899"
+            },
+            "Space": "project",
+            "Cursor": null,
+            "Knowledge": null
+          }
+        },
+        {
+          "kind": "source",
+          "id": "d235fced974fecab872c5d1e7f35901f91b75cd98d9b6ddc12da06413f21514e",
+          "anchor": {
+            "Fence": {
+              "Store": "2e449dfc24118cc3aeb0cdfd1657ed66",
+              "LSN": 14,
+              "CommitDigest": "1beae479b1022d9fc67849d0c0351415289abc79061a0f86d0cfacf285c876c3"
+            },
+            "Space": "project",
+            "Cursor": null,
+            "Knowledge": null
+          }
+        }
+      ]
+    },
+    {
+      "source": {
+        "kind": "source",
+        "id": "d235fced974fecab872c5d1e7f35901f91b75cd98d9b6ddc12da06413f21514e",
+        "anchor": {
+          "Fence": {
+            "Store": "2e449dfc24118cc3aeb0cdfd1657ed66",
+            "LSN": 14,
+            "CommitDigest": "1beae479b1022d9fc67849d0c0351415289abc79061a0f86d0cfacf285c876c3"
+          },
+          "Space": "project",
+          "Cursor": null,
+          "Knowledge": null
+        }
+      },
+      "encoding": "object",
+      "data": "QVRFT0JKMDEBAAlhdGUudmFsdWUHcHJvamVjdAEAsgMBAAGtA3siaWQiOiJzb3VyY2UtdmFsaWRhdGlvbi0xMyIsInRleHQiOiJ7XCJjbGFpbVwiOlwiUHJvY2VkdXJlIGRlcGxveS1SOTogcmVzdGFydCBhIHN0YXRlbGVzcyBkZXBsb3ltZW50IGFmdGVyIHJvbGxvdXQgaGVhbHRoIGNoZWNrcy5cIixcImVudmlyb25tZW50XCI6XCJhcHBlbmQtdjMvbGludXgtZnN5bmNcIixcImZpeHR1cmVcIjpcInNvdXJjZS1wcm90b2NvbC92MVwiLFwib2JzZXJ2ZWRcIjp7XCJhcHBlbmRfaW52b2NhdGlvbnNcIjoyLFwicGh5c2ljYWxfYXBwZW5kX3JlY29yZHNcIjoyLFwicHJvY2Vzc19sb2NhbF9kZWR1cGxpY2F0aW9uXCI6ZmFsc2UsXCJzYW1lX3JlY2lwaWVudF9yZXF1ZXN0X2tleVwiOnRydWV9LFwic2NvcGVcIjpcImNvbnRyb2xsZWQgZml4dHVyZSwgbm90IGEgcHJvZHVjdGlvbiBkZXBsb3ltZW50IHZhbGlkYXRpb25cIn0ifQ=="
+    },
+    {
+      "source": {
+        "kind": "source",
+        "id": "dbe216342a19d3e1e49f72247fc60ce6553e1c3f0fd09caf4909e4dddf76e5aa",
+        "anchor": {
+          "Fence": {
+            "Store": "2e449dfc24118cc3aeb0cdfd1657ed66",
+            "LSN": 18,
+            "CommitDigest": "c642406436d25ba91937b3090fec4d91d31a7b62436598444cde2db07c8cb899"
+          },
+          "Space": "project",
+          "Cursor": null,
+          "Knowledge": null
+        }
+      },
+      "encoding": "memory",
+      "data": "QVRFLU1FTU9SWQACB3Byb2plY3QJcHJvY2VkdXJldVByb2NlZHVyZSByZXRyeS1sZWdhY3ktTDI6IHByb3RvY29sIHYyIHdpdGggcmVjaXBpZW50IGlkZW1wb3RlbmN5IGtleXMgcGVybWl0cyByZXRyeSB3aXRoIHRoZSBzYW1lIGRlZHVwbGljYXRpb24ga2V5LgFAMzk2ZWQwY2I4NDk0ZTY0NzZjMDkyMzdkOWE4NmRjZGZjNDlmY2VkZWFhNDQ3MzNkOWI5NTZmYjQ5ZDBiZmYwZSAyZTQ0OWRmYzI0MTE4Y2MzYWViMGNkZmQxNjU3ZWQ2NglAZTUxYTA1MWY2MjFmZTkzZTI1ZTI4MjI4ODFlM2YxOWVjOWZhOTZkODUwN2I1ZmM4N2Q3Y2ZlMzcyZDk4OTgwMQdwcm9qZWN0AAAAEGpvdXJuYWwtcmVjb3ZlcnkUYXBwZW5kLXYyL2lkZW1wb3RlbnQBAQdqb3VybmFsCXZhbGlkYXRlZAABAAAAAAFAYjM4OWVjYzA0NGMyZGU5YTNiOTAwM2RiNTdhNzI5OTQ5ZDIxNWRhMDc1M2JjMTk0MmY2ZTBkM2Q4ZWQzZjc0MQAAAQEBAUAzOTZlZDBjYjg0OTRlNjQ3NmMwOTIzN2Q5YTg2ZGNkZmM0OWZjZWRlYWE0NDczM2Q5Yjk1NmZiNDlkMGJmZjBlIDJlNDQ5ZGZjMjQxMThjYzNhZWIwY2RmZDE2NTdlZDY2CUBlNTFhMDUxZjYyMWZlOTNlMjVlMjgyMjg4MWUzZjE5ZWM5ZmE5NmQ4NTA3YjVmYzg3ZDdjZmUzNzJkOTg5ODAxB3Byb2plY3QAAAAA",
+      "dependencies": [
+        {
+          "kind": "source",
+          "id": "396ed0cb8494e6476c09237d9a86dcdfc49fcedeaa44733d9b956fb49d0bff0e",
+          "anchor": {
+            "Fence": {
+              "Store": "2e449dfc24118cc3aeb0cdfd1657ed66",
+              "LSN": 9,
+              "CommitDigest": "e51a051f621fe93e25e2822881e3f19ec9fa96d8507b5fc87d7cfe372d989801"
+            },
+            "Space": "project",
+            "Cursor": null,
+            "Knowledge": null
+          }
+        },
+        {
+          "kind": "source",
+          "id": "b389ecc044c2de9a3b9003db57a729949d215da0753bc1942f6e0d3d8ed3f741",
+          "anchor": {
+            "Fence": {
+              "Store": "2e449dfc24118cc3aeb0cdfd1657ed66",
+              "LSN": 18,
+              "CommitDigest": "c642406436d25ba91937b3090fec4d91d31a7b62436598444cde2db07c8cb899"
+            },
+            "Space": "project",
+            "Cursor": null,
+            "Knowledge": null
+          }
+        }
+      ]
+    }
+  ]
+}

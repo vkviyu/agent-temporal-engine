@@ -1,0 +1,12 @@
+# Build output
+/ate
+/bin/
+
+# Local stores and test artifacts
+/.ate/
+/testdata/generated/
+
+# IDE/OS files
+.DS_Store
+.idea/
+.vscode/

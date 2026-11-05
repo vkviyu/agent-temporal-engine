@@ -1,0 +1,337 @@
+{
+  "Packet": {
+    "ID": "24bf5f014e683fcf718d83d940b49e4960a8440b17b7bc38b92e7c1f95e7a21c",
+    "Space": "project",
+    "Key": {
+      "Actor": "worker",
+      "Execution": "execution"
+    },
+    "Source": {
+      "Anchor": {
+        "Fence": {
+          "Store": "c21710361d4aec0c1e12c51921c366f2",
+          "LSN": 144,
+          "CommitDigest": "a7b2364df97ecae630ecd6497fcb204e67a50529036cb0416a58543741c25623"
+        },
+        "Space": "project",
+        "Cursor": {
+          "Store": "c21710361d4aec0c1e12c51921c366f2",
+          "Space": "project",
+          "Revision": "19c564d494dc7e923b3cdcc4e9c5f89c134de112e0ae8857c69a7d3c21324380"
+        },
+        "Knowledge": {
+          "Actor": "worker",
+          "Execution": "execution"
+        }
+      },
+      "ViewDigest": "0f75cafccf12b5587616be94626890dab56fce31a750341d03feb03cb9884ff1",
+      "Frontier": "8dade14f66e6f3ce18c659c77d3e3c9105df9b83917db732f0d546159dca75af"
+    },
+    "GoalRef": "77faf5365dad985f4e734d2cc10d602c99b5ee3162c61ba082994441cbf530ec",
+    "Items": [
+      {
+        "Ordinal": 0,
+        "Observation": "19c5ec2b1dc4a26f8193a14505c861ca45b0b1bd5876693556fa76a0ac8f7f30",
+        "Content": "77faf5365dad985f4e734d2cc10d602c99b5ee3162c61ba082994441cbf530ec",
+        "Label": "summary-1-validated-notes"
+      },
+      {
+        "Ordinal": 1,
+        "Observation": "b1e756f4faf1a4123dbcc7c0395d2dbc4bdc8aa889834a5f8a3575f4e32f262f",
+        "Content": "a15da9f74af46f28206c14ccf491740f2dc97cc44da4b1be58273de169bc6535",
+        "Label": "round-2-health-00"
+      },
+      {
+        "Ordinal": 2,
+        "Observation": "d4f6c8acf05cfd5e955faca5b6df45fbe83fb4200818466471f78c8f8f48948d",
+        "Content": "e2877fea2ead67991043b32e3065bffea890aa02e73d477337ba96221792b25a",
+        "Label": "round-2-health-01"
+      },
+      {
+        "Ordinal": 3,
+        "Observation": "a350d09baedcd0f9774833f081379db293c61c1a2effb0761ba270ee82296f72",
+        "Content": "abdb9b7589254adc55c08a31580c6e23bf7cd5ca5a19a4feca8502605b4a8119",
+        "Label": "round-2-health-02"
+      },
+      {
+        "Ordinal": 4,
+        "Observation": "c42f17290aa420c90671808947724bd134e229759a39389e8526948c25885136",
+        "Content": "b1bf0ea84ae96ccf8307fc7c79efd5d37612b3603812fd00c6d5863594133bf1",
+        "Label": "round-2-health-03"
+      },
+      {
+        "Ordinal": 5,
+        "Observation": "b33e334960c712829d035698658a91b8c7533d801b479bb2f8fe576d20739283",
+        "Content": "e5f9dd00d8148e408adce1f19250396347e65664ff402273bcfb92c85c145586",
+        "Label": "round-2-health-04"
+      },
+      {
+        "Ordinal": 6,
+        "Observation": "39154f5fe583b3608310a34d32d108ed6e8247a5fd4a1e9fe125e5f88547cebc",
+        "Content": "8b0b00c3e38475ab5f1b19fd56567c9ac34e5f7b03dda4c9d264b4c71f0072a2",
+        "Label": "round-2-health-05"
+      },
+      {
+        "Ordinal": 7,
+        "Observation": "178783167095b0cb6a19971df6879960d2faaf2c68a45f6169220790ed61078e",
+        "Content": "587441536b2e5ab7359b23128409b07eba53447355e4c459bee5878cf9c5c96f",
+        "Label": "round-2-health-06"
+      },
+      {
+        "Ordinal": 8,
+        "Observation": "5032f8440757d7c240bfd9c14ed8176c3405b7cf18da448d4705d2cad0ca0215",
+        "Content": "7e16f1bbac4e702513a2368f9dc6b9c548c7e2f937576f2af972016867829c44",
+        "Label": "round-2-health-07"
+      },
+      {
+        "Ordinal": 9,
+        "Observation": "76dbce17671520ac3d9af1317554cc4319a2bbb750152b4166b8ab0666402b7e",
+        "Content": "e2b078217c49e8eed2da917a27c6f92b53962ec7b9cd72265684a4384ecd0796",
+        "Label": "round-2-health-08"
+      },
+      {
+        "Ordinal": 10,
+        "Observation": "f9dde2f77a5dd531c11abd6b0ec81b09c14ce43a13af15b201eb96d3fe8dd8b1",
+        "Content": "629ad3d98cd032c5ca729f8952c91ab427a9d528fe5675401d0acba56f47b1a9",
+        "Label": "round-2-health-09"
+      },
+      {
+        "Ordinal": 11,
+        "Observation": "71e8e22f5291b4905239285b3404c20129e889e75ecd6b551f1c4ec9f4d40cb1",
+        "Content": "46ef84761f353dd8ea7062468167b884ebebe13fef1b189e317a20c879432add",
+        "Label": "round-2-health-10"
+      },
+      {
+        "Ordinal": 12,
+        "Observation": "39cc9e16c399e7d7d253eebd3823d6d74948b49334b787dfeac3ea58f2ceb6de",
+        "Content": "081dc5d11d03b945555a1a87e0ef54f7bd34919a33c0829a1d01d82ef28f9dcc",
+        "Label": "round-2-health-11"
+      },
+      {
+        "Ordinal": 13,
+        "Observation": "d1a0dca3ae53626c4286514aa9812a68c62f88a46d83247a2b68ac511a498d58",
+        "Content": "727daad1e35161180faa12bbc9906d732953dcf5df419385fc82a6b36c951898",
+        "Label": "round-2-health-12"
+      },
+      {
+        "Ordinal": 14,
+        "Observation": "d5fa57658fe3b4c8dd643c8d19fe6ca1298d747c51dd4ebaf4c978ff848dfa88",
+        "Content": "cf6691cce592e8dd53832e96db1811cb3026df0c2b99c0d8f0137d6c5474d0ec",
+        "Label": "round-2-health-13"
+      },
+      {
+        "Ordinal": 15,
+        "Observation": "3086c86dc24268822708629eb170cae2a98961f9a50d715dae94bf8951c1c32b",
+        "Content": "24e7a8c2830ba7e173d177185703b546861cc4b760d524bb4f6582f168dafae0",
+        "Label": "round-2-health-14"
+      },
+      {
+        "Ordinal": 16,
+        "Observation": "8e31a9add3f92f3f610aff312eb1e0a2db37d2d48a5320a36fdf46dbf54ca963",
+        "Content": "7091606de4a97bbf9fb934a652d24a0801385dcb93ef70774c486d77f63565a4",
+        "Label": "round-2-health-15"
+      },
+      {
+        "Ordinal": 17,
+        "Observation": "a0d9eb7eee87b5f9a7b6c3e699f5755f049a46dee5c62a70404d64bab39854ae",
+        "Content": "c28fb97cac50b46ee78311c5b00318fac591e0d6d209e2d5f840fef35f7ac791",
+        "Label": "round-2-health-16"
+      },
+      {
+        "Ordinal": 18,
+        "Observation": "16e6d6d327fa3166ddcb67b3dc0391a567c9142ebdf644851401c698f0cd2be8",
+        "Content": "0f877f1469dad7d72cc706c76a804f4b7c388b9591de782178a3598b340d328f",
+        "Label": "round-2-health-17"
+      },
+      {
+        "Ordinal": 19,
+        "Observation": "76553dd40cb30b0746a83fb2e9377ec984a6bf5fab4897628186bdcb5761e13e",
+        "Content": "e0fcfb07fb740c7291fe4a0d41d008be0574c86b1b05484872843a77ec7e66c4",
+        "Label": "round-2-health-18"
+      },
+      {
+        "Ordinal": 20,
+        "Observation": "453fb3b0e4328cca94a85da1cb4fff9684c1368e364d4232e8e9404e6bc267c9",
+        "Content": "c929502bd69c6e52210a387641393c7440dda8a3c3f394dbbf6cefe39bd4b605",
+        "Label": "round-2-health-19"
+      },
+      {
+        "Ordinal": 21,
+        "Observation": "0b13a01c29ef55b025e0f66562b53d7b12b094831ff61437d5098714bf8553db",
+        "Content": "f8e5e5c0499bcf03370696e410f195145c64e613edca925528d3b12842da54e0",
+        "Label": "round-2-health-20"
+      },
+      {
+        "Ordinal": 22,
+        "Observation": "d359528ee2c77d0f316abe9b254f7c554221b87bb3822672bda2cca83ae37eff",
+        "Content": "d167078d07dd19e9efaffe3d78a5768c30bd43183376eab2f7914fb7fb9dc31b",
+        "Label": "round-2-health-21"
+      },
+      {
+        "Ordinal": 23,
+        "Observation": "e7916f45f06f31c577283c1dafa2d226e24d2efe669a3752d24af91e13ffd27f",
+        "Content": "78c050ee62084ec55c87c8a9e35af5acc8ada896e3092a350274b3fbf8dbb4fd",
+        "Label": "round-2-health-22"
+      },
+      {
+        "Ordinal": 24,
+        "Observation": "1c4a2ce236fbec5306cbb8bffd9f695388fa4465bdda7f908b73414f9c4cdcf8",
+        "Content": "e41b027db8a8eb101cd7e9d951e4d69ee05af5626678aeaed3a2a85b3e1afc83",
+        "Label": "round-2-health-23"
+      },
+      {
+        "Ordinal": 25,
+        "Observation": "b71afc5cc95a808d736c60cfe5b8b04d2db5df15360aaddecffbaf18716fbccc",
+        "Content": "c66ad73f34edb3d23cadd5c461ae6cf54007a24722fdca5681b427b9c089a539",
+        "Label": "summary-2-review-candidate"
+      }
+    ],
+    "Renderer": "ate-effect-evidence-json/v1",
+    "Tokenizer": "utf8-quarter-estimate/v1",
+    "EstimatedTokens": 0,
+    "Input": {
+      "Object": "90c998df7793d9c313ca45ff9e3ce74225e9e50b63503a10f134d9d28e1a02ee",
+      "Anchor": {
+        "Fence": {
+          "Store": "c21710361d4aec0c1e12c51921c366f2",
+          "LSN": 144,
+          "CommitDigest": "a7b2364df97ecae630ecd6497fcb204e67a50529036cb0416a58543741c25623"
+        },
+        "Space": "project",
+        "Cursor": null,
+        "Knowledge": null
+      },
+      "Encoding": "application/json"
+    }
+  },
+  "Activity": {
+    "Activity": "summary-2-review",
+    "Execution": "execution",
+    "Query": "",
+    "Role": "aux_summary",
+    "Step": 0,
+    "Invocation": "",
+    "GoalEpoch": 1,
+    "InputFence": {
+      "Store": "c21710361d4aec0c1e12c51921c366f2",
+      "LSN": 145,
+      "CommitDigest": "ef3eaaca8394fc97fa22fb0bf2398b597d4cb47efffb4b60c3f0a60504c9ab9d"
+    },
+    "ContextPacket": "24bf5f014e683fcf718d83d940b49e4960a8440b17b7bc38b92e7c1f95e7a21c",
+    "RequestDigest": "90fa48f7086360e8013e622a73063f796af6cbfd63d5dca965588ec052b6cae9",
+    "Request": "90c998df7793d9c313ca45ff9e3ce74225e9e50b63503a10f134d9d28e1a02ee",
+    "Recipient": "gpt-6.1-sol",
+    "Effect": "pure",
+    "IdempotencyKey": "",
+    "ResourceScope": "evaluation",
+    "Contract": {
+      "Version": "",
+      "Definition": "",
+      "Recipient": "",
+      "AllowsMutation": false,
+      "VerifiedPure": false,
+      "HistoricalRead": false,
+      "KeyNamespace": "",
+      "RetentionNanos": 0,
+      "DifferentRequest": "",
+      "ResultQuery": "",
+      "ResourceFence": "",
+      "Compensation": "",
+      "CompensationLimit": "",
+      "LateArrivalFence": ""
+    }
+  },
+  "Result": {
+    "ID": "summary-2-review-result",
+    "Activity": "summary-2-review",
+    "Attempt": "summary-2-review-attempt",
+    "RequestDigest": "90fa48f7086360e8013e622a73063f796af6cbfd63d5dca965588ec052b6cae9",
+    "Incarnation": 1,
+    "Outcome": "success",
+    "Payload": "eyJzdXBwb3J0ZWQiOmZhbHNlLCJjb250cmFkaWN0aW9ucyI6W10sInVuc3VwcG9ydGVkX2NsYWltcyI6WyJUaGUgY2FuZGlkYXRlIGF0dHJpYnV0ZXMgdGhlIHJvdW5kLTEgaGVhbHRoIHJlY29yZHMgYW5kIHRoZWlyIGludGVycHJldGF0aW9uIHRvIHRoZSBzb3VyY2Ugbm90ZXMsIGJ1dCB0aGUgc3VwcGxpZWQgcmVjb3JkcyBkbyBub3QgaW5jbHVkZSB0aG9zZSBpbmRpdmlkdWFsIHJvdW5kLTEgcmVjb3JkczsgdGhlIG5vdGVzIG9ubHkgbWVudGlvbiB0aGVtLiIsIlRoZSBjYW5kaWRhdGUgYWRkcyByb3VuZC0yIGhlYWx0aCBtZWFzdXJlbWVudCByYW5nZXMgKGNhY2hlIDcw4oCTODYlLCBxdWV1ZSAw4oCTNCwgbGF0ZW5jeSAy4oCTOCBtcykuIFRoZSBzdXBwbGllZCByb3VuZC0yIHJlY29yZHMgcHJvdmlkZSBpbmRpdmlkdWFsIG1lYXN1cmVtZW50cyBidXQgZG8gbm90IHN0YXRlIHRoZXNlIHJhbmdlcyBhcyBhIHN1bW1hcml6ZWQgY2xhaW0uIFRoZSBjYW5kaWRhdGUgYWxzbyBhdHRyaWJ1dGVzIHRoZSBpbnRlcnByZXRhdGlvbiB0aGF0IHRoZXNlIG1lYXN1cmVtZW50cyBjYW5ub3QgZXN0YWJsaXNoIGFwcGVuZCBvdXRjb21lIG9yIHJlcGxhY2UgcmVjb3ZlcnkgZXZpZGVuY2UgdG8gdGhlIHJvdW5kLTEgaGVhbHRoIHJlY29yZHM7IHRoZSBzdXBwbGllZCByb3VuZC0yIHJlY29yZHMgZG8gc3VwcG9ydCB0aGF0IGludGVycHJldGF0aW9uLiJdLCJyZWFzb24iOiJUaGUgY2FuZGlkYXRlIGxhYmVscyB0aGUgdmFsaWRhdGVkIG5vdGVzIGFzIG5vdCBpbmRlcGVuZGVudGx5IHZlcmlmaWVkLCBidXQgaXQgbWFrZXMgYWRkaXRpb25hbCBjbGFpbXMgYWJvdXQgb21pdHRlZCByb3VuZC0xIHNvdXJjZSByZWNvcmRzIGFuZCBzdW1tYXJpemVzIHJvdW5kLTIgdmFsdWVzIGJleW9uZCB3aGF0IHRoZSByZWNvcmRzIGV4cGxpY2l0bHkgc3RhdGUuIn0="
+  },
+  "Output": {
+    "Object": "cf1719dbdfe61dfb430362feffe11d0e7170f2b1b2e27cdf9cbee4975c54eca7",
+    "Anchor": {
+      "Fence": {
+        "Store": "c21710361d4aec0c1e12c51921c366f2",
+        "LSN": 151,
+        "CommitDigest": "ba318256b3d928d6d67e7678ca8e6dc34807cd8145657a16ca15313280cce38b"
+      },
+      "Space": "project",
+      "Cursor": null,
+      "Knowledge": null
+    },
+    "Encoding": "text/plain;charset=utf-8"
+  },
+  "Reply": {
+    "ID": "resp_052dddfef19b1fa9016aeb1fde505c87d098e9599ced74b72a",
+    "Model": "gpt-6.1-sol",
+    "Status": "completed",
+    "Output": [
+      {
+        "Type": "message",
+        "Content": [
+          {
+            "Type": "output_text",
+            "Text": "{\"supported\":false,\"contradictions\":[],\"unsupported_claims\":[\"The candidate attributes the round-1 health records and their interpretation to the source notes, but the supplied records do not include those individual round-1 records; the notes only mention them.\",\"The candidate adds round-2 health measurement ranges (cache 70–86%, queue 0–4, latency 2–8 ms). The supplied round-2 records provide individual measurements but do not state these ranges as a summarized claim. The candidate also attributes the interpretation that these measurements cannot establish append outcome or replace recovery evidence to the round-1 health records; the supplied round-2 records do support that interpretation.\"],\"reason\":\"The candidate labels the validated notes as not independently verified, but it makes additional claims about omitted round-1 source records and summarizes round-2 values beyond what the records explicitly state.\"}"
+          }
+        ]
+      }
+    ],
+    "Usage": {
+      "input_tokens": 1919,
+      "input_tokens_details": {
+        "cached_tokens": 0,
+        "cache_write_tokens": 0
+      },
+      "output_tokens": 180,
+      "output_tokens_details": {
+        "reasoning_tokens": 0
+      },
+      "total_tokens": 2099,
+      "attribution": {
+        "items": {
+          "msg_052dddfef19b1fa9016aeb1fde514087d085bf94bb466d7f83": {
+            "input_tokens": 1889,
+            "cached_tokens": 0,
+            "cache_write_tokens": 0,
+            "output_tokens": 0,
+            "content": [
+              {
+                "input_tokens": 1889,
+                "cached_tokens": 0,
+                "cache_write_tokens": 0,
+                "output_tokens": 0
+              }
+            ]
+          },
+          "msg_052dddfef19b1fa9016aeb1fdee9dc87d0a9978e8aff586588": {
+            "input_tokens": 2,
+            "cached_tokens": 0,
+            "cache_write_tokens": 0,
+            "output_tokens": 180,
+            "content": [
+              {
+                "input_tokens": 2,
+                "cached_tokens": 0,
+                "cache_write_tokens": 0,
+                "output_tokens": 180
+              }
+            ]
+          }
+        },
+        "request_fields": {
+          "instructions": {
+            "input_tokens": 28,
+            "cached_tokens": 0,
+            "cache_write_tokens": 0,
+            "output_tokens": 0
+          }
+        }
+      }
+    },
+    "Error": null,
+    "incomplete_details": null
+  }
+}

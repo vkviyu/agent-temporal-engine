@@ -1,0 +1,83 @@
+{
+  "raw_log": "native-scale-2026-11-03.jsonl",
+  "raw_sha256": "8bc7071d30f7f3a5023eeabef35c413c6bdf242bf87d8e5ee94296d70d07f413",
+  "samples_per_configuration": 3,
+  "engine": [
+    {
+      "keys": 128,
+      "max_batch": 1,
+      "ack_per_second_median": 31.357426869757326,
+      "ack_per_second_min": 23.435536424171847,
+      "ack_per_second_max": 33.86371495006293,
+      "p50_ms_median": 258.953208,
+      "p95_ms_median": 308.962,
+      "file_sync_per_ack": 3.0,
+      "directory_sync_per_ack": 2.0,
+      "written_bytes_per_ack_median": 6482.75,
+      "transactions_per_current": 1.0,
+      "reopen_ms_median": 46.907292,
+      "compaction_ms_median": 117.61075
+    },
+    {
+      "keys": 128,
+      "max_batch": 16,
+      "ack_per_second_median": 209.85355291115013,
+      "ack_per_second_min": 180.81390287591944,
+      "ack_per_second_max": 227.85014047050163,
+      "p50_ms_median": 36.203833,
+      "p95_ms_median": 48.083125,
+      "file_sync_per_ack": 0.375,
+      "directory_sync_per_ack": 0.25,
+      "written_bytes_per_ack_median": 6158.625,
+      "transactions_per_current": 8.0,
+      "reopen_ms_median": 39.92725,
+      "compaction_ms_median": 118.693666
+    },
+    {
+      "keys": 1024,
+      "max_batch": 1,
+      "ack_per_second_median": 44.98051693507677,
+      "ack_per_second_min": 25.089830905320486,
+      "ack_per_second_max": 48.60022800341341,
+      "p50_ms_median": 170.961083,
+      "p95_ms_median": 209.937667,
+      "file_sync_per_ack": 3.0,
+      "directory_sync_per_ack": 2.0,
+      "written_bytes_per_ack_median": 7242.765625,
+      "transactions_per_current": 1.0,
+      "reopen_ms_median": 81.919416,
+      "compaction_ms_median": 129.968875
+    },
+    {
+      "keys": 1024,
+      "max_batch": 16,
+      "ack_per_second_median": 357.75591942525034,
+      "ack_per_second_min": 351.8488436256854,
+      "ack_per_second_max": 361.7478916541551,
+      "p50_ms_median": 22.037125,
+      "p95_ms_median": 24.900375,
+      "file_sync_per_ack": 0.375,
+      "directory_sync_per_ack": 0.25,
+      "written_bytes_per_ack_median": 6917.390625,
+      "transactions_per_current": 8.0,
+      "reopen_ms_median": 76.739708,
+      "compaction_ms_median": 129.05425
+    }
+  ],
+  "physical_pin": [
+    {
+      "extra_hold_ms": 0.0,
+      "pin_acquire_us_median": 4.292,
+      "compaction_ms_median": 58.88325,
+      "release_reclaim_ms_median": 16.964875,
+      "retained_segments": 33
+    },
+    {
+      "extra_hold_ms": 10.0,
+      "pin_acquire_us_median": 3.833,
+      "compaction_ms_median": 79.928917,
+      "release_reclaim_ms_median": 28.942791,
+      "retained_segments": 33
+    }
+  ]
+}

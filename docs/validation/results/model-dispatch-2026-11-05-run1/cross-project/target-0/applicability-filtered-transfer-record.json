@@ -1,0 +1,202 @@
+{
+  "Packet": {
+    "ID": "87baadfdb801aa309f3b1fa1c725ab2883475d55c99d983cfab204e9ac4b79b6",
+    "Space": "target-project-0",
+    "Key": {
+      "Actor": "target-worker",
+      "Execution": "target-execution"
+    },
+    "Source": {
+      "Anchor": {
+        "Fence": {
+          "Store": "2e449dfc24118cc3aeb0cdfd1657ed66",
+          "LSN": 37,
+          "CommitDigest": "3eb69c3249fdbc4c32093ecc1d85a393eb9608785f30247068f090597a0f1555"
+        },
+        "Space": "target-project-0",
+        "Cursor": {
+          "Store": "2e449dfc24118cc3aeb0cdfd1657ed66",
+          "Space": "target-project-0",
+          "Revision": "c847614dced63f0f570548f9181e9b73b775776a176bafd4ecec9317b8644a12"
+        },
+        "Knowledge": {
+          "Actor": "target-worker",
+          "Execution": "target-execution"
+        }
+      },
+      "ViewDigest": "c990e1c22c1c4e6c7e1081546f854e1779c151d689ca44502408fe0bf014ffcf",
+      "Frontier": "dda485bd0521d6098251aeac2bcd8dce4669468938200641190dd95cfc479b7b"
+    },
+    "GoalRef": "b2c75147d83294cca114a2740c1fb67d7d21e8e283cbdac165dc5c10d22d5438",
+    "Items": [
+      {
+        "Ordinal": 0,
+        "Observation": "04e8a958c582dd8bfa9426854fa3bc82ac77733fb829719554dc49eed171c3ae",
+        "Content": "b2c75147d83294cca114a2740c1fb67d7d21e8e283cbdac165dc5c10d22d5438",
+        "Label": "target-environment"
+      },
+      {
+        "Ordinal": 1,
+        "Observation": "9f6a8c0ab0a33e38863a83b56181a09dd26a3d6c75ee751995db41a88ca5d98d",
+        "Content": "81f5543db18a30e0820dc429296ecb4f54e5b7b785fff3a9986aa35b6ea06ec2",
+        "Label": "foreign-9de369827bc41c7e4f3e6e4c4581b79576479607ac1b62e82ca624e12d283231"
+      }
+    ],
+    "Renderer": "ate-effect-evidence-json/v1",
+    "Tokenizer": "utf8-quarter-estimate/v1",
+    "EstimatedTokens": 0,
+    "Input": {
+      "Object": "193398835a25581bec657758eb1e64c3477d474e4cb2d6f6335100e78608f3e8",
+      "Anchor": {
+        "Fence": {
+          "Store": "2e449dfc24118cc3aeb0cdfd1657ed66",
+          "LSN": 37,
+          "CommitDigest": "3eb69c3249fdbc4c32093ecc1d85a393eb9608785f30247068f090597a0f1555"
+        },
+        "Space": "target-project-0",
+        "Cursor": null,
+        "Knowledge": null
+      },
+      "Encoding": "application/json"
+    }
+  },
+  "Activity": {
+    "Activity": "applicability-filtered-transfer",
+    "Execution": "target-execution",
+    "Query": "",
+    "Role": "aux_summary",
+    "Step": 0,
+    "Invocation": "",
+    "GoalEpoch": 1,
+    "InputFence": {
+      "Store": "2e449dfc24118cc3aeb0cdfd1657ed66",
+      "LSN": 38,
+      "CommitDigest": "b66f2ca230446261e1b129a5dd5a939d513e4353f6900c8708776f6460683882"
+    },
+    "ContextPacket": "87baadfdb801aa309f3b1fa1c725ab2883475d55c99d983cfab204e9ac4b79b6",
+    "RequestDigest": "ff180c55b63ef78c18c2925ede322a0eeeb9a0c5a1dcd8f1bbaa8da622a11e1b",
+    "Request": "193398835a25581bec657758eb1e64c3477d474e4cb2d6f6335100e78608f3e8",
+    "Recipient": "gpt-6.1-sol",
+    "Effect": "pure",
+    "IdempotencyKey": "",
+    "ResourceScope": "evaluation",
+    "Contract": {
+      "Version": "",
+      "Definition": "",
+      "Recipient": "",
+      "AllowsMutation": false,
+      "VerifiedPure": false,
+      "HistoricalRead": false,
+      "KeyNamespace": "",
+      "RetentionNanos": 0,
+      "DifferentRequest": "",
+      "ResultQuery": "",
+      "ResourceFence": "",
+      "Compensation": "",
+      "CompensationLimit": "",
+      "LateArrivalFence": ""
+    }
+  },
+  "Grant": {
+    "id": "applicability-filtered-transfer-grant",
+    "execution": "target-execution",
+    "task": "task",
+    "goal_epoch": 1,
+    "authority": {
+      "Deployment": "evaluation",
+      "OwnerEpoch": 1,
+      "Incarnation": 1,
+      "Holder": "host"
+    },
+    "authority_version": 1,
+    "content": "87baadfdb801aa309f3b1fa1c725ab2883475d55c99d983cfab204e9ac4b79b6",
+    "anchor": {
+      "Fence": {
+        "Store": "2e449dfc24118cc3aeb0cdfd1657ed66",
+        "LSN": 38,
+        "CommitDigest": "b66f2ca230446261e1b129a5dd5a939d513e4353f6900c8708776f6460683882"
+      },
+      "Space": "target-project-0",
+      "Cursor": null,
+      "Knowledge": null
+    },
+    "offset": 0,
+    "length": 1417,
+    "destination": "gpt-6.1-sol",
+    "activity": "applicability-filtered-transfer",
+    "attempt": "applicability-filtered-transfer-attempt",
+    "request_digest": "ff180c55b63ef78c18c2925ede322a0eeeb9a0c5a1dcd8f1bbaa8da622a11e1b",
+    "content_kind": "packet"
+  },
+  "Dispatch": {
+    "Code": "durable_ack",
+    "RequestID": "eval-000042",
+    "TxID": "d9b95a6afc4ddc8493fb24e19fd46af6",
+    "Fence": {
+      "Store": "2e449dfc24118cc3aeb0cdfd1657ed66",
+      "LSN": 42,
+      "CommitDigest": "112feabb24a101a76fdba55241823fb37b84e866b7f233bfbe5de7ae53b2b64c"
+    },
+    "RequestDigest": "77c638afda969a3eb79d4113b86948fdaccaf3fb5fee35cfca533e0cfba400c8",
+    "ResultDigest": "95d8a8c897ca092ac184f229c40924f05a9df8efb7b67895ab619407a413d7f9",
+    "Conflict": "",
+    "StateRoot": "7c931eee8e9903291b958f55d14f281c544e99db2ffb0085725bf69f8a99682e",
+    "RootSet": "7f77c0b3fc7e9904540a7d75ad2b19e582cc0556d84dedb5aa6a78301341eae7"
+  },
+  "Result": {
+    "ID": "applicability-filtered-transfer-result",
+    "Activity": "applicability-filtered-transfer",
+    "Attempt": "applicability-filtered-transfer-attempt",
+    "RequestDigest": "ff180c55b63ef78c18c2925ede322a0eeeb9a0c5a1dcd8f1bbaa8da622a11e1b",
+    "Incarnation": 1,
+    "Outcome": "success",
+    "Payload": "eyJhcHBseV9tZW1vcnkiOnRydWUsInByb2NlZHVyZV9pZCI6ImxlZGdlci1aWDgiLCJyZXRyeV91bmtub3duIjpmYWxzZX0="
+  },
+  "Output": {
+    "Object": "a8ec3f67e25d7f92ad7f7af5f8d1fafa2455a464bb78812769bea59b61b83707",
+    "Anchor": {
+      "Fence": {
+        "Store": "2e449dfc24118cc3aeb0cdfd1657ed66",
+        "LSN": 45,
+        "CommitDigest": "6154427b68eb44ad071cd61307e748f09f0a542121a012709d9b76f422c36647"
+      },
+      "Space": "target-project-0",
+      "Cursor": null,
+      "Knowledge": null
+    },
+    "Encoding": "text/plain;charset=utf-8"
+  },
+  "Reply": {
+    "ID": "resp_0f57d2c1d8f30002016aeb9dce6fb887d2bc56369aad9a7358",
+    "Model": "gpt-6.1-sol",
+    "Status": "completed",
+    "Output": [
+      {
+        "Type": "reasoning",
+        "Content": []
+      },
+      {
+        "Type": "message",
+        "Content": [
+          {
+            "Type": "output_text",
+            "Text": "{\"apply_memory\":true,\"procedure_id\":\"ledger-ZX8\",\"retry_unknown\":false}"
+          }
+        ]
+      }
+    ],
+    "Usage": {
+      "input_tokens": 14356,
+      "input_tokens_details": {
+        "cached_tokens": 0
+      },
+      "output_tokens": 58,
+      "output_tokens_details": {
+        "reasoning_tokens": 33
+      },
+      "total_tokens": 14414
+    },
+    "Error": null,
+    "incomplete_details": null
+  }
+}

@@ -1,0 +1,171 @@
+{
+  "Packet": {
+    "ID": "a8fb93dea2b73fe3301fcee1bc480c5c44a2d856928bc732bfd7a3e8efe77a71",
+    "Space": "target-project-1",
+    "Key": {
+      "Actor": "target-worker",
+      "Execution": "target-execution"
+    },
+    "Source": {
+      "Anchor": {
+        "Fence": {
+          "Store": "0fea3fa3b3ee224dad9795ea8d79ccba",
+          "LSN": 61,
+          "CommitDigest": "a9d3cef5ee41ad18c8e2c82c516c7b6c0d0354dbb0d0604a32de18e6ec85ea15"
+        },
+        "Space": "target-project-1",
+        "Cursor": {
+          "Store": "0fea3fa3b3ee224dad9795ea8d79ccba",
+          "Space": "target-project-1",
+          "Revision": "74fce2d17c55e50c05292e3813529884291b13b8a40bd3d289fa92aa36b1f057"
+        },
+        "Knowledge": {
+          "Actor": "target-worker",
+          "Execution": "target-execution"
+        }
+      },
+      "ViewDigest": "053889ee5b9d70498e682706465e88677d9975ff2dfccdcba3c5d91ec30c5168",
+      "Frontier": "89738a443eb1e96e5ab50b46be262396df509c857281db8ad80aac67bcd9e974"
+    },
+    "GoalRef": "56e273516b33b3be3365611b11029248b109961c44ff8dc65322d25d7694ed35",
+    "Items": [
+      {
+        "Ordinal": 0,
+        "Observation": "eb2bc6e36c66cee101015e04f0c720cd75d183fbe4403b6a76923acc1f9007c0",
+        "Content": "56e273516b33b3be3365611b11029248b109961c44ff8dc65322d25d7694ed35",
+        "Label": "target-environment"
+      }
+    ],
+    "Renderer": "ate-effect-evidence-json/v1",
+    "Tokenizer": "utf8-quarter-estimate/v1",
+    "EstimatedTokens": 0,
+    "Input": {
+      "Object": "e18d5ea52b3297868802108908bc10c04039c969351cd0c1c1f5e1d68a3bd28c",
+      "Anchor": {
+        "Fence": {
+          "Store": "0fea3fa3b3ee224dad9795ea8d79ccba",
+          "LSN": 61,
+          "CommitDigest": "a9d3cef5ee41ad18c8e2c82c516c7b6c0d0354dbb0d0604a32de18e6ec85ea15"
+        },
+        "Space": "target-project-1",
+        "Cursor": null,
+        "Knowledge": null
+      },
+      "Encoding": "application/json"
+    }
+  },
+  "Activity": {
+    "Activity": "applicability-filtered-transfer",
+    "Execution": "target-execution",
+    "Query": "",
+    "Role": "aux_summary",
+    "Step": 0,
+    "Invocation": "",
+    "GoalEpoch": 1,
+    "InputFence": {
+      "Store": "0fea3fa3b3ee224dad9795ea8d79ccba",
+      "LSN": 62,
+      "CommitDigest": "38944ed112481355a320cda2643c6cef3686921ad81c0f2d43ac113cb3167e7f"
+    },
+    "ContextPacket": "a8fb93dea2b73fe3301fcee1bc480c5c44a2d856928bc732bfd7a3e8efe77a71",
+    "RequestDigest": "355d1a4600c83be8815018b599212461cd2b220b09f5b305ffc3bf229254ea5e",
+    "Request": "e18d5ea52b3297868802108908bc10c04039c969351cd0c1c1f5e1d68a3bd28c",
+    "Recipient": "gpt-6.1-sol",
+    "Effect": "pure",
+    "IdempotencyKey": "",
+    "ResourceScope": "evaluation"
+  },
+  "Result": {
+    "ID": "applicability-filtered-transfer-result",
+    "Activity": "applicability-filtered-transfer",
+    "Attempt": "applicability-filtered-transfer-attempt",
+    "RequestDigest": "355d1a4600c83be8815018b599212461cd2b220b09f5b305ffc3bf229254ea5e",
+    "Incarnation": 1,
+    "Outcome": "success",
+    "Payload": "eyJhcHBseV9tZW1vcnkiOmZhbHNlLCJwcm9jZWR1cmVfaWQiOm51bGwsInJldHJ5X3Vua25vd24iOmZhbHNlfQ=="
+  },
+  "Output": {
+    "Object": "13d887511519a93f5b5fb0ffc7e1393d390dd28c368fea2b00d99eb474738f5d",
+    "Anchor": {
+      "Fence": {
+        "Store": "0fea3fa3b3ee224dad9795ea8d79ccba",
+        "LSN": 68,
+        "CommitDigest": "2c23b9dc51413bf60d34ac0a1d330790f472a3983540156346142d61e778bfc5"
+      },
+      "Space": "target-project-1",
+      "Cursor": null,
+      "Knowledge": null
+    },
+    "Encoding": "text/plain;charset=utf-8"
+  },
+  "Reply": {
+    "ID": "resp_0733299d95adf576016ae9aa41e9548191b1f5d84e06108b8b",
+    "Model": "gpt-6.1-sol",
+    "Status": "completed",
+    "Output": [
+      {
+        "Type": "message",
+        "Content": [
+          {
+            "Type": "output_text",
+            "Text": "{\"apply_memory\":false,\"procedure_id\":null,\"retry_unknown\":false}"
+          }
+        ]
+      }
+    ],
+    "Usage": {
+      "input_tokens": 169,
+      "input_tokens_details": {
+        "cached_tokens": 0,
+        "cache_write_tokens": 0
+      },
+      "output_tokens": 20,
+      "output_tokens_details": {
+        "reasoning_tokens": 0
+      },
+      "total_tokens": 189,
+      "attribution": {
+        "items": {
+          "msg_0733299d95adf576016ae9aa41ea0c8191815686729936f712": {
+            "input_tokens": 139,
+            "cached_tokens": 0,
+            "cache_write_tokens": 0,
+            "output_tokens": 0,
+            "content": [
+              {
+                "input_tokens": 139,
+                "cached_tokens": 0,
+                "cache_write_tokens": 0,
+                "output_tokens": 0
+              }
+            ]
+          },
+          "msg_0733299d95adf576016ae9aa43ed288191ada78d0c277583e3": {
+            "input_tokens": 2,
+            "cached_tokens": 0,
+            "cache_write_tokens": 0,
+            "output_tokens": 20,
+            "content": [
+              {
+                "input_tokens": 2,
+                "cached_tokens": 0,
+                "cache_write_tokens": 0,
+                "output_tokens": 20
+              }
+            ]
+          }
+        },
+        "request_fields": {
+          "instructions": {
+            "input_tokens": 28,
+            "cached_tokens": 0,
+            "cache_write_tokens": 0,
+            "output_tokens": 0
+          }
+        }
+      }
+    },
+    "Error": null,
+    "incomplete_details": null
+  }
+}

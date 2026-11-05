@@ -1,0 +1,742 @@
+{
+  "schema": 1,
+  "release": "v1.0.0",
+  "status": "frozen",
+  "families": [
+    {
+      "id": "agent.command",
+      "selector": "schema",
+      "domain": "ATE-AGENT-COMMAND\\0",
+      "status": "frozen",
+      "migration": "preserve-history",
+      "versions": [
+        {
+          "number": 1,
+          "decode": true,
+          "replay": true,
+          "write": true
+        }
+      ]
+    },
+    {
+      "id": "agent.continuation",
+      "selector": "opcode",
+      "domain": "agent.lifecycle",
+      "layout": "owner-step-direct-or-producer-knowledge-adapter-actions-v1",
+      "status": "frozen",
+      "migration": "preserve-history",
+      "versions": [
+        {
+          "number": 8,
+          "decode": true,
+          "replay": true,
+          "write": true
+        }
+      ]
+    },
+    {
+      "id": "agent.control",
+      "selector": "schema",
+      "domain": "ATE-AGENT-CONTROL\\0",
+      "layout": "control5-effect-contract-retry-v1",
+      "status": "frozen",
+      "migration": "preserve-history",
+      "versions": [
+        {
+          "number": 5,
+          "decode": true,
+          "replay": true,
+          "write": true
+        }
+      ]
+    },
+    {
+      "id": "agent.invocation",
+      "selector": "schema",
+      "domain": "Invocation",
+      "status": "frozen",
+      "migration": "preserve-history",
+      "versions": [
+        {
+          "number": 2,
+          "decode": true,
+          "replay": true,
+          "write": true
+        }
+      ]
+    },
+    {
+      "id": "agent.snapshot",
+      "selector": "schema",
+      "domain": "ATE-AGENT-SNAPSHOT\\0",
+      "status": "frozen",
+      "migration": "preserve-history",
+      "versions": [
+        {
+          "number": 1,
+          "decode": true,
+          "replay": true,
+          "write": true
+        },
+        {
+          "number": 2,
+          "decode": true,
+          "replay": true,
+          "write": true
+        }
+      ]
+    },
+    {
+      "id": "agent.tool-definition",
+      "selector": "schema",
+      "domain": "ATE-TOOL-DEFINITION\\0",
+      "layout": "name-version-schema-dispatch-mode-effect-v1",
+      "status": "frozen",
+      "migration": "preserve-history",
+      "versions": [
+        {
+          "number": 1,
+          "decode": true,
+          "replay": true,
+          "write": true
+        }
+      ]
+    },
+    {
+      "id": "agent.work",
+      "selector": "schema",
+      "domain": "ATE-WORK\\0",
+      "layout": "bounded-work-producer-cut-atomic-step-and-dispatch-v1",
+      "status": "frozen",
+      "migration": "preserve-history",
+      "versions": [
+        {
+          "number": 1,
+          "decode": true,
+          "replay": true,
+          "write": true
+        }
+      ]
+    },
+    {
+      "id": "annotation.record",
+      "selector": "schema",
+      "domain": "ATE-ANNOTATION\\0v1\\0",
+      "layout": "canonical-json-owner-append-only-v1",
+      "status": "frozen",
+      "migration": "preserve-history",
+      "versions": [
+        {
+          "number": 1,
+          "decode": true,
+          "replay": true,
+          "write": true
+        }
+      ]
+    },
+    {
+      "id": "annotation.snapshot",
+      "selector": "schema",
+      "domain": "ATE-ANNOTATIONS\\0v1\\0",
+      "layout": "canonical-json-owner-append-only-v1",
+      "status": "frozen",
+      "migration": "preserve-history",
+      "versions": [
+        {
+          "number": 1,
+          "decode": true,
+          "replay": true,
+          "write": true
+        }
+      ]
+    },
+    {
+      "id": "codec.object",
+      "selector": "schema",
+      "domain": "ATEOBJ01",
+      "status": "frozen",
+      "migration": "preserve-history",
+      "versions": [
+        {
+          "number": 1,
+          "decode": true,
+          "replay": true,
+          "write": true
+        }
+      ]
+    },
+    {
+      "id": "core.command",
+      "selector": "schema",
+      "domain": "ate.command",
+      "status": "frozen",
+      "migration": "preserve-history",
+      "versions": [
+        {
+          "number": 1,
+          "decode": true,
+          "replay": true,
+          "write": true
+        }
+      ]
+    },
+    {
+      "id": "core.receipt",
+      "selector": "schema",
+      "domain": "ate.receipt",
+      "status": "frozen",
+      "migration": "preserve-history",
+      "versions": [
+        {
+          "number": 1,
+          "decode": true,
+          "replay": true,
+          "write": true
+        }
+      ]
+    },
+    {
+      "id": "core.rootset",
+      "selector": "schema",
+      "domain": "ate.rootset",
+      "status": "frozen",
+      "migration": "preserve-history",
+      "versions": [
+        {
+          "number": 1,
+          "decode": true,
+          "replay": true,
+          "write": true
+        }
+      ]
+    },
+    {
+      "id": "core.stateops",
+      "selector": "schema",
+      "domain": "ate.stateops",
+      "status": "frozen",
+      "migration": "preserve-history",
+      "versions": [
+        {
+          "number": 1,
+          "decode": true,
+          "replay": true,
+          "write": true
+        }
+      ]
+    },
+    {
+      "id": "core.value",
+      "selector": "schema",
+      "domain": "ate.value",
+      "status": "frozen",
+      "migration": "preserve-history",
+      "versions": [
+        {
+          "number": 1,
+          "decode": true,
+          "replay": true,
+          "write": true
+        }
+      ]
+    },
+    {
+      "id": "emission.command",
+      "selector": "schema",
+      "domain": "ATE-EMISSION\\0",
+      "status": "frozen",
+      "migration": "preserve-history",
+      "versions": [
+        {
+          "number": 3,
+          "decode": true,
+          "replay": true,
+          "write": true
+        }
+      ]
+    },
+    {
+      "id": "event.agent",
+      "selector": "schema",
+      "domain": "ate.agent.event",
+      "status": "frozen",
+      "migration": "preserve-history",
+      "versions": [
+        {
+          "number": 1,
+          "decode": true,
+          "replay": true,
+          "write": true
+        }
+      ]
+    },
+    {
+      "id": "event.core",
+      "selector": "schema",
+      "domain": "ate.event",
+      "status": "frozen",
+      "migration": "preserve-history",
+      "versions": [
+        {
+          "number": 1,
+          "decode": true,
+          "replay": true,
+          "write": true
+        },
+        {
+          "number": 2,
+          "decode": true,
+          "replay": true,
+          "write": true
+        }
+      ]
+    },
+    {
+      "id": "event.profile-registry",
+      "selector": "schema",
+      "domain": "agent.transition_applied",
+      "status": "frozen",
+      "migration": "preserve-history",
+      "versions": [
+        {
+          "number": 1,
+          "decode": true,
+          "replay": true,
+          "write": true
+        }
+      ]
+    },
+    {
+      "id": "graph.branch",
+      "selector": "schema",
+      "domain": "Branch",
+      "status": "frozen",
+      "migration": "preserve-history",
+      "versions": [
+        {
+          "number": 1,
+          "decode": true,
+          "replay": true,
+          "write": true
+        }
+      ]
+    },
+    {
+      "id": "graph.command",
+      "selector": "schema",
+      "domain": "ATE-GRAPH-COMMAND\\0",
+      "status": "frozen",
+      "migration": "preserve-history",
+      "versions": [
+        {
+          "number": 1,
+          "decode": true,
+          "replay": true,
+          "write": true
+        }
+      ]
+    },
+    {
+      "id": "graph.revision",
+      "selector": "schema",
+      "domain": "ATE-REVISION\\0",
+      "status": "frozen",
+      "migration": "preserve-history",
+      "versions": [
+        {
+          "number": 2,
+          "decode": true,
+          "replay": true,
+          "write": true
+        }
+      ]
+    },
+    {
+      "id": "knowledge.command",
+      "selector": "schema",
+      "domain": "ATE-KNOWLEDGE-COMMAND\\0",
+      "status": "frozen",
+      "migration": "preserve-history",
+      "versions": [
+        {
+          "number": 1,
+          "decode": true,
+          "replay": true,
+          "write": true
+        }
+      ]
+    },
+    {
+      "id": "knowledge.observation",
+      "selector": "schema",
+      "domain": "Observation",
+      "status": "frozen",
+      "migration": "preserve-history",
+      "versions": [
+        {
+          "number": 1,
+          "decode": true,
+          "replay": true,
+          "write": true
+        },
+        {
+          "number": 2,
+          "decode": true,
+          "replay": true,
+          "write": true
+        },
+        {
+          "number": 3,
+          "decode": true,
+          "replay": true,
+          "write": true
+        },
+        {
+          "number": 4,
+          "decode": true,
+          "replay": true,
+          "write": true
+        }
+      ]
+    },
+    {
+      "id": "knowledge.packet",
+      "selector": "schema",
+      "domain": "ContextPacket",
+      "layout": "packet4-context-requirements-v1",
+      "status": "frozen",
+      "migration": "preserve-history",
+      "versions": [
+        {
+          "number": 4,
+          "decode": true,
+          "replay": true,
+          "write": true
+        }
+      ]
+    },
+    {
+      "id": "knowledge.summary",
+      "selector": "schema",
+      "domain": "ATE-KNOWLEDGE-SUMMARY\\0",
+      "status": "frozen",
+      "migration": "preserve-history",
+      "versions": [
+        {
+          "number": 1,
+          "decode": true,
+          "replay": true,
+          "write": true
+        }
+      ]
+    },
+    {
+      "id": "local.protocol",
+      "selector": "schema",
+      "domain": "length-be32/json",
+      "status": "frozen",
+      "migration": "preserve-history",
+      "versions": [
+        {
+          "number": 1,
+          "decode": true,
+          "replay": true,
+          "write": true
+        }
+      ]
+    },
+    {
+      "id": "memory.command",
+      "selector": "schema",
+      "domain": "MemoryCommand",
+      "status": "frozen",
+      "migration": "preserve-history",
+      "versions": [
+        {
+          "number": 1,
+          "decode": true,
+          "replay": true,
+          "write": true
+        }
+      ]
+    },
+    {
+      "id": "memory.snapshot",
+      "selector": "schema",
+      "domain": "ATE-MEMORY-SNAPSHOT\\0",
+      "status": "frozen",
+      "migration": "preserve-history",
+      "versions": [
+        {
+          "number": 1,
+          "decode": true,
+          "replay": true,
+          "write": true
+        }
+      ]
+    },
+    {
+      "id": "state.radix",
+      "selector": "schema",
+      "domain": "ate.radix",
+      "status": "frozen",
+      "migration": "preserve-history",
+      "versions": [
+        {
+          "number": 1,
+          "decode": true,
+          "replay": true,
+          "write": true
+        }
+      ]
+    },
+    {
+      "id": "storage.current",
+      "selector": "schema",
+      "domain": "ATECUR01",
+      "status": "frozen",
+      "migration": "preserve-history",
+      "versions": [
+        {
+          "number": 1,
+          "decode": true,
+          "replay": true,
+          "write": true
+        }
+      ]
+    },
+    {
+      "id": "storage.frame",
+      "selector": "schema",
+      "domain": "ATEFRM01",
+      "status": "frozen",
+      "migration": "preserve-history",
+      "versions": [
+        {
+          "number": 1,
+          "decode": true,
+          "replay": true,
+          "write": true
+        }
+      ]
+    },
+    {
+      "id": "storage.identity",
+      "selector": "schema",
+      "domain": "ATEID001",
+      "status": "frozen",
+      "migration": "preserve-history",
+      "versions": [
+        {
+          "number": 1,
+          "decode": true,
+          "replay": true,
+          "write": true
+        }
+      ]
+    },
+    {
+      "id": "storage.manifest",
+      "selector": "schema",
+      "domain": "ATEMAN01",
+      "status": "frozen",
+      "migration": "preserve-history",
+      "versions": [
+        {
+          "number": 1,
+          "decode": true,
+          "replay": true,
+          "write": true
+        },
+        {
+          "number": 2,
+          "decode": true,
+          "replay": true,
+          "write": true
+        },
+        {
+          "number": 3,
+          "decode": true,
+          "replay": true,
+          "write": true
+        }
+      ]
+    },
+    {
+      "id": "storage.segment",
+      "selector": "schema",
+      "domain": "ATESEG01",
+      "status": "frozen",
+      "migration": "preserve-history",
+      "versions": [
+        {
+          "number": 1,
+          "decode": true,
+          "replay": true,
+          "write": true
+        }
+      ]
+    },
+    {
+      "id": "transfer.archive",
+      "selector": "schema",
+      "domain": "ArchiveEntry",
+      "status": "frozen",
+      "migration": "preserve-history",
+      "versions": [
+        {
+          "number": 1,
+          "decode": true,
+          "replay": true,
+          "write": true
+        }
+      ]
+    },
+    {
+      "id": "transfer.import-record",
+      "selector": "schema",
+      "domain": "ImportRecord",
+      "status": "frozen",
+      "migration": "preserve-history",
+      "versions": [
+        {
+          "number": 1,
+          "decode": true,
+          "replay": true,
+          "write": true
+        }
+      ]
+    },
+    {
+      "id": "transfer.manifest",
+      "selector": "schema",
+      "domain": "ATE-TRANSFER-MANIFEST\\0",
+      "status": "frozen",
+      "migration": "preserve-history",
+      "versions": [
+        {
+          "number": 1,
+          "decode": true,
+          "replay": true,
+          "write": true
+        }
+      ]
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "agent/v1",
+      "methods": [
+        "apply_agent",
+        "apply_emission",
+        "apply_summary",
+        "get_agent_state",
+        "get_emission",
+        "get_query_intake",
+        "get_query_progress",
+        "get_summary"
+      ]
+    },
+    {
+      "id": "annotation/v1",
+      "methods": [
+        "apply_annotation",
+        "get_annotations"
+      ]
+    },
+    {
+      "id": "core/content-range-v1",
+      "methods": [
+        "read_content"
+      ]
+    },
+    {
+      "id": "core/node-explore-v1",
+      "methods": [
+        "search_nodes",
+        "trace_nodes"
+      ]
+    },
+    {
+      "id": "core/node-query-v1",
+      "methods": [
+        "get_node",
+        "get_node_context",
+        "list_nodes"
+      ]
+    },
+    {
+      "id": "core/publication-ref-v1",
+      "methods": [
+        "resolve_publication"
+      ]
+    },
+    {
+      "id": "core/state-view-v1",
+      "methods": [
+        "close_view",
+        "get_view_entries",
+        "get_view_state",
+        "open_view"
+      ]
+    },
+    {
+      "id": "core/storage-v1",
+      "methods": [
+        "commit",
+        "get_state",
+        "lookup_request",
+        "mutate",
+        "snapshot"
+      ]
+    },
+    {
+      "id": "event/v1",
+      "methods": []
+    },
+    {
+      "id": "graph/query-v1",
+      "methods": [
+        "diff_graph",
+        "plan_graph_join",
+        "trace_graph"
+      ]
+    },
+    {
+      "id": "graph/v1",
+      "methods": [
+        "apply_graph",
+        "get_graph_branch",
+        "get_graph_revision"
+      ]
+    },
+    {
+      "id": "knowledge/v1",
+      "methods": [
+        "apply_knowledge",
+        "get_knowledge"
+      ]
+    },
+    {
+      "id": "memory/v1",
+      "methods": [
+        "apply_memory",
+        "get_memory"
+      ]
+    },
+    {
+      "id": "protocol/local-v1",
+      "methods": [
+        "hello"
+      ]
+    },
+    {
+      "id": "transfer/archive-v1",
+      "methods": [
+        "export_transfer",
+        "get_transfer",
+        "import_transfer"
+      ]
+    }
+  ]
+}

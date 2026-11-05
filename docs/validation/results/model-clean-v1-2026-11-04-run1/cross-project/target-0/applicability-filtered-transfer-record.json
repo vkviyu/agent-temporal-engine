@@ -1,0 +1,203 @@
+{
+  "Packet": {
+    "ID": "a455c2ea9a2dacc509f67dfd07c6a49c5a3485a69439789b9f12b4c8e1950212",
+    "Space": "target-project-0",
+    "Key": {
+      "Actor": "target-worker",
+      "Execution": "target-execution"
+    },
+    "Source": {
+      "Anchor": {
+        "Fence": {
+          "Store": "836a7912611d4e95a6f88c64abb64a17",
+          "LSN": 36,
+          "CommitDigest": "60fcc930930d192503c7db114d4466aef11d530609411860cd8b5113699f6453"
+        },
+        "Space": "target-project-0",
+        "Cursor": {
+          "Store": "836a7912611d4e95a6f88c64abb64a17",
+          "Space": "target-project-0",
+          "Revision": "66ccf1ea626a81071d538f53f6caa886a8261e0dccd28e4357fff95d9fcf4863"
+        },
+        "Knowledge": {
+          "Actor": "target-worker",
+          "Execution": "target-execution"
+        }
+      },
+      "ViewDigest": "2699cd338953c615b0f324a90708e1226a43c5b3702e27f17d456ea54814e4b0",
+      "Frontier": "17d4f49fd815b744e3448cca507e422f81e27aff122c5daf1de6806ba00883d9"
+    },
+    "GoalRef": "b2c75147d83294cca114a2740c1fb67d7d21e8e283cbdac165dc5c10d22d5438",
+    "Items": [
+      {
+        "Ordinal": 0,
+        "Observation": "d301ae6567c0e877a7a7a5290b7bcc2d06d8c013c257e97d78d21a5b56d3809d",
+        "Content": "b2c75147d83294cca114a2740c1fb67d7d21e8e283cbdac165dc5c10d22d5438",
+        "Label": "target-environment"
+      },
+      {
+        "Ordinal": 1,
+        "Observation": "668958ef7240d042c789f992ab6ea5d9a4f4a345fb6ad4af35426366bb89722a",
+        "Content": "03122537cac20be3ae0fa58523073917fb267b316b41fddabc7d9ab8918a0082",
+        "Label": "foreign-17ec15cb40315bbf7718a8232a8d1fa1dc5ad44b9223ca65d6cedc6424f4cfa2"
+      }
+    ],
+    "Renderer": "ate-effect-evidence-json/v1",
+    "Tokenizer": "utf8-quarter-estimate/v1",
+    "EstimatedTokens": 0,
+    "Input": {
+      "Object": "951336651467651fd80747e7b8c4ee74bbf1fc27137e19a25e4b226b2083d03a",
+      "Anchor": {
+        "Fence": {
+          "Store": "836a7912611d4e95a6f88c64abb64a17",
+          "LSN": 36,
+          "CommitDigest": "60fcc930930d192503c7db114d4466aef11d530609411860cd8b5113699f6453"
+        },
+        "Space": "target-project-0",
+        "Cursor": null,
+        "Knowledge": null
+      },
+      "Encoding": "application/json"
+    }
+  },
+  "Activity": {
+    "Activity": "applicability-filtered-transfer",
+    "Execution": "target-execution",
+    "Query": "",
+    "Role": "aux_summary",
+    "Step": 0,
+    "Invocation": "",
+    "GoalEpoch": 1,
+    "InputFence": {
+      "Store": "836a7912611d4e95a6f88c64abb64a17",
+      "LSN": 37,
+      "CommitDigest": "a130cea9b11f91336e26b6161edbbfcf33ad10f9edeb1a86f245e47b882e82e9"
+    },
+    "ContextPacket": "a455c2ea9a2dacc509f67dfd07c6a49c5a3485a69439789b9f12b4c8e1950212",
+    "RequestDigest": "23440f341f3e18d9cca172edb7d81f1b5b88b3ff9ebd20ed8bc1304025c6d368",
+    "Request": "951336651467651fd80747e7b8c4ee74bbf1fc27137e19a25e4b226b2083d03a",
+    "Recipient": "gpt-6.1-sol",
+    "Effect": "pure",
+    "IdempotencyKey": "",
+    "ResourceScope": "evaluation",
+    "Contract": {
+      "Version": "",
+      "Definition": "",
+      "Recipient": "",
+      "AllowsMutation": false,
+      "VerifiedPure": false,
+      "HistoricalRead": false,
+      "KeyNamespace": "",
+      "RetentionNanos": 0,
+      "DifferentRequest": "",
+      "ResultQuery": "",
+      "ResourceFence": "",
+      "Compensation": "",
+      "CompensationLimit": "",
+      "LateArrivalFence": ""
+    }
+  },
+  "Result": {
+    "ID": "applicability-filtered-transfer-result",
+    "Activity": "applicability-filtered-transfer",
+    "Attempt": "applicability-filtered-transfer-attempt",
+    "RequestDigest": "23440f341f3e18d9cca172edb7d81f1b5b88b3ff9ebd20ed8bc1304025c6d368",
+    "Incarnation": 1,
+    "Outcome": "success",
+    "Payload": "eyJhcHBseV9tZW1vcnkiOnRydWUsInByb2NlZHVyZV9pZCI6ImxlZGdlci1aWDgiLCJyZXRyeV91bmtub3duIjpmYWxzZX0="
+  },
+  "Output": {
+    "Object": "a8ec3f67e25d7f92ad7f7af5f8d1fafa2455a464bb78812769bea59b61b83707",
+    "Anchor": {
+      "Fence": {
+        "Store": "836a7912611d4e95a6f88c64abb64a17",
+        "LSN": 43,
+        "CommitDigest": "70d83e1ce55b4f3154fd4b091fc11b7c131e65a56b44b9c189d3f6f96cb7a590"
+      },
+      "Space": "target-project-0",
+      "Cursor": null,
+      "Knowledge": null
+    },
+    "Encoding": "text/plain;charset=utf-8"
+  },
+  "Reply": {
+    "ID": "resp_06cde3dc7fb39495016aeb201192dc87d2adbafe39e8b455a7",
+    "Model": "gpt-6.1-sol",
+    "Status": "completed",
+    "Output": [
+      {
+        "Type": "reasoning",
+        "Content": []
+      },
+      {
+        "Type": "message",
+        "Content": [
+          {
+            "Type": "output_text",
+            "Text": "{\"apply_memory\":true,\"procedure_id\":\"ledger-ZX8\",\"retry_unknown\":false}"
+          }
+        ]
+      }
+    ],
+    "Usage": {
+      "input_tokens": 278,
+      "input_tokens_details": {
+        "cached_tokens": 0,
+        "cache_write_tokens": 0
+      },
+      "output_tokens": 53,
+      "output_tokens_details": {
+        "reasoning_tokens": 28
+      },
+      "total_tokens": 331,
+      "attribution": {
+        "items": {
+          "msg_06cde3dc7fb39495016aeb201193b087d2afcb3718ef6a8668": {
+            "input_tokens": 248,
+            "cached_tokens": 0,
+            "cache_write_tokens": 0,
+            "output_tokens": 0,
+            "content": [
+              {
+                "input_tokens": 248,
+                "cached_tokens": 0,
+                "cache_write_tokens": 0,
+                "output_tokens": 0
+              }
+            ]
+          },
+          "msg_06cde3dc7fb39495016aeb20145c6087d2ad610d1ec41f726b": {
+            "input_tokens": 0,
+            "cached_tokens": 0,
+            "cache_write_tokens": 0,
+            "output_tokens": 25,
+            "content": [
+              {
+                "input_tokens": 0,
+                "cached_tokens": 0,
+                "cache_write_tokens": 0,
+                "output_tokens": 25
+              }
+            ]
+          },
+          "rs_06cde3dc7fb39495016aeb20145c6c87d2bfaabcd2cbd4bc4b": {
+            "input_tokens": 2,
+            "cached_tokens": 0,
+            "cache_write_tokens": 0,
+            "output_tokens": 28
+          }
+        },
+        "request_fields": {
+          "instructions": {
+            "input_tokens": 28,
+            "cached_tokens": 0,
+            "cache_write_tokens": 0,
+            "output_tokens": 0
+          }
+        }
+      }
+    },
+    "Error": null,
+    "incomplete_details": null
+  }
+}

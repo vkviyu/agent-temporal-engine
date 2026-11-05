@@ -1,0 +1,196 @@
+{
+  "Packet": {
+    "ID": "c58afeeb8ae53ff040b7a400150c7d2ac2e88726e6441128a1c1b3f58e64142b",
+    "Space": "target-project-1",
+    "Key": {
+      "Actor": "target-worker",
+      "Execution": "target-execution"
+    },
+    "Source": {
+      "Anchor": {
+        "Fence": {
+          "Store": "2e449dfc24118cc3aeb0cdfd1657ed66",
+          "LSN": 64,
+          "CommitDigest": "3ddcdd01c2870f9bdc94dff176775a494a85603f0ca798fd1ab73b74e00f1cc6"
+        },
+        "Space": "target-project-1",
+        "Cursor": {
+          "Store": "2e449dfc24118cc3aeb0cdfd1657ed66",
+          "Space": "target-project-1",
+          "Revision": "2553cf64beb1836d662bbd9910fabd16d2652bc5556ab52dbd12534fcf86ece3"
+        },
+        "Knowledge": {
+          "Actor": "target-worker",
+          "Execution": "target-execution"
+        }
+      },
+      "ViewDigest": "7a2ddcc744246f04128c38e9c0625ee11548c289f90ccd4eee32c77cfdad7d65",
+      "Frontier": "7889dbf0d2ee6b3fd8c002958c37cb097d0525d479c9fbd71c253f28af485835"
+    },
+    "GoalRef": "56e273516b33b3be3365611b11029248b109961c44ff8dc65322d25d7694ed35",
+    "Items": [
+      {
+        "Ordinal": 0,
+        "Observation": "c34c8b63693c795e9560c90bccb2287b7c93fdccacdf0b0eb6aef55728629575",
+        "Content": "56e273516b33b3be3365611b11029248b109961c44ff8dc65322d25d7694ed35",
+        "Label": "target-environment"
+      }
+    ],
+    "Renderer": "ate-effect-evidence-json/v1",
+    "Tokenizer": "utf8-quarter-estimate/v1",
+    "EstimatedTokens": 0,
+    "Input": {
+      "Object": "e18d5ea52b3297868802108908bc10c04039c969351cd0c1c1f5e1d68a3bd28c",
+      "Anchor": {
+        "Fence": {
+          "Store": "2e449dfc24118cc3aeb0cdfd1657ed66",
+          "LSN": 64,
+          "CommitDigest": "3ddcdd01c2870f9bdc94dff176775a494a85603f0ca798fd1ab73b74e00f1cc6"
+        },
+        "Space": "target-project-1",
+        "Cursor": null,
+        "Knowledge": null
+      },
+      "Encoding": "application/json"
+    }
+  },
+  "Activity": {
+    "Activity": "applicability-filtered-transfer",
+    "Execution": "target-execution",
+    "Query": "",
+    "Role": "aux_summary",
+    "Step": 0,
+    "Invocation": "",
+    "GoalEpoch": 1,
+    "InputFence": {
+      "Store": "2e449dfc24118cc3aeb0cdfd1657ed66",
+      "LSN": 65,
+      "CommitDigest": "03710364a591becba7bd0728b6f394fc859d483f9924ec32b25be4e49b33d121"
+    },
+    "ContextPacket": "c58afeeb8ae53ff040b7a400150c7d2ac2e88726e6441128a1c1b3f58e64142b",
+    "RequestDigest": "355d1a4600c83be8815018b599212461cd2b220b09f5b305ffc3bf229254ea5e",
+    "Request": "e18d5ea52b3297868802108908bc10c04039c969351cd0c1c1f5e1d68a3bd28c",
+    "Recipient": "gpt-6.1-sol",
+    "Effect": "pure",
+    "IdempotencyKey": "",
+    "ResourceScope": "evaluation",
+    "Contract": {
+      "Version": "",
+      "Definition": "",
+      "Recipient": "",
+      "AllowsMutation": false,
+      "VerifiedPure": false,
+      "HistoricalRead": false,
+      "KeyNamespace": "",
+      "RetentionNanos": 0,
+      "DifferentRequest": "",
+      "ResultQuery": "",
+      "ResourceFence": "",
+      "Compensation": "",
+      "CompensationLimit": "",
+      "LateArrivalFence": ""
+    }
+  },
+  "Grant": {
+    "id": "applicability-filtered-transfer-grant",
+    "execution": "target-execution",
+    "task": "task",
+    "goal_epoch": 1,
+    "authority": {
+      "Deployment": "evaluation",
+      "OwnerEpoch": 1,
+      "Incarnation": 1,
+      "Holder": "host"
+    },
+    "authority_version": 1,
+    "content": "c58afeeb8ae53ff040b7a400150c7d2ac2e88726e6441128a1c1b3f58e64142b",
+    "anchor": {
+      "Fence": {
+        "Store": "2e449dfc24118cc3aeb0cdfd1657ed66",
+        "LSN": 65,
+        "CommitDigest": "03710364a591becba7bd0728b6f394fc859d483f9924ec32b25be4e49b33d121"
+      },
+      "Space": "target-project-1",
+      "Cursor": null,
+      "Knowledge": null
+    },
+    "offset": 0,
+    "length": 974,
+    "destination": "gpt-6.1-sol",
+    "activity": "applicability-filtered-transfer",
+    "attempt": "applicability-filtered-transfer-attempt",
+    "request_digest": "355d1a4600c83be8815018b599212461cd2b220b09f5b305ffc3bf229254ea5e",
+    "content_kind": "packet"
+  },
+  "Dispatch": {
+    "Code": "durable_ack",
+    "RequestID": "eval-000042",
+    "TxID": "862a8105dded0d0f1be6691e9e8a0cc0",
+    "Fence": {
+      "Store": "2e449dfc24118cc3aeb0cdfd1657ed66",
+      "LSN": 69,
+      "CommitDigest": "7dc233fabc0f5d7bf7a92f17186f2b952b83786cc773433221b5405866227e49"
+    },
+    "RequestDigest": "21c8003c38038e8c0b41d9ae7d2c0b9eac34933f9ad7b42cf0385db880710d9b",
+    "ResultDigest": "f7508709259efe88fd194b45688b8eec26c10ecfe36da93b764a959fefea1138",
+    "Conflict": "",
+    "StateRoot": "66caa75c11821ea89b4349f1c4077c777269732db6bdc881a8b34003b4e77688",
+    "RootSet": "143b650aca2f19939c8b665f66b76354a7b47a0364b77f8baa9aecc9c4e23de4"
+  },
+  "Result": {
+    "ID": "applicability-filtered-transfer-result",
+    "Activity": "applicability-filtered-transfer",
+    "Attempt": "applicability-filtered-transfer-attempt",
+    "RequestDigest": "355d1a4600c83be8815018b599212461cd2b220b09f5b305ffc3bf229254ea5e",
+    "Incarnation": 1,
+    "Outcome": "success",
+    "Payload": "eyJhcHBseV9tZW1vcnkiOmZhbHNlLCJwcm9jZWR1cmVfaWQiOm51bGwsInJldHJ5X3Vua25vd24iOmZhbHNlfQ=="
+  },
+  "Output": {
+    "Object": "13d887511519a93f5b5fb0ffc7e1393d390dd28c368fea2b00d99eb474738f5d",
+    "Anchor": {
+      "Fence": {
+        "Store": "2e449dfc24118cc3aeb0cdfd1657ed66",
+        "LSN": 72,
+        "CommitDigest": "5086a6e48d98d6e1779d5ac0a0e98d55d2f6cb2520a86d34228f00c9c086ada8"
+      },
+      "Space": "target-project-1",
+      "Cursor": null,
+      "Knowledge": null
+    },
+    "Encoding": "text/plain;charset=utf-8"
+  },
+  "Reply": {
+    "ID": "resp_02ad7a314d4f9fcc016aeb9dd82c5887d2ab0185ab3bd36db3",
+    "Model": "gpt-6.1-sol",
+    "Status": "completed",
+    "Output": [
+      {
+        "Type": "reasoning",
+        "Content": []
+      },
+      {
+        "Type": "message",
+        "Content": [
+          {
+            "Type": "output_text",
+            "Text": "{\"apply_memory\":false,\"procedure_id\":null,\"retry_unknown\":false}"
+          }
+        ]
+      }
+    ],
+    "Usage": {
+      "input_tokens": 14248,
+      "input_tokens_details": {
+        "cached_tokens": 0
+      },
+      "output_tokens": 44,
+      "output_tokens_details": {
+        "reasoning_tokens": 22
+      },
+      "total_tokens": 14292
+    },
+    "Error": null,
+    "incomplete_details": null
+  }
+}
