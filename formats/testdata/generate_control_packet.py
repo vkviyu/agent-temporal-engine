@@ -1,4 +1,4 @@
-"""Build Control 5, ContextPacket 4 and ToolDefinition 1 independently of Go."""
+"""Build Control 6, ContextPacket 5 and ToolDefinition 1 independently of Go."""
 
 import hashlib
 import json
@@ -38,7 +38,7 @@ spec = fields(
     activity, "e", "", "external_tool", 1, "invocation", 1,
     "store", 7, "c" * 64, "", request_digest, "d" * 64,
     recipient, "idempotent", key, "resource",
-) + contract
+) + contract + fields("")
 
 guarantee = fields(
     activity, 1, "active", contract_id, request_digest, namespace, key, "epoch",
@@ -54,7 +54,7 @@ source = fields("store", 7, "5" * 64, "s", 0, 1, "actor", "e", 1, "6" * 64, 1, "
 input_source = fields("store", 8, "8" * 64, "s", 0, 0, 0, 0)
 requirements = fields(1, "agent_mandatory_context/v1", "host/v1", 1, "goal", "task", observation, goal)
 packet = (
-    fields(4, "s", 1, "actor", "e") + source
+    fields(5, "s", 1, "actor", "e") + source
     + fields(goal, 1, 0, observation, goal, "goal", "renderer/v1", "tokenizer/v1", 10)
     + fields(1, "9" * 64) + input_source + fields("json", 0, 1) + blob(requirements)
 )
@@ -66,7 +66,7 @@ def vector(name, family, version, raw):
 
 
 def control_vector(name, op, payload):
-    return vector(name, "agent.control", 5, b"ATE-AGENT-CONTROL\x00" + fields(5, op) + payload)
+    return vector(name, "agent.control", 6, b"ATE-AGENT-CONTROL\x00" + fields(6, op) + payload)
 
 
 tool_schema = b'{"type":"object"}'
@@ -76,18 +76,28 @@ tool_definition = (
              "reject", "strong", "supported", "supported", "before settlement", "receiver_epoch")
 )
 
+chunk = fields("a", "at", "c" * 64, 1, "response", 1, "hello")
+chunk_id = identity(b"ATE-OUTPUT-CHUNK\x00\x01", fields("") + chunk)
+
 vectors = [
     vector("agent-tool-definition-v1", "agent.tool-definition", 1, tool_definition),
-    control_vector("control-effect-contract-v5", 6, spec + authority),
-    control_vector("control-retry-claim-v5", 7, fields("next-attempt", activity, 2) + authority + use),
-    control_vector("control-retry-dispatch-v5", 8, fields("next-attempt") + authority + fields("0" * 64) + use),
-    control_vector("control-retry-use-v5", 13, fields(activity, 2) + authority + use),
-    control_vector("control-idempotency-guarantee-v5", 32, fields(guarantee_id) + guarantee),
-    control_vector("control-retry-authorization-v5", 33, fields(authorization_id) + authorization),
-    vector("packet-context-requirements-v4", "knowledge.packet", 4, packet + fields(packet_id)),
+    control_vector("control-effect-contract-v6", 6, spec + authority),
+    control_vector("control-output-chunk-v6", 34, fields(chunk_id) + chunk),
+    control_vector("control-result-capture-v6", 9, fields("result", "a", "at", "c" * 64, 1, "success", "hello", "full", "response", 1, chunk_id)),
+    control_vector("control-retry-claim-v6", 7, fields("next-attempt", activity, 2) + authority + use),
+    control_vector("control-retry-dispatch-v6", 8, fields("next-attempt") + authority + fields("0" * 64) + use),
+    control_vector("control-retry-use-v6", 13, fields(activity, 2) + authority + use),
+    control_vector("control-idempotency-guarantee-v6", 32, fields(guarantee_id) + guarantee),
+    control_vector("control-retry-authorization-v6", 33, fields(authorization_id) + authorization),
+    vector("packet-context-requirements-v5", "knowledge.packet", 5, packet + fields(packet_id)),
 ]
 corpus_path = Path(__file__).with_name("compatibility.json")
 corpus = json.loads(corpus_path.read_text())
 by_name = {row["name"]: row for row in corpus}
 by_name.update((row["name"], row) for row in vectors)
 corpus_path.write_text(json.dumps(list(by_name.values()), indent=2) + "\n")
+
+# Save the same independent chunk vector in its outer Agent command wrapper.
+output_control = b"ATE-AGENT-CONTROL\x00" + fields(6, 34, chunk_id) + chunk
+output_command = b"ATE-AGENT-COMMAND\x00" + fields(1, 13) + blob(output_control)
+(Path(__file__).resolve().parents[2] / "agentprofile" / "testdata" / "output-chunk-v1.hex").write_text(output_command.hex() + "\n")

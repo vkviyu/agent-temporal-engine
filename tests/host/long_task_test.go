@@ -40,6 +40,7 @@ type hostAPI interface {
 	api.MemoryCommands
 	api.BasicNodeReader
 	api.NodeExplorer
+	api.TaskTraceCommands
 	api.ContentReader
 	api.ViewEntriesReader
 }
@@ -362,7 +363,7 @@ func (h *host) decision(id model.ExecutionID, binding agentprofile.AuthorityBind
 	// This deterministic provider consumes the stored request bytes through
 	// the same public replay path; it does not silently render a fresh prompt.
 	actualInput := h.exactInput(record)
-	result := agentprofile.ActivityResult{ID: activity.Activity + "-result", Activity: activity.Activity, Attempt: activity.Activity + "-attempt", RequestDigest: activity.RequestDigest, Incarnation: binding.Incarnation, Outcome: "success", Payload: []byte("decision for exact request " + string(requestDigest(actualInput)))}
+	result := agentprofile.ActivityResult{Capture: "full", ID: activity.Activity + "-result", Activity: activity.Activity, Attempt: activity.Activity + "-attempt", RequestDigest: activity.RequestDigest, Incarnation: binding.Incarnation, Outcome: "success", Payload: []byte("decision for exact request " + string(requestDigest(actualInput)))}
 	h.control(result.ID+"-capture", agentprofile.ControlCommand{CaptureResult: &agentprofile.CaptureResultCommand{Result: result}})
 	state, err := h.peer.GetAgentState(ctx, api.ReadAgentStateRequest{Space: "project", Principal: "owner"})
 	if err != nil {
@@ -429,6 +430,11 @@ func (h *host) dispatch(activity agentprofile.ActivitySpec, binding agentprofile
 	h.control(activity.Activity+"-create", agentprofile.ControlCommand{CreateActivity: &agentprofile.CreateActivityCommand{Spec: activity, Authority: binding}})
 	h.control(activity.Activity+"-claim", agentprofile.ControlCommand{ClaimAttempt: &agentprofile.ClaimAttemptCommand{Activity: activity.Activity, Attempt: activity.Activity + "-attempt", Sequence: 1, Authority: binding}})
 	attempt := activity.Activity + "-attempt"
+	h.dispatchClaimed(activity, binding, attempt)
+}
+
+func (h *host) dispatchClaimed(activity agentprofile.ActivitySpec, binding agentprofile.AuthorityBinding, attempt string) {
+	h.t.Helper()
 	state, err := h.peer.GetAgentState(context.Background(), api.ReadAgentStateRequest{Space: "project", Principal: "owner"})
 	if err != nil {
 		h.t.Fatal(err)
@@ -456,11 +462,11 @@ func (h *host) dispatch(activity agentprofile.ActivitySpec, binding agentprofile
 	if err != nil {
 		h.t.Fatal(err)
 	}
-	grant := api.EmissionSpec{ID: activity.Activity + "-grant", Execution: activity.Execution, Task: task, GoalEpoch: activity.GoalEpoch, Authority: binding, AuthorityVersion: authorityVersion, Content: activity.Request, Anchor: model.SnapshotAnchor{Space: "project", Fence: activity.InputFence}, Projection: "value_bytes", Length: part.TotalBytes, Destination: activity.Recipient, Activity: activity.Activity, Attempt: attempt, RequestDigest: activity.RequestDigest}
+	grant := api.EmissionSpec{ID: attempt + "-grant", Query: activity.Query, Execution: activity.Execution, Task: task, GoalEpoch: activity.GoalEpoch, Authority: binding, AuthorityVersion: authorityVersion, Content: activity.Request, Anchor: model.SnapshotAnchor{Space: "project", Fence: activity.InputFence}, Projection: "value_bytes", Length: part.TotalBytes, Destination: activity.Recipient, Activity: activity.Activity, Attempt: attempt, RequestDigest: activity.RequestDigest}
 	if activity.ContextPacket != "" {
 		grant.Content, grant.ContentKind = activity.ContextPacket, "packet"
 	}
-	h.ack(h.peer.ApplyEmission(context.Background(), api.ApplyEmissionRequest{Key: key(activity.Activity + "-issue"), Command: api.EmissionCommand{Issue: &grant}}))
+	h.ack(h.peer.ApplyEmission(context.Background(), api.ApplyEmissionRequest{Key: key(attempt + "-issue"), Command: api.EmissionCommand{Issue: &grant}}))
 	claimStep, err := api.EmissionWorkStep(api.EmissionCommand{ClaimID: grant.ID, ClaimVersion: 1, ClaimAuthority: binding})
 	if err != nil {
 		h.t.Fatal(err)
@@ -469,11 +475,11 @@ func (h *host) dispatch(activity agentprofile.ActivitySpec, binding agentprofile
 	if err != nil {
 		h.t.Fatal(err)
 	}
-	h.ack(h.peer.ApplyWork(context.Background(), api.ApplyWorkRequest{Key: key(activity.Activity + "-dispatch"), Unit: api.WorkUnit{Kind: "emission_dispatch", Steps: []api.WorkStep{claimStep, dispatchStep}}}))
+	h.ack(h.peer.ApplyWork(context.Background(), api.ApplyWorkRequest{Key: key(attempt + "-dispatch"), Unit: api.WorkUnit{Kind: "emission_dispatch", Query: activity.Query, Steps: []api.WorkStep{claimStep, dispatchStep}}}))
 }
 func (h *host) captureAccept(activity agentprofile.ActivitySpec, binding agentprofile.AuthorityBinding, outcome string, raw []byte) {
 	h.t.Helper()
-	r := agentprofile.ActivityResult{ID: activity.Activity + "-result", Activity: activity.Activity, Attempt: activity.Activity + "-attempt", RequestDigest: activity.RequestDigest, Incarnation: binding.Incarnation, Outcome: outcome, Payload: raw}
+	r := agentprofile.ActivityResult{Capture: "full", ID: activity.Activity + "-result", Activity: activity.Activity, Attempt: activity.Activity + "-attempt", RequestDigest: activity.RequestDigest, Incarnation: binding.Incarnation, Outcome: outcome, Payload: raw}
 	h.control(r.ID+"-capture", agentprofile.ControlCommand{CaptureResult: &agentprofile.CaptureResultCommand{Result: r}})
 	h.control(r.ID+"-accept", agentprofile.ControlCommand{AcceptActivity: &agentprofile.AcceptActivityCommand{Activity: activity.Activity, Result: r.ID, ExpectedVersion: 1, Authority: binding, Evidence: proof()}})
 }
@@ -592,9 +598,7 @@ func TestLongTaskPublicHostAcceptance(t *testing.T) {
 			h.ack(h.peer.ApplyWork(ctx, start))
 			seed := h.knowledge(rootKey)
 			base, _ := h.revision("base-revision", "")
-			for _, branch := range []model.BranchID{"chosen", "failed"} {
-				h.ack(h.peer.ApplyGraph(ctx, api.ApplyGraphRequest{Key: key("fork-" + string(branch)), Command: graph.Command{Fork: &graph.ForkCommand{Branch: branch, Source: base.ID}}}))
-			}
+			h.forkLocal("chosen", base.ID, "root", rootBinding)
 			delegate := agentprofile.ToolDefinition{Name: "delegate", Version: "delegate/v1", SchemaEncoding: "json-schema/v1", Schema: []byte(`{"type":"object"}`), DispatchMode: "delegate", DispatchClass: "pure", Contract: agentprofile.EffectContract{
 				Version: "effect/v1", Recipient: "host-controller", VerifiedPure: true, DifferentRequest: "unsupported", ResultQuery: "none", ResourceFence: "none", Compensation: "none", LateArrivalFence: "none",
 			}}
@@ -659,6 +663,7 @@ func TestLongTaskPublicHostAcceptance(t *testing.T) {
 					}(), workStep(agentprofile.ControlCommand{Checkpoint: &childCheckpoint}),
 				}}}
 				h.ack(h.peer.ApplyWork(ctx, childStart))
+				h.forkLocal(model.BranchID(id), base.ID, id, childBinding)
 			}
 			leftModel, rightModel := h.model("left", bindings["left"], childGoals["left"]), h.model("right", bindings["right"], childGoals["right"])
 			toolRequest := []byte("append exactly one selected result")
@@ -695,16 +700,15 @@ func TestLongTaskPublicHostAcceptance(t *testing.T) {
 			if err != nil || string(effect) != "selected-result\n" {
 				t.Fatal("cannot reconcile actual side effect", err)
 			}
-			late := agentprofile.ActivityResult{ID: "left-file-result", Activity: tool.Activity, Attempt: tool.Activity + "-attempt", RequestDigest: tool.RequestDigest, Incarnation: 1, Outcome: "success", Payload: effect}
+			late := agentprofile.ActivityResult{Capture: "full", ID: "left-file-result", Activity: tool.Activity, Attempt: tool.Activity + "-attempt", RequestDigest: tool.RequestDigest, Incarnation: 1, Outcome: "success", Payload: effect}
 			h.control("late-capture", agentprofile.ControlCommand{CaptureResult: &agentprofile.CaptureResultCommand{Result: late}})
 			h.control("effect-reconciled", agentprofile.ControlCommand{ReconcileAttempt: &agentprofile.ReconcileAttemptCommand{Attempt: late.Attempt, Outcome: "occurred", Evidence: proof()}})
 			h.control("adopt-reconciled-result", agentprofile.ControlCommand{ImportActivityResult: &agentprofile.AcceptActivityCommand{Activity: tool.Activity, Result: late.ID, ExpectedVersion: 1, Authority: bindings["left"], Evidence: proof()}})
 			h.control("left-tool-settled", agentprofile.ControlCommand{SettleActivity: &agentprofile.SettleActivityCommand{Activity: tool.Activity, Status: "settled", Evidence: proof()}})
-			winner, winnerAck := h.put("left-state", "answer", effect)
+			winner, winnerAck := h.put("left-evidence", "winning-evidence", effect)
 			leftKnowledge := h.knowledge(model.KnowledgeKey{Actor: "left", Execution: "left"})
 			winnerObservation := h.observe("left-observed-result", "left", winner, winnerAck.Fence, uint64(len(leftKnowledge.Snapshot.Observations)+1))
-			left, leftAck := h.revision("left-revision", base.ID)
-			h.ack(h.peer.ApplyGraph(ctx, api.ApplyGraphRequest{Key: key("advance-left"), Command: graph.Command{Advance: &graph.AdvanceBranchCommand{Branch: "chosen", Expected: 0, Head: left.ID}}}))
+			left, leftAck := h.writeBranch("left", base.ID, "left", bindings["left"], []api.StateMutation{branchValue("answer", effect)})
 			send := func(id model.ExecutionID, body string) {
 				t.Helper()
 				m := agentprofile.Message{ID: string(id) + "-message", Sender: id, Recipient: "root", Payload: []byte(body), GoalEpoch: 1}
@@ -760,12 +764,10 @@ func TestLongTaskPublicHostAcceptance(t *testing.T) {
 			h.dispatch(rightTool, bindings["right"])
 			h.captureAccept(rightTool, bindings["right"], "failure", []byte("counterexample: alternative disagrees with observed file"))
 			h.control("right-tool-settled", agentprofile.ControlCommand{SettleActivity: &agentprofile.SettleActivityCommand{Activity: rightTool.Activity, Status: "settled", Evidence: proof()}})
-			h.put("right-state", "answer", []byte("invalid-alternative"))
 			counter, counterAck := h.put("right-counterexample", "counterexample", []byte("alternative does not match the actual file; retain this constraint"))
 			rightKnowledge := h.knowledge(model.KnowledgeKey{Actor: "right", Execution: "right"})
 			counterObservation := h.observe("right-observed-counterexample", "right", counter, counterAck.Fence, uint64(len(rightKnowledge.Snapshot.Observations)+1))
-			right, rightAck := h.revision("right-revision", base.ID)
-			h.ack(h.peer.ApplyGraph(ctx, api.ApplyGraphRequest{Key: key("advance-right"), Command: graph.Command{Advance: &graph.AdvanceBranchCommand{Branch: "failed", Expected: 0, Head: right.ID}}}))
+			right, rightAck := h.writeBranch("right", base.ID, "right", bindings["right"], []api.StateMutation{branchValue("answer", []byte("invalid-alternative")), branchValue("counterexample", []byte("alternative does not match the actual file; retain this constraint"))})
 			send("right", "failed alternative; useful counterexample retained")
 			resolvedFence = h.snapshot().Fence
 			h.control("right-model-action-absent", agentprofile.ControlCommand{ResolveAction: &agentprofile.ResolveActionCommand{Resolution: agentprofile.ActionResolution{Key: "right-model-action", Generation: 1, Outcome: "absent", ObservedFence: resolvedFence}}})
@@ -789,13 +791,25 @@ func TestLongTaskPublicHostAcceptance(t *testing.T) {
 				command := knowledge.ImportCommand{Target: rootKey, Source: knowledge.SourceAnchor{Anchor: cursorAnchor(known), Frontier: known.Frontier}, ExpectedSequence: expectedSequence, Observations: []model.ObjectID{adopted.ID}}
 				h.ack(h.peer.ApplyKnowledge(ctx, api.ApplyKnowledgeRequest{Key: key(fmt.Sprintf("root-adopt-child-%d", i)), Command: knowledge.Command{Import: &command}}))
 			}
-			plan, err := h.peer.PlanGraphJoin(ctx, api.PlanGraphJoinRequest{Space: "project", Left: left.ID, Right: right.ID})
+			leftPosition := graph.BranchPosition{Branch: "left", Head: left.ID, Version: 1}
+			rightPosition := graph.BranchPosition{Branch: "right", Head: right.ID, Version: 1}
+			rootAuthority := branchAuthority("root", rootBinding)
+			h.ack(h.peer.ApplyGraph(ctx, api.ApplyGraphRequest{Key: key("join-root-left"), Command: graph.Command{JoinLocal: &graph.JoinLocalCommand{Target: graph.BranchPosition{Branch: "chosen", Head: base.ID}, Source: leftPosition, Authority: rootAuthority}}}))
+			chosen := h.branch("chosen")
+			plan, err := h.peer.PlanGraphJoin(ctx, api.PlanGraphJoinRequest{Space: "project", Left: chosen.Head, Right: right.ID})
 			if err != nil || len(plan.Plan.Conflicts) != 1 {
 				t.Fatalf("join plan=%+v %v", plan, err)
 			}
-			current, _ := h.entries()
-			joinReq := api.ApplyGraphRequest{Key: key("join-chosen"), Command: graph.Command{Join: &graph.JoinCommand{Branch: "chosen", Expected: 1, Left: left.ID, Right: right.ID, ExpectedDomainRoot: current, Resolutions: []graph.Resolution{{Key: []byte("answer"), Value: winner}}}}}
+			joinReq := api.ApplyGraphRequest{Key: key("join-chosen"), Command: graph.Command{JoinLocal: &graph.JoinLocalCommand{
+				Target: graph.BranchPosition{Branch: chosen.ID, Head: chosen.Head, Version: chosen.Version}, Source: rightPosition, Authority: rootAuthority,
+				Resolutions: []graph.Resolution{{Key: []byte("answer"), Value: winner}},
+			}}}
 			joined := h.ack(h.peer.ApplyGraph(ctx, joinReq))
+			chosen = h.branch("chosen")
+			current, _ := h.entries()
+			h.ack(h.peer.ApplyGraph(ctx, api.ApplyGraphRequest{Key: key("publish-chosen"), Command: graph.Command{PublishBranch: &graph.PublishBranchCommand{
+				Source: graph.BranchPosition{Branch: chosen.ID, Head: chosen.Head, Version: chosen.Version}, Authority: rootAuthority, ExpectedDomainRoot: current,
+			}}}))
 			value, err := h.peer.GetState(ctx, api.ReadStateRequest{Space: "project", Key: []byte("answer")})
 			if err != nil || !bytes.Equal(value.Value.Data, effect) {
 				t.Fatal("join did not adopt selected result", err)
@@ -833,7 +847,7 @@ func TestLongTaskPublicHostAcceptance(t *testing.T) {
 				}
 			}
 			h.ack(h.peer.ApplyMemory(ctx, api.ApplyMemoryRequest{Key: key("experience-path"), Command: memory.Command{BuildPath: &memory.BuildPathCommand{Space: "project", Anchor: model.SnapshotAnchor{Space: "project", Fence: h.snapshot().Fence}, Steps: []memory.Step{{Node: model.NodeRef{Kind: model.NodeRevision, Revision: left.ID}, Memory: memoryID, Outcome: "validated choice"}}, Omitted: []model.NodeRef{{Kind: model.NodeRevision, Revision: right.ID}}, Validation: validation}}}))
-			h.ack(h.peer.ApplyGraph(ctx, api.ApplyGraphRequest{Key: key("prune-failed"), Command: graph.Command{Prune: &graph.PruneBranchCommand{Branch: "failed", Expected: 1, Head: right.ID, Reason: "failed exploration retained as counterexample"}}}))
+			h.ack(h.peer.ApplyGraph(ctx, api.ApplyGraphRequest{Key: key("prune-failed"), Command: graph.Command{Prune: &graph.PruneBranchCommand{Branch: "right", Expected: 1, Head: right.ID, Reason: "failed exploration retained as counterexample"}}}))
 			ancestor, err := h.peer.GetGraphRevision(ctx, api.ReadGraphRevisionRequest{Space: "project", ID: base.ID})
 			if err != nil || !ancestor.Found {
 				t.Fatal("pruning removed shared ancestor", err)
@@ -892,7 +906,28 @@ func TestLongTaskPublicHostAcceptance(t *testing.T) {
 			resolvedFence = h.snapshot().Fence
 			h.control("root-initial-action-absent", agentprofile.ControlCommand{ResolveAction: &agentprofile.ResolveActionCommand{Resolution: agentprofile.ActionResolution{Key: "root-initial-action", Generation: 1, Outcome: "absent", ObservedFence: resolvedFence}}})
 			h.completeTask("root-completed", agentprofile.CompleteTaskCommand{Task: "root-task", Execution: "root", Epoch: 1, Result: winner, Authority: rootBinding})
-			h.control("answer-query", agentprofile.ControlCommand{AnswerQuery: &agentprofile.AnswerQueryCommand{Query: query.ID, Slot: "final", Kind: "final", ExpectedVersion: 1, Body: []byte("validated result with retained counterexample"), Final: true}})
+			h.answerCompletedQuery(query, []byte("validated result with retained counterexample"))
+			traceRequest, trace := h.recordLongTaskTrace(query.ID)
+			var fork model.EventID
+			for _, node := range trace.Nodes {
+				if node.Operation == "Graph.ForkLocal" && node.Subject.ID == "chosen" {
+					fork = node.At.Ref.Event
+				}
+			}
+			var baseBoundary model.EventID
+			for _, edge := range trace.Edges {
+				if edge.Relation == "causal" && edge.To == fork && edge.Boundary {
+					baseBoundary = edge.From
+				}
+			}
+			if fork == "" || baseBoundary == "" {
+				t.Fatal("task trace lost the causal boundary to its shared state baseline")
+			}
+			boundaryPage, err := h.peer.GetTaskTraceEvidence(ctx, api.TaskTraceEvidenceRequest{TaskTraceRequest: traceRequest, From: baseBoundary, To: fork, Relation: "causal"})
+			if err != nil || len(boundaryPage.Events) != 2 || !boundaryPage.Events[0].Boundary || boundaryPage.Events[0].Operation != "Graph.AddRevision" ||
+				boundaryPage.Events[0].Subject.ID != model.EntityID(base.ID) || boundaryPage.Events[1].Boundary || boundaryPage.Events[1].At.Ref.Event != fork {
+				t.Fatalf("scoped causal boundary: %+v %v", boundaryPage, err)
+			}
 			h.exactInput(leftModel)
 			h.exactInput(rightModel)
 			h.exactInput(rootModel)
@@ -922,6 +957,9 @@ func TestLongTaskPublicHostAcceptance(t *testing.T) {
 			}
 			h.peer.CloseView(ctx, api.CloseViewRequest{Ref: audit.Ref})
 			h.reopen()
+			if recovered, err := h.peer.GetTaskTrace(ctx, traceRequest); err != nil || !reflect.DeepEqual(trace, recovered) {
+				t.Fatalf("trace changed after compaction and recovery: %+v %v", recovered, err)
+			}
 			h.exactInput(leftModel)
 			h.exactInput(rightModel)
 			h.exactInput(rootModel)
@@ -929,14 +967,14 @@ func TestLongTaskPublicHostAcceptance(t *testing.T) {
 				t.Fatal("reopen changed original merge receipt")
 			}
 			final, err := h.peer.GetAgentState(ctx, api.ReadAgentStateRequest{Space: "project", Principal: "owner"})
-			if err != nil || len(final.Snapshot.Lifecycle.Recovery.Outcomes) != 3 || len(final.Snapshot.Lifecycle.Recovery.ValidationRequirements) != 3 || len(final.Snapshot.Lifecycle.Consumptions) != 2 || len(final.Snapshot.Lifecycle.Recovery.Imports) != 1 || len(final.Snapshot.Lifecycle.Activities) != 5 || len(final.Snapshot.Lifecycle.Attempts) != 5 {
+			if err != nil || len(final.Snapshot.Lifecycle.Recovery.Outcomes) != 3 || len(final.Snapshot.Lifecycle.Recovery.ValidationRequirements) != 3 || len(final.Snapshot.Lifecycle.Consumptions) != 2 || len(final.Snapshot.Lifecycle.Recovery.Imports) != 1 || len(final.Snapshot.Lifecycle.Activities) != 6 || len(final.Snapshot.Lifecycle.Attempts) != 7 {
 				t.Fatal("long task recovery lost control decisions", err)
 			}
 			mem, err = h.peer.GetMemoryState(ctx, api.ReadMemoryStateRequest{Space: "project"})
 			if err != nil || len(mem.Snapshot.Paths) != 1 || len(mem.Snapshot.Paths[0].Omitted) != 1 || len(mem.Snapshot.Paths[0].Validation.Counterexamples) != 1 {
 				t.Fatal("experience omitted provenance or useful failure", err)
 			}
-			branch, err := h.peer.GetGraphBranch(ctx, api.ReadGraphBranchRequest{Space: "project", ID: "failed"})
+			branch, err := h.peer.GetGraphBranch(ctx, api.ReadGraphBranchRequest{Space: "project", ID: "right"})
 			if err != nil || !branch.Pruned {
 				t.Fatal("failed branch prune not durable", err)
 			}
@@ -969,10 +1007,10 @@ func TestLongTaskPublicHostAcceptance(t *testing.T) {
 				"root": {winnerObservation.ID: true, counterObservation.ID: true},
 				"left": {o.ID: true}, "right": {o.ID: true},
 			}
-			if !reflect.DeepEqual(observationCounts, wantCounts) || !reflect.DeepEqual(importedOrigins, wantImports) || len(known.Snapshot.Packets) != 3 {
+			if !reflect.DeepEqual(observationCounts, wantCounts) || !reflect.DeepEqual(importedOrigins, wantImports) || len(known.Snapshot.Packets) != 4 {
 				t.Fatalf("explicit multi-execution adoption history changed: observations=%v imports=%v packets=%d", observationCounts, importedOrigins, len(known.Snapshot.Packets))
 			}
-			t.Logf("verified LSN=%d; executions=3, managed activities/attempts=5/5, messages/consumptions=2/2, observations=15 (root=7, left=4, right=4), exact packets=3, memory audit versions=%d, experience paths=1, pruned branches=1, non-idempotent external writes=1", final.Fence.LSN, len(mem.Snapshot.Memories))
+			t.Logf("verified LSN=%d; executions=3, managed activities/attempts=6/7, messages/consumptions=2/2, observations=15 (root=7, left=4, right=4), exact packets=4, memory audit versions=%d, experience paths=1, pruned branches=1, non-idempotent external writes=1", final.Fence.LSN, len(mem.Snapshot.Memories))
 		})
 	}
 }

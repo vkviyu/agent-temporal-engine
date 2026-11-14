@@ -1,0 +1,4 @@
+=== RUN   TestNativeExt4RebootPreservesAcknowledgedPrefix
+    native_reboot_linux_test.go:142: verified witnessed prefix after Linux reboot: old_boot_id=8e779063-6474-46cf-ad82-c79cdf454280 new_boot_id=49bef12f-2125-4a69-a638-bbf5edf11cb2 lsn=8 transactions=8
+--- PASS: TestNativeExt4RebootPreservesAcknowledgedPrefix (0.01s)
+PASS

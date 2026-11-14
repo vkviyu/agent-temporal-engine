@@ -177,7 +177,7 @@ func TestNodeEntitiesLifecycleDetailContextAndBoundPagination(t *testing.T) {
 		{CreateActivity: &agentprofile.CreateActivityCommand{Spec: spec, Authority: authority}},
 		{ClaimAttempt: &agentprofile.ClaimAttemptCommand{Activity: spec.Activity, Attempt: "attempt", Sequence: 1, Authority: authority}},
 		{DispatchAttempt: &agentprofile.DispatchAttemptCommand{Attempt: "attempt", Authority: authority, Evidence: inv.ToolDefinition}},
-		{CaptureResult: &agentprofile.CaptureResultCommand{Result: agentprofile.ActivityResult{ID: "result", Activity: spec.Activity, Attempt: "attempt", RequestDigest: spec.RequestDigest, Incarnation: 1, Outcome: "success", Payload: []byte("actual tool output")}}},
+		{CaptureResult: &agentprofile.CaptureResultCommand{Result: agentprofile.ActivityResult{Capture: "full", ID: "result", Activity: spec.Activity, Attempt: "attempt", RequestDigest: spec.RequestDigest, Incarnation: 1, Outcome: "success", Payload: []byte("actual tool output")}}},
 		{AcceptActivity: &agentprofile.AcceptActivityCommand{Activity: spec.Activity, Result: "result", ExpectedVersion: 1, Authority: authority, Evidence: inv.ToolDefinition}},
 		{SendMessage: &agentprofile.SendMessageCommand{Message: message, Authority: authority}},
 	} {
@@ -193,7 +193,7 @@ func TestNodeEntitiesLifecycleDetailContextAndBoundPagination(t *testing.T) {
 	messageWork := api.ApplyWorkRequest{Key: agentKey("nodes-consume-message"), Unit: api.WorkUnit{Kind: "message_consume", Steps: []api.WorkStep{
 		workControl(t, agentprofile.ControlCommand{ConsumeMessage: &agentprofile.ConsumeMessageCommand{Consumption: agentprofile.MessageConsumption{Message: message.ID, Recipient: x.ID, Incarnation: 1, GoalEpoch: 1}, Authority: authority}}),
 		workSeedObservation(t, key, messageContent, messageAck.Fence, uint64(len(messageKnown.Snapshot.Observations))+1, "received message"),
-		workCheckpoint(t, x.ID, authority, messageAck.Fence, "nodes-after-message", 1, nil, uint64(1)),
+		workCheckpoint(t, x.ID, authority, messageAck.Fence, "nodes-after-message", 1, 1),
 	}}}
 	workApply(t, s, messageWork)
 	body, err := engine.EncodeStateBatch(api.StateBatch{Operations: []api.StateMutation{integrationPut([]byte("next-node"), integrationBytes('n'))}})

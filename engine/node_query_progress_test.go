@@ -34,7 +34,11 @@ func assertQueryProgressNodeIsolation(t *testing.T, s *integrationStore, query s
 	defer s.e.CloseView(ctx, api.CloseViewRequest{Ref: other.Ref})
 	for _, kind := range []string{"QueryProgress", "QueryDecision", "QueryInvocation"} {
 		page, err := s.e.ListNodes(ctx, api.ListNodesRequest{View: latest.Ref, Layer: "entities", EntityKind: model.EntityKind(kind)})
-		if err != nil || len(page.Items) != 1 {
+		wantNodes := 1
+		if kind == "QueryDecision" {
+			wantNodes = 2
+		}
+		if err != nil || len(page.Items) != wantNodes {
 			t.Fatalf("%s not navigable: %+v %v", kind, page, err)
 		}
 		ref := page.Items[0].Ref
@@ -45,7 +49,7 @@ func assertQueryProgressNodeIsolation(t *testing.T, s *integrationStore, query s
 		switch kind {
 		case "QueryProgress":
 			var p api.QueryProgress
-			if json.Unmarshal(detail.Data, &p) != nil || p.Query != query || !p.Completed || len(p.Decisions) != 1 {
+			if json.Unmarshal(detail.Data, &p) != nil || p.Query != query || !p.Completed || len(p.Decisions) != 2 {
 				t.Fatal("wrong typed progress")
 			}
 		case "QueryDecision":

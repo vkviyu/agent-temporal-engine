@@ -59,6 +59,18 @@ func domainSubjectNode(ctx context.Context, reader state.ObjectReader, entry *vi
 		}{branch, pruned}
 		encoding, found = "graph/Branch/v1+json", true
 		sources = append(sources, model.NodeRef{Kind: model.NodeRevision, Revision: branch.Head})
+		if branch.Scope != nil {
+			seen := map[model.RevisionID]bool{branch.Head: true}
+			for _, revision := range []model.RevisionID{branch.Scope.Base, branch.PublishedHead} {
+				if revision != "" && !seen[revision] {
+					seen[revision] = true
+					sources = append(sources, model.NodeRef{Kind: model.NodeRevision, Revision: revision})
+				}
+			}
+			if branch.Scope.Execution != "" && branch.Scope.Principal == principal {
+				sources = append(sources, model.NodeRef{Kind: model.NodeEntity, Entity: eventSubject("Execution", string(branch.Scope.Execution))})
+			}
+		}
 	case ref.Kind == model.NodeEntity && entity.Profile == "memory":
 		raw, _, exists, err := domainEventValue(ctx, reader, entry.roots.ExecutionKnowledge, space, memoryStateKey(space))
 		if err != nil || !exists {
@@ -83,8 +95,9 @@ func domainSubjectNode(ctx context.Context, reader state.ObjectReader, entry *vi
 				if p.ID == id {
 					value, payload, encoding, found = p, p.ID, "memory/ExperiencePath/v1+json", true
 					for _, step := range p.Steps {
-						sources = append(sources, model.NodeRef{Kind: model.NodeEntity, Entity: domainSubject("memory", "memory", string(step.Memory))})
+						sources = append(sources, model.NodeRef{Kind: model.NodeEntity, Entity: domainSubject("memory", "memory", string(step.Memory))}, step.Node)
 					}
+					sources = append(sources, p.Omitted...)
 				}
 			}
 		case "Source":
@@ -151,29 +164,26 @@ func domainSubjectNode(ctx context.Context, reader state.ObjectReader, entry *vi
 			sources = append(sources, model.NodeRef{Kind: model.NodeObject, Object: mapping.Target})
 		}
 	case ref.Kind == model.NodeObject:
-		raw, _, exists, err := domainEventValue(ctx, reader, entry.roots.ExecutionKnowledge, space, knowledgeStateKey(space, principal))
+		root, err := slotSpaceRoot(ctx, reader, entry.roots.ExecutionKnowledge, space)
 		if err != nil {
 			return nodeProjection{}, true, err
 		}
-		if !exists {
-			return nodeProjection{}, false, nil
-		}
-		s, err := knowledge.DecodeSnapshot(raw)
+		index, err := openKnowledgeIndex(ctx, reader, root, space, principal)
 		if err != nil {
 			return nodeProjection{}, true, err
 		}
-		for _, o := range s.Observations {
-			if o.ID == ref.Object {
-				value, encoding, found = o, "knowledge/Observation/v1+json", true
-				sources = append(sources, knowledgePayloadNodeRef(o))
-			}
+		if o, ok, err := index.observation(ctx, ref.Object); err != nil {
+			return nodeProjection{}, true, err
+		} else if ok {
+			value, encoding, found = o, "knowledge/Observation/v1+json", true
+			sources = append(sources, knowledgePayloadNodeRef(o))
 		}
-		for _, p := range s.Packets {
-			if p.ID == ref.Object {
-				value, encoding, found = p, "knowledge/ContextPacket/v1+json", true
-				for _, item := range p.Items {
-					sources = append(sources, model.NodeRef{Kind: model.NodeObject, Object: item.Observation})
-				}
+		if p, ok, err := index.packet(ctx, ref.Object); err != nil {
+			return nodeProjection{}, true, err
+		} else if ok {
+			value, encoding, found = p, "knowledge/ContextPacket/v1+json", true
+			for _, item := range p.Items {
+				sources = append(sources, model.NodeRef{Kind: model.NodeObject, Object: item.Observation})
 			}
 		}
 		if !found {

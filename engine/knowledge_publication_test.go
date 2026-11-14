@@ -41,7 +41,7 @@ func TestKnowledgePublicationUnknownDoesNotInstallPrivateCandidate(t *testing.T)
 			io.arm("current", gate)
 			pending := coordinatorCommit(e, context.Background(), r)
 			coordinatorWait(t, gate.entered)
-			if got := coordinatorLookup(t, e, r); got.Code != api.CodeInFlight {
+			if got := coordinatorInFlight(t, e, r); got.Code != api.CodeInFlight {
 				t.Fatalf("private receipt escaped: %+v", got)
 			}
 			gate.unblock()

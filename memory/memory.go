@@ -202,6 +202,26 @@ func (s *Store) promote(id model.ObjectID) (Memory, error) {
 	}
 	return s.transition(id, StatusPromoted, "promoted")
 }
+
+// SupportingSources returns the sources and positive evidence the caller
+// supplied for this assertion. Counterexamples remain provenance for audit
+// and withdrawal, but do not establish support for a path step.
+func (m Memory) SupportingSources() []Source {
+	out := append([]Source(nil), m.Sources...)
+	for _, evidence := range m.Evidence {
+		if !evidence.Counter {
+			out = append(out, evidence.Source)
+		}
+	}
+	if m.Validation != nil {
+		out = append(out, m.Validation.Evidence...)
+	}
+	for i := range out {
+		out[i] = cloneSource(out[i])
+	}
+	return out
+}
+
 func allSources(m Memory) []Source {
 	out := append([]Source(nil), m.Sources...)
 	for _, e := range m.Evidence {
@@ -374,14 +394,21 @@ func (s *Store) eligible(m Memory, q Query) bool {
 			return false
 		}
 	}
-	if q.Goal != "" && m.Applicability.Goal != "" && q.Goal != m.Applicability.Goal {
+	return matchesApplicability(m.Applicability, q)
+}
+
+func matchesApplicability(applicability Applicability, q Query) bool {
+	if q.Goal != "" && applicability.Goal != "" && q.Goal != applicability.Goal {
 		return false
 	}
-	if q.Environment != "" && m.Applicability.Environment != "" && q.Environment != m.Applicability.Environment {
+	if q.Environment != "" && applicability.Environment != "" && q.Environment != applicability.Environment {
 		return false
 	}
-	tags := map[string]bool{}
-	for _, tag := range m.Applicability.Tags {
+	if q.SchemaVersion != 0 && applicability.SchemaVersion != 0 && q.SchemaVersion != applicability.SchemaVersion {
+		return false
+	}
+	tags := make(map[string]bool, len(applicability.Tags))
+	for _, tag := range applicability.Tags {
 		tags[tag] = true
 	}
 	for _, tag := range q.Tags {

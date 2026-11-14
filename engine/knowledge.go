@@ -17,45 +17,54 @@ import (
 )
 
 func knowledgeStateKey(space model.SpaceID, principal model.PrincipalID) []byte {
+	return []byte("ate/knowledge/v1/" + knowledgeOwnerDigest(space, principal))
+}
+
+func knowledgeOwnerDigest(space model.SpaceID, principal model.PrincipalID) string {
 	// Scope must remain unambiguous and bounded even at maximum identity sizes.
 	b, _ := codec.AppendString(nil, string(space))
 	b, _ = codec.AppendString(b, string(principal))
 	sum := sha256.Sum256(b)
-	return []byte("ate/knowledge/v1/" + hex.EncodeToString(sum[:]))
+	return hex.EncodeToString(sum[:])
 }
 
 func (e *Engine) loadKnowledge(ctx context.Context, roots model.RootSet, space model.SpaceID, principal model.PrincipalID) (knowledge.Snapshot, model.ObjectID, bool, error) {
-	root, err := slotSpaceRoot(ctx, e.index, roots.ExecutionKnowledge, space)
+	index, root, err := e.knowledgeIndexAt(ctx, roots, space, principal)
 	if err != nil {
 		return knowledge.Snapshot{}, "", false, err
 	}
-	id, found, err := state.Get(ctx, e.index, space, root, knowledgeStateKey(space, principal))
+	snapshot, err := index.snapshot(ctx, nil, false, true)
+	return snapshot, root, len(snapshot.Observations)+len(snapshot.Packets) > 0, err
+}
+
+func readLegacyKnowledge(ctx context.Context, reader state.ObjectReader, root model.ObjectID, space model.SpaceID, principal model.PrincipalID) (knowledge.Snapshot, bool, error) {
+	id, found, err := state.Get(ctx, reader, space, root, knowledgeStateKey(space, principal))
 	if err != nil || !found {
-		return knowledge.Snapshot{}, root, found, err
+		return knowledge.Snapshot{}, found, err
 	}
-	obj, err := readObject(ctx, e.index, id)
+	obj, err := readObject(ctx, reader, id)
 	if err != nil {
-		return knowledge.Snapshot{}, "", false, err
+		return knowledge.Snapshot{}, false, err
 	}
 	value, err := readValue(obj)
 	if err != nil || obj.Space != space || value.Kind != api.ValueBytes {
-		return knowledge.Snapshot{}, "", false, fmt.Errorf("%w: knowledge snapshot", ErrStoredObject)
+		return knowledge.Snapshot{}, false, fmt.Errorf("%w: knowledge snapshot", ErrStoredObject)
 	}
 	snap, err := knowledge.DecodeSnapshot(value.Data)
 	if err != nil {
-		return knowledge.Snapshot{}, "", false, fmt.Errorf("%w: %w", ErrStoredObject, err)
+		return knowledge.Snapshot{}, false, fmt.Errorf("%w: %w", ErrStoredObject, err)
 	}
 	for _, o := range snap.Observations {
 		if o.Source.Anchor.Space != space {
-			return knowledge.Snapshot{}, "", false, ErrInvalidStateData
+			return knowledge.Snapshot{}, false, ErrInvalidStateData
 		}
 	}
 	for _, p := range snap.Packets {
 		if p.Space != space {
-			return knowledge.Snapshot{}, "", false, ErrInvalidStateData
+			return knowledge.Snapshot{}, false, ErrInvalidStateData
 		}
 	}
-	return snap, root, true, nil
+	return snap, true, nil
 }
 
 // An Execution selector is an authority check, not merely a string filter.
@@ -66,7 +75,7 @@ func (e *Engine) authorizeKnowledge(ctx context.Context, roots model.RootSet, sp
 	if err := validAgentScope(space, principal); err != nil {
 		return err
 	}
-	l, _, _, err := loadAgentLedger(ctx, e.index, roots.LiveControl, space, principal)
+	l, _, _, err := loadAgentLedger(ctx, e.reader(ctx), roots.LiveControl, space, principal)
 	if err != nil {
 		return err
 	}
@@ -100,12 +109,16 @@ func (e *Engine) prepareKnowledge(ctx context.Context, req api.CommitRequest, di
 	if err != nil {
 		return nil, err
 	}
-	current, _, _, err := e.loadKnowledge(ctx, e.roots, req.Space, req.Principal)
+	index, _, err := e.knowledgeIndexAt(ctx, e.roots, req.Space, req.Principal)
 	if err != nil {
 		return nil, err
 	}
+	legacy := c.UsesLegacySnapshot()
+	if legacy && index.root != state.EmptyRoot {
+		return nil, knowledge.ErrUnsupportedSchema
+	}
 	if c.Import != nil {
-		return e.prepareKnowledgeImport(ctx, req, digest, txID, lsn, recorded, current, *c.Import)
+		return e.prepareKnowledgeImport(ctx, req, digest, txID, lsn, recorded, index, legacy, *c.Import)
 	}
 	var source knowledge.SourceAnchor
 	var key *model.KnowledgeKey
@@ -155,17 +168,24 @@ func (e *Engine) prepareKnowledge(ctx context.Context, req api.CommitRequest, di
 			}
 		}
 	}
-	sourceSnap, _, _, err := e.loadKnowledge(ctx, roots, req.Space, req.Principal)
-	if err != nil {
-		return nil, err
-	}
+	var sourceSnap knowledge.Snapshot
 	if source.Anchor.Knowledge != nil {
-		sourceSnap, _, _, _, err = e.selectedKnowledge(ctx, roots, source.Anchor, req.Principal)
+		sourceSnap, _, _, _, err = e.selectedKnowledgeObservations(ctx, roots, source.Anchor, req.Principal)
 		if err != nil {
 			return nil, err
 		}
 	} else if source.Anchor.Cursor != nil {
 		if _, err = e.resolveDomainCursor(ctx, roots, source.Anchor); err != nil {
+			return nil, err
+		}
+	}
+	if source.Anchor.Knowledge == nil && source.Frontier != "" && key != nil {
+		sourceIndex, _, err := e.knowledgeIndexAt(ctx, roots, req.Space, req.Principal)
+		if err != nil {
+			return nil, err
+		}
+		sourceSnap, err = sourceIndex.snapshot(ctx, key, true, false)
+		if err != nil {
 			return nil, err
 		}
 	}
@@ -256,7 +276,14 @@ func (e *Engine) prepareKnowledge(ctx context.Context, req api.CommitRequest, di
 			return nil, err
 		}
 	}
-	next, err := knowledge.ApplyCommand(current, c)
+	if !legacy {
+		var observations []knowledge.Observation
+		if c.Observation != nil {
+			observations = append(observations, *c.Observation)
+		}
+		return e.prepareKnowledgeRecords(ctx, req, digest, txID, lsn, recorded, index, observations, c.Packet, sourceSnap)
+	}
+	next, err := knowledge.ApplyCommand(index.legacy, c)
 	if err != nil {
 		return nil, fmt.Errorf("knowledge candidate: %w", err)
 	}
@@ -266,6 +293,9 @@ func (e *Engine) prepareKnowledge(ctx context.Context, req api.CommitRequest, di
 	raw, err := knowledge.EncodeSnapshot(next)
 	if err != nil {
 		return nil, err
+	}
+	if c.Packet != nil {
+		return e.prepareDerivedValue(ctx, req, digest, txID, lsn, recorded, knowledgeStateKey(req.Space, req.Principal), raw, packetDerivations(*c.Packet, next))
 	}
 	return e.prepareTypedValue(ctx, req, digest, txID, lsn, recorded, knowledgeStateKey(req.Space, req.Principal), raw)
 }
@@ -297,7 +327,7 @@ func (e *Engine) visibleSourceObject(ctx context.Context, roots model.RootSet, a
 		// A domain Cursor is a strict ancestry selection, including audit
 		// occurrences. Owner/Fence membership alone would import an event
 		// from an unrelated branch at the same global cut.
-		_, revisions, err := loadGraphParents(ctx, &cursorReader{source: e.index}, roots, anchor.Space, []model.RevisionID{anchor.Cursor.Revision})
+		_, revisions, err := loadGraphParents(ctx, &cursorReader{source: e.reader(ctx)}, roots, anchor.Space, []model.RevisionID{anchor.Cursor.Revision})
 		if err != nil {
 			if errors.Is(err, graph.ErrUnknownRevision) {
 				return model.ErrAnchorMismatch
@@ -318,7 +348,7 @@ func (e *Engine) visibleSourceObject(ctx context.Context, roots model.RootSet, a
 
 // Visible source content belongs to the authenticated historical domain tree.
 func (e *Engine) visibleDomainObject(ctx context.Context, roots model.RootSet, space model.SpaceID, id model.ObjectID) error {
-	root, err := domainRoot(ctx, e.index, roots, space)
+	root, err := domainRoot(ctx, e.reader(ctx), roots, space)
 	if err != nil {
 		return err
 	}
@@ -326,13 +356,13 @@ func (e *Engine) visibleDomainObject(ctx context.Context, roots model.RootSet, s
 }
 
 func (e *Engine) visibleDomainRootObject(ctx context.Context, root model.ObjectID, space model.SpaceID, id model.ObjectID) error {
-	entries, err := state.Entries(ctx, e.index, space, root, state.ScanLimits{})
+	entries, err := state.Entries(ctx, e.reader(ctx), space, root, state.ScanLimits{})
 	if err != nil {
 		return err
 	}
 	for _, v := range entries {
 		if v.Value == id {
-			o, err := readObject(ctx, e.index, id)
+			o, err := readObject(ctx, e.reader(ctx), id)
 			if err != nil {
 				return err
 			}
@@ -347,6 +377,11 @@ func (e *Engine) visibleDomainRootObject(ctx context.Context, root model.ObjectI
 }
 
 func (e *Engine) GetKnowledgeState(ctx context.Context, req api.ReadKnowledgeStateRequest) (api.KnowledgeStateResult, error) {
+	if ctx.Value(readDeliveryKey{}) == nil {
+		return embeddedReadDelivery(ctx, e, "get_knowledge", req.Principal, req, func(scoped context.Context) (api.KnowledgeStateResult, error) {
+			return e.GetKnowledgeState(scoped, req)
+		})
+	}
 	if err := ctx.Err(); err != nil {
 		return api.KnowledgeStateResult{}, err
 	}
@@ -359,14 +394,10 @@ func (e *Engine) GetKnowledgeState(ctx context.Context, req api.ReadKnowledgeSta
 	if err := e.publicGate(); err != nil {
 		return api.KnowledgeStateResult{}, err
 	}
-	if err := e.mu.LockContext(ctx); err != nil {
+	if err := e.readReady(ctx); err != nil {
 		return api.KnowledgeStateResult{}, err
 	}
-	defer e.mu.Unlock()
-	if err := e.ready(); err != nil {
-		return api.KnowledgeStateResult{}, err
-	}
-	anchor := model.SnapshotAnchor{Space: req.Space, Fence: e.publication.Fence()}
+	anchor := model.SnapshotAnchor{Space: req.Space, Fence: e.readPublication(ctx).Fence()}
 	if req.Anchor != nil {
 		anchor = req.Anchor.Clone()
 	}
@@ -385,20 +416,19 @@ func (e *Engine) GetKnowledgeState(ctx context.Context, req api.ReadKnowledgeSta
 	}
 	roots, rootID, err := e.rootsAtFence(ctx, anchor.Fence, false)
 	if err != nil {
-		return api.KnowledgeStateResult{}, e.knowledgeReadFailure(err)
+		return api.KnowledgeStateResult{}, e.knowledgeReadFailure(ctx, err)
 	}
-	snap, root, found, err := e.loadKnowledge(ctx, roots, req.Space, req.Principal)
-	if err != nil {
-		return api.KnowledgeStateResult{}, e.knowledgeReadFailure(err)
-	}
+	var snap knowledge.Snapshot
+	var root model.ObjectID
+	var found bool
 	var frontier model.ObjectID
 	var revision *knowledge.Revision
 	if k := anchor.Knowledge; k != nil {
 		if err = e.authorizeKnowledge(ctx, roots, req.Space, req.Principal, *k); err != nil {
-			return api.KnowledgeStateResult{}, e.knowledgeReadFailure(err)
+			return api.KnowledgeStateResult{}, e.knowledgeReadFailure(ctx, err)
 		}
-		if err = e.authorizeKnowledge(ctx, e.roots, req.Space, req.Principal, *k); err != nil {
-			return api.KnowledgeStateResult{}, e.knowledgeReadFailure(err)
+		if err = e.authorizeKnowledge(ctx, e.readRoots(ctx), req.Space, req.Principal, *k); err != nil {
+			return api.KnowledgeStateResult{}, e.knowledgeReadFailure(ctx, err)
 		}
 		var selected knowledge.Revision
 		snap, selected, root, found, err = e.selectedKnowledge(ctx, roots, anchor, req.Principal)
@@ -411,13 +441,18 @@ func (e *Engine) GetKnowledgeState(ctx context.Context, req api.ReadKnowledgeSta
 			return api.KnowledgeStateResult{}, err
 		}
 		found = len(snap.Observations) > 0 || len(snap.Packets) > 0
+	} else {
+		snap, root, found, err = e.loadKnowledge(ctx, roots, req.Space, req.Principal)
+		if err != nil {
+			return api.KnowledgeStateResult{}, e.knowledgeReadFailure(ctx, err)
+		}
 	}
 	if err = ctx.Err(); err != nil {
 		return api.KnowledgeStateResult{}, err
 	}
 	dependencies, err := e.summaryDependencyIDs(ctx, roots, req.Space, req.Principal, observationSummaryIDs(snap.Observations))
 	if err != nil {
-		return api.KnowledgeStateResult{}, e.knowledgeReadFailure(err)
+		return api.KnowledgeStateResult{}, e.knowledgeReadFailure(ctx, err)
 	}
 	ids := append(knowledgePolicyIDs(snap), dependencies...)
 	if err := e.checkDisclosureIDs(ctx, req.Space, ids); err != nil {
@@ -430,17 +465,17 @@ func (e *Engine) GetKnowledgeState(ctx context.Context, req api.ReadKnowledgeSta
 	return finishReadDelivery(ctx, e, "get_knowledge", req.Principal, out, anchor, "", "", ids)
 }
 
-func (e *Engine) knowledgeReadFailure(err error) error {
+func (e *Engine) knowledgeReadFailure(ctx context.Context, err error) error {
 	if knowledgeCommandRejection(err) || errors.Is(err, ErrUnsupportedMethod) || isLimit(err) {
 		return err
 	}
-	return e.readFailure(err)
+	return e.readFailureAt(ctx, err)
 }
 func knowledgeCommandRejection(err error) bool {
 	if errors.Is(err, ErrStoredObject) || errors.Is(err, ErrObjectIO) || errors.Is(err, ErrSemanticCorruption) {
 		return false
 	}
-	return errors.Is(err, knowledge.ErrInvalidSummary) || errors.Is(err, knowledge.ErrInvalid) || errors.Is(err, knowledge.ErrObservationSequence) || errors.Is(err, knowledge.ErrUnknownObservation) || errors.Is(err, knowledge.ErrKnowledgeMismatch) || errors.Is(err, knowledge.ErrFutureSource) || errors.Is(err, knowledge.ErrDuplicateItem) || errors.Is(err, knowledge.ErrContextSelectionInvalid) || errors.Is(err, knowledge.ErrContextSelectionLimit) || errors.Is(err, knowledge.ErrContextBudgetUnsatisfied) || errors.Is(err, model.ErrAnchorMismatch) || errors.Is(err, agentprofile.ErrCommandScope) || errors.Is(err, ErrUnsupportedMethod)
+	return errors.Is(err, knowledge.ErrUnsupportedSchema) || errors.Is(err, knowledge.ErrInvalidSummary) || errors.Is(err, knowledge.ErrInvalid) || errors.Is(err, knowledge.ErrObservationSequence) || errors.Is(err, knowledge.ErrUnknownObservation) || errors.Is(err, knowledge.ErrKnowledgeMismatch) || errors.Is(err, knowledge.ErrFutureSource) || errors.Is(err, knowledge.ErrDuplicateItem) || errors.Is(err, knowledge.ErrContextSelectionInvalid) || errors.Is(err, knowledge.ErrContextSelectionLimit) || errors.Is(err, knowledge.ErrContextBudgetUnsatisfied) || errors.Is(err, model.ErrAnchorMismatch) || errors.Is(err, agentprofile.ErrCommandScope) || errors.Is(err, ErrUnsupportedMethod)
 }
 
 var _ api.KnowledgeCommands = (*Engine)(nil)

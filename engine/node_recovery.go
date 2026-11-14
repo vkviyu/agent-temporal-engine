@@ -1,13 +1,10 @@
 package engine
 
 import (
-	"bytes"
 	"encoding/base64"
-	"encoding/json"
 	"strconv"
 
 	"github.com/vkviyu/agent-temporal-engine/agentprofile"
-	"github.com/vkviyu/agent-temporal-engine/api"
 	"github.com/vkviyu/agent-temporal-engine/codec"
 	"github.com/vkviyu/agent-temporal-engine/model"
 	"github.com/vkviyu/agent-temporal-engine/storage"
@@ -33,26 +30,17 @@ func addRecoveryNodes(c *nodeCatalog, s *agentprofile.RecoverySnapshot, snapshot
 	if count > maxNodeQueryRecords-len(c.nodes) {
 		return storage.ErrLimit
 	}
+	if len(s.OutputChunks) > maxNodeQueryRecords-len(c.nodes)-count {
+		return storage.ErrLimit
+	}
 	add := func(kind model.EntityKind, id, label string, value any, parents []model.NodeRef, objects ...model.ObjectID) error {
-		ref := agentEntity(kind, id)
-		raw, err := json.Marshal(value)
-		if err != nil {
-			return err
-		}
-		if old, exists := c.nodes[ref]; exists {
-			if !bytes.Equal(old.detail.Data, raw) {
-				return ErrInvalidStateData
-			}
-			return nil
-		}
 		sources := []model.NodeRef{}
 		for _, id := range objects {
 			if id != "" {
 				sources = append(sources, model.NodeRef{Kind: model.NodeObject, Object: id})
 			}
 		}
-		c.nodes[ref] = nodeProjection{detail: api.NodeDetail{Ref: ref, Summary: api.NodeSummary{Ref: ref, Label: label, Kind: kind}, Payload: snapshot, Data: raw, Encoding: "agent/" + string(kind) + "/v1+json", Anchor: anchor.Clone(), Sources: sources}, parents: parents}
-		return nil
+		return c.addEntityJSON(anchor, snapshot, kind, id, label, value, parents, sources, true)
 	}
 	entity := func(kind model.EntityKind, id string) model.NodeRef { return agentEntity(kind, id) }
 	for _, v := range s.Authorities {
@@ -82,6 +70,11 @@ func addRecoveryNodes(c *nodeCatalog, s *agentprofile.RecoverySnapshot, snapshot
 	}
 	for _, v := range s.AttemptControls {
 		if err := add("AttemptControl", v.Attempt, v.Status, v, []model.NodeRef{entity("Attempt", v.Attempt), entity("Activity", v.Activity)}); err != nil {
+			return err
+		}
+	}
+	for _, v := range s.OutputChunks {
+		if err := add("OutputChunk", string(v.ID), "output chunk", v, []model.NodeRef{entity("Attempt", v.Attempt), entity("Activity", v.Activity)}); err != nil {
 			return err
 		}
 	}
@@ -115,7 +108,14 @@ func addRecoveryNodes(c *nodeCatalog, s *agentprofile.RecoverySnapshot, snapshot
 		}
 	}
 	for _, v := range s.Answers {
-		if err := add("QueryAnswer", recoveryNodeID(v.Query, v.Slot), v.Kind, v, []model.NodeRef{entity("Query", v.Query)}); err != nil {
+		parents := []model.NodeRef{entity("Query", v.Query)}
+		if v.GeneratedFrom != "" {
+			parents = append(parents, entity("ActivityResult", v.GeneratedFrom))
+		}
+		for _, outcome := range v.Outcomes {
+			parents = append(parents, entity("TaskOutcome", string(outcome.Task)))
+		}
+		if err := add("QueryAnswer", recoveryNodeID(v.Query, v.Slot), v.Kind, v, parents); err != nil {
 			return err
 		}
 	}

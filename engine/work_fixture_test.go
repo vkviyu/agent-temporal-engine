@@ -37,7 +37,7 @@ func testInvocationDecision(t *testing.T, s *integrationStore, id string, inv ag
 			version = c.Version
 		}
 	}
-	checkpoint := workCheckpoint(t, inv.Execution, a, read.Fence, id+"-next", version, nil, inv.Step)
+	checkpoint := workCheckpoint(t, inv.Execution, a, read.Fence, id+"-next", version, inv.Step)
 	command, err := agentprofile.DecodeCommand(checkpoint.Body)
 	if err != nil {
 		t.Fatal(err)
@@ -122,7 +122,7 @@ func testChildSpawnWork(t *testing.T, s *integrationStore, id string, spawn agen
 		t.Fatal(err)
 	}
 	goal, source, _ := goalCoreImage(t, s, id+"-goal", spawn.Task)
-	checkpoint := workCheckpoint(t, spawn.Execution.ID, authority, source, id+"-seed-next", 0)
+	checkpoint := workCheckpoint(t, spawn.Execution.ID, authority, source, id+"-seed-next", 0, 0)
 	command, err := agentprofile.DecodeCommand(checkpoint.Body)
 	if err != nil {
 		t.Fatal(err)

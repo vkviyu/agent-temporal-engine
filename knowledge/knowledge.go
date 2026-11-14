@@ -9,6 +9,7 @@ const MaxEstimatedTokens = 16 << 20
 
 var (
 	ErrInvalid           = errors.New("invalid knowledge record")
+	ErrUnsupportedSchema = errors.New("unsupported knowledge schema")
 	ErrFutureSource      = errors.New("knowledge source is after consumer commit")
 	ErrKnowledgeMismatch = errors.New("knowledge key does not match source")
 	ErrDuplicateItem     = errors.New("duplicate context item")

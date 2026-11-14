@@ -195,7 +195,7 @@ func TestCheckpointPendingRenderRecoversOriginalKnowledgeAndRecordedInput(t *tes
 	if !bytes.Equal(firstRender, rendered) {
 		t.Fatal("pure retry changed the exact source prompt")
 	}
-	result := agentprofile.ActivityResult{ID: "render-result", Activity: activity.Activity, Attempt: "render-attempt-2", RequestDigest: activity.RequestDigest, Incarnation: binding.Incarnation, Outcome: "success", Payload: rendered}
+	result := agentprofile.ActivityResult{Capture: "full", ID: "render-result", Activity: activity.Activity, Attempt: "render-attempt-2", RequestDigest: activity.RequestDigest, Incarnation: binding.Incarnation, Outcome: "success", Payload: rendered}
 	recoveryCoreControl(t, s, "render-capture", agentprofile.ControlCommand{CaptureResult: &agentprofile.CaptureResultCommand{Result: result}})
 	recoveryCoreControl(t, s, "render-accept", agentprofile.ControlCommand{AcceptActivity: &agentprofile.AcceptActivityCommand{Activity: activity.Activity, Result: result.ID, ExpectedVersion: 2, Authority: binding, Evidence: proof}})
 	inputBody, _ := engine.EncodeStateBatch(api.StateBatch{Operations: []api.StateMutation{integrationPut([]byte("recorded-input"), api.Value{Kind: api.ValueBytes, Data: rendered})}})

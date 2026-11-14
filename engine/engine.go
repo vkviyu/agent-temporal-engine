@@ -10,6 +10,7 @@ import (
 	"github.com/vkviyu/agent-temporal-engine/api"
 	"github.com/vkviyu/agent-temporal-engine/codec"
 	"github.com/vkviyu/agent-temporal-engine/graph"
+	"github.com/vkviyu/agent-temporal-engine/investigation"
 	"github.com/vkviyu/agent-temporal-engine/knowledge"
 	"github.com/vkviyu/agent-temporal-engine/model"
 	"github.com/vkviyu/agent-temporal-engine/state"
@@ -81,11 +82,20 @@ type Engine struct {
 	replayingEvents     bool
 	replayEventRegistry uint64
 	mu                  contextMutex
+	// Only coordinator, maintenance and final Close acquire writerMu. Public
+	// readers use mu to capture the published roots, never this IO gate.
+	writerMu            contextMutex
+	publicationPending  atomic.Bool
 	views               viewRegistry
 	history             map[uint64]commitEnvelope
 	baseHistory         map[uint64]commitEnvelope
 	events              map[model.EventID]eventEntry
 	baseEvents          map[model.EventID]eventEntry
+	eventBlocks         *eventMetadataBlock
+	traceEvents         map[traceEventKey][]eventMetadataItem
+	traceEventMeta      map[model.EventID]eventMetadataItem
+	traceEventKeys      map[model.EventID][]traceEventKey
+	traceCausalChildren map[model.EventID][]eventMetadataItem
 	eventHeads          map[string]eventHead
 	baseEventHeads      map[string]eventHead
 	journal             *storage.Journal
@@ -108,7 +118,18 @@ type Engine struct {
 var _ api.Committer = (*Engine)(nil)
 
 func newEngine(o Options) *Engine {
-	return &Engine{options: o, history: make(map[uint64]commitEnvelope), events: make(map[model.EventID]eventEntry), eventHeads: make(map[string]eventHead), index: newObjectIndex(), envelopes: make(map[model.TxID]commitEnvelope), receiptHints: make(map[[32]byte]struct{})}
+	return &Engine{
+		options:             o,
+		history:             make(map[uint64]commitEnvelope),
+		events:              make(map[model.EventID]eventEntry),
+		eventHeads:          make(map[string]eventHead),
+		traceEventMeta:      make(map[model.EventID]eventMetadataItem),
+		traceEventKeys:      make(map[model.EventID][]traceEventKey),
+		traceCausalChildren: make(map[model.EventID][]eventMetadataItem),
+		index:               newObjectIndex(),
+		envelopes:           make(map[model.TxID]commitEnvelope),
+		receiptHints:        make(map[[32]byte]struct{}),
+	}
 }
 
 // Create uses an existing empty directory IO. The caller owns that IO lifetime;
@@ -169,6 +190,9 @@ func (e *Engine) ready() error {
 	if e.fenced != nil {
 		return fmt.Errorf("%w: %w", storage.ErrStoreFenced, e.fenced)
 	}
+	if e.publicationPending.Load() {
+		return api.ErrReadAuthorizationChanged
+	}
 	_, err := e.journal.Published()
 	return err
 }
@@ -183,7 +207,7 @@ func semanticError(err error) error {
 	if errors.Is(err, ErrStoredObject) {
 		return fmt.Errorf("%w: %w: %w", ErrSemanticCorruption, storage.ErrCorruption, err)
 	}
-	if errors.Is(err, ErrUnsupportedSchema) || errors.Is(err, codec.ErrObjectUnsupported) || errors.Is(err, storage.ErrUnsupported) || errors.Is(err, storage.ErrLimit) || errors.Is(err, state.ErrLimit) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+	if errors.Is(err, ErrUnsupportedSchema) || errors.Is(err, knowledge.ErrUnsupportedSchema) || errors.Is(err, codec.ErrObjectUnsupported) || errors.Is(err, storage.ErrUnsupported) || errors.Is(err, storage.ErrLimit) || errors.Is(err, state.ErrLimit) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return err
 	}
 	return fmt.Errorf("%w: %w: %w", ErrSemanticCorruption, storage.ErrCorruption, err)
@@ -193,7 +217,7 @@ func isLimit(err error) bool {
 	if errors.Is(err, ErrStoredObject) || errors.Is(err, ErrObjectIO) {
 		return false
 	}
-	return errors.Is(err, storage.ErrLimit) || errors.Is(err, state.ErrLimit) || errors.Is(err, codec.ErrObjectLimit) || errors.Is(err, graph.ErrLimit) || errors.Is(err, knowledge.ErrContextSelectionLimit) || errors.Is(err, annotation.ErrLimit)
+	return errors.Is(err, storage.ErrLimit) || errors.Is(err, state.ErrLimit) || errors.Is(err, codec.ErrObjectLimit) || errors.Is(err, graph.ErrLimit) || errors.Is(err, knowledge.ErrContextSelectionLimit) || errors.Is(err, annotation.ErrLimit) || errors.Is(err, investigation.ErrLimit)
 }
 
 func (e *Engine) readFailure(err error) error {
@@ -208,11 +232,11 @@ func (e *Engine) readFailure(err error) error {
 }
 
 func (e *Engine) lookup(ctx context.Context, key model.RequestKey) (api.CommitResult, bool, error) {
-	id, found, err := state.Get(ctx, e.index, systemSpace, e.roots.CommandReceipts, receiptKey(key))
+	id, found, err := state.Get(ctx, e.reader(ctx), systemSpace, e.readRoots(ctx).CommandReceipts, receiptKey(key))
 	if err != nil || !found {
 		return api.CommitResult{}, false, err
 	}
-	obj, err := readObject(ctx, e.index, id)
+	obj, err := readObject(ctx, e.reader(ctx), id)
 	if err != nil {
 		return api.CommitResult{}, false, err
 	}
@@ -220,7 +244,10 @@ func (e *Engine) lookup(ctx context.Context, key model.RequestKey) (api.CommitRe
 	if err != nil {
 		return api.CommitResult{}, false, err
 	}
-	proof, ok := e.lookupProof(receipt.TxID)
+	proof, ok, err := e.readEnvelope(ctx, receipt.TxID)
+	if err != nil {
+		return api.CommitResult{}, false, err
+	}
 	if !ok || receipt.Key != key || receipt.LSN != proof.fence.LSN {
 		return api.CommitResult{}, false, ErrInvalidStateData
 	}
@@ -230,14 +257,6 @@ func (e *Engine) lookup(ctx context.Context, key model.RequestKey) (api.CommitRe
 
 func (e *Engine) Commit(ctx context.Context, req api.CommitRequest) (api.CommitResult, error) {
 	return e.commitQueued(ctx, req)
-}
-
-func (e *Engine) lookupProof(id model.TxID) (commitEnvelope, bool) {
-	proof, ok := e.envelopes[id]
-	if !ok {
-		proof, ok = e.baseEnvelopes[id]
-	}
-	return proof, ok
 }
 
 func (e *Engine) Mutate(ctx context.Context, req api.MutateRequest) (api.CommitResult, error) {
@@ -252,6 +271,11 @@ func (e *Engine) Mutate(ctx context.Context, req api.MutateRequest) (api.CommitR
 }
 
 func (e *Engine) LookupRequest(ctx context.Context, req api.LookupRequestRequest) (api.LookupRequestResult, error) {
+	if ctx.Value(readDeliveryKey{}) == nil {
+		return embeddedReadDelivery(ctx, e, "lookup_request", req.Principal, req, func(scoped context.Context) (api.LookupRequestResult, error) {
+			return e.LookupRequest(scoped, req)
+		})
+	}
 	if err := req.Validate(); err != nil {
 		return api.LookupRequestResult{}, err
 	}
@@ -261,27 +285,19 @@ func (e *Engine) LookupRequest(ctx context.Context, req api.LookupRequestRequest
 	if err := e.publicGate(); err != nil {
 		return api.LookupRequestResult{Code: api.CodeIndeterminate}, err
 	}
+	if err := e.readReady(ctx); err != nil {
+		return api.LookupRequestResult{Code: api.CodeIndeterminate}, err
+	}
 	if got, found, err := e.inFlight(req); found {
 		if err == nil && ctx.Value(readDeliveryKey{}) != nil {
-			if lockErr := e.mu.LockContext(ctx); lockErr != nil {
-				return api.LookupRequestResult{Code: api.CodeIndeterminate}, lockErr
-			}
 			captured, captureErr := finishReadDelivery(ctx, e, "lookup_request", req.Principal, got, model.SnapshotAnchor{Space: req.Space, Fence: got.ObservedFence}, "", "", nil)
-			e.mu.Unlock()
 			return captured, captureErr
 		}
 		return got, err
 	}
-	if err := e.mu.LockContext(ctx); err != nil {
-		return api.LookupRequestResult{Code: api.CodeIndeterminate}, err
-	}
-	defer e.mu.Unlock()
-	if err := e.ready(); err != nil {
-		return api.LookupRequestResult{Code: api.CodeIndeterminate}, err
-	}
 	result, found, err := e.lookup(ctx, req.Key())
 	if err != nil {
-		return api.LookupRequestResult{Code: api.CodeIndeterminate}, e.readFailure(err)
+		return api.LookupRequestResult{Code: api.CodeIndeterminate}, e.readFailureAt(ctx, err)
 	}
 	if !found {
 		if got, queued, err := e.inFlight(req); queued {
@@ -291,32 +307,23 @@ func (e *Engine) LookupRequest(ctx context.Context, req api.LookupRequestRequest
 			}
 			return got, err
 		}
-		result := api.LookupRequestResult{Code: api.CodeNotFoundAtFence, ObservedFence: e.publication.Fence()}
+		result := api.LookupRequestResult{Code: api.CodeNotFoundAtFence, ObservedFence: e.readPublication(ctx).Fence()}
 		return finishReadDelivery(ctx, e, "lookup_request", req.Principal, result, model.SnapshotAnchor{Space: req.Space, Fence: result.ObservedFence}, "", "", nil)
 	}
-	out := api.LookupRequestResult{Code: api.CodeDurableAck, Result: result, ObservedFence: e.publication.Fence()}
+	out := api.LookupRequestResult{Code: api.CodeDurableAck, Result: result, ObservedFence: e.readPublication(ctx).Fence()}
 	return finishReadDelivery(ctx, e, "lookup_request", req.Principal, out, model.SnapshotAnchor{Space: req.Space, Fence: out.ObservedFence}, "", "", nil)
 }
 
 func (e *Engine) GetState(ctx context.Context, req api.ReadStateRequest) (api.StateValueResult, error) {
-	return e.getStateForMethodAnchor(ctx, req, api.MethodMutateState, nil, true)
+	if ctx.Value(readDeliveryKey{}) == nil {
+		return embeddedReadDelivery(ctx, e, "get_state", "embedded-host", req, func(scoped context.Context) (api.StateValueResult, error) {
+			return e.GetState(scoped, req)
+		})
+	}
+	return e.getState(ctx, req)
 }
 
-// GetStateForMethod reads the root owned by a typed domain command. It is used
-// by Graph/Memory/Knowledge facades so their reads cannot silently fall back
-// to DomainStates.
-func (e *Engine) GetStateForMethod(ctx context.Context, req api.ReadStateRequest, method string) (api.StateValueResult, error) {
-	return e.GetStateForMethodAnchor(ctx, req, method, nil)
-}
-
-// GetStateForMethodAnchor reads a typed root at an already-published fence.
-// Knowledge selectors remain separate from this control-state cut and are
-// rejected here until their per-key projection is available.
-func (e *Engine) GetStateForMethodAnchor(ctx context.Context, req api.ReadStateRequest, method string, anchor *model.SnapshotAnchor) (api.StateValueResult, error) {
-	return e.getStateForMethodAnchor(ctx, req, method, anchor, false)
-}
-
-func (e *Engine) getStateForMethodAnchor(ctx context.Context, req api.ReadStateRequest, method string, anchor *model.SnapshotAnchor, deliver bool) (api.StateValueResult, error) {
+func (e *Engine) getState(ctx context.Context, req api.ReadStateRequest) (api.StateValueResult, error) {
 	if err := ctx.Err(); err != nil {
 		return api.StateValueResult{}, err
 	}
@@ -326,54 +333,19 @@ func (e *Engine) getStateForMethodAnchor(ctx context.Context, req api.ReadStateR
 	if len(req.Key) > api.MaxStateKeyBytes {
 		return api.StateValueResult{}, state.ErrInvalidKey
 	}
-	if !isRegisteredDomainMethod(method) {
-		return api.StateValueResult{}, ErrUnsupportedMethod
-	}
 	if err := e.publicGate(); err != nil {
 		return api.StateValueResult{}, err
 	}
-	if err := e.mu.LockContext(ctx); err != nil {
+	if err := e.readReady(ctx); err != nil {
 		return api.StateValueResult{}, err
 	}
-	defer e.mu.Unlock()
-	if err := e.ready(); err != nil {
-		return api.StateValueResult{}, err
-	}
-	roots := e.roots
-	rootSetID := e.rootSet
-	if anchor != nil {
-		a := anchor.Clone()
-		if err := a.Validate(); err != nil || a.Space != req.Space || a.Cursor != nil || a.Knowledge != nil {
-			return api.StateValueResult{}, model.ErrAnchorMismatch
-		}
-		proof, ok := e.history[a.Fence.LSN]
-		if !ok || proof.fence != a.Fence {
-			return api.StateValueResult{}, model.ErrAnchorMismatch
-		}
-		roots = model.RootSet{}
-		if proof.rootSet != "" {
-			obj, err := readObject(ctx, e.index, proof.rootSet)
-			if err != nil {
-				return api.StateValueResult{}, e.readFailure(err)
-			}
-			roots, err = readRootSet(obj)
-			if err != nil {
-				return api.StateValueResult{}, e.readFailure(err)
-			}
-		}
-		rootSetID = proof.rootSet
-	}
-	root, err := slotSpaceRoot(ctx, e.index, methodRoot(roots, method), req.Space)
+	root, err := domainRoot(ctx, e.reader(ctx), e.readRoots(ctx), req.Space)
 	if err != nil {
-		return api.StateValueResult{}, e.readFailure(err)
+		return api.StateValueResult{}, e.readFailureAt(ctx, err)
 	}
 	out, id, err := e.readStateAtRoot(ctx, req, root)
 	if err != nil {
 		return api.StateValueResult{}, err
-	}
-	out.RootSet = rootSetID
-	if anchor != nil {
-		out.Fence = anchor.Fence
 	}
 	if err := ctx.Err(); err != nil {
 		return api.StateValueResult{}, err
@@ -381,65 +353,60 @@ func (e *Engine) getStateForMethodAnchor(ctx context.Context, req api.ReadStateR
 	if err := e.viewOutputGate(); err != nil {
 		return api.StateValueResult{}, err
 	}
-	if deliver {
-		// The transport authenticates this principal and authorizes the requested
-		// space before calling the principal-free core state API.
-		var dependencies []model.ObjectID
-		if out.Found {
-			dependencies = []model.ObjectID{id}
-		}
-		anchor := model.SnapshotAnchor{Space: req.Space, Fence: out.Fence}
-		return finishReadDelivery(ctx, e, "get_state", readDeliveryPrincipal(ctx), out, anchor, "", "", dependencies)
+	// The transport or trusted embedded host supplies the destination for this
+	// principal-free domain-state API.
+	var dependencies []model.ObjectID
+	if out.Found {
+		dependencies = []model.ObjectID{id}
 	}
-	return out, nil
+	anchor := model.SnapshotAnchor{Space: req.Space, Fence: out.Fence}
+	return finishReadDelivery(ctx, e, "get_state", readDeliveryPrincipal(ctx), out, anchor, "", "", dependencies)
 }
 
 func (e *Engine) readStateAtRoot(ctx context.Context, req api.ReadStateRequest, root model.ObjectID) (api.StateValueResult, model.ObjectID, error) {
-	id, found, err := state.Get(ctx, e.index, req.Space, root, req.Key)
+	id, found, err := state.Get(ctx, e.reader(ctx), req.Space, root, req.Key)
 	if err != nil {
-		return api.StateValueResult{}, "", e.readFailure(err)
+		return api.StateValueResult{}, "", e.readFailureAt(ctx, err)
 	}
-	result := api.StateValueResult{Found: found, StateRoot: root, RootSet: e.rootSet, Fence: e.publication.Fence()}
+	result := api.StateValueResult{Found: found, StateRoot: root, RootSet: e.readRootSet(ctx), Fence: e.readPublication(ctx).Fence()}
 	if found {
 		if err := e.checkDisclosureIDs(ctx, req.Space, []model.ObjectID{id}); err != nil {
 			return api.StateValueResult{}, "", err
 		}
-		if err := e.checkDerivedDisclosureIDs(ctx, req.Space, []model.ObjectID{id}); err != nil {
-			return api.StateValueResult{}, "", err
-		}
-		obj, err := readObject(ctx, e.index, id)
+		obj, err := readObject(ctx, e.reader(ctx), id)
 		if err != nil {
-			return api.StateValueResult{}, "", e.readFailure(err)
+			return api.StateValueResult{}, "", e.readFailureAt(ctx, err)
 		}
 		if obj.Space != req.Space {
-			return api.StateValueResult{}, "", e.readFailure(ErrInvalidStateData)
+			return api.StateValueResult{}, "", e.readFailureAt(ctx, ErrInvalidStateData)
 		}
 		result.Value, err = readValue(obj)
 		if err != nil {
-			return api.StateValueResult{}, "", e.readFailure(err)
+			return api.StateValueResult{}, "", e.readFailureAt(ctx, err)
 		}
 	}
 	return result, id, nil
 }
 
 func (e *Engine) Snapshot(ctx context.Context) (api.StateSnapshot, error) {
+	if ctx.Value(readDeliveryKey{}) == nil {
+		return embeddedReadDelivery(ctx, e, "snapshot", "embedded-host", struct{}{}, func(scoped context.Context) (api.StateSnapshot, error) {
+			return e.Snapshot(scoped)
+		})
+	}
 	if err := ctx.Err(); err != nil {
 		return api.StateSnapshot{}, err
 	}
 	if err := e.publicGate(); err != nil {
 		return api.StateSnapshot{}, err
 	}
-	if err := e.mu.LockContext(ctx); err != nil {
-		return api.StateSnapshot{}, err
-	}
-	defer e.mu.Unlock()
-	if err := e.ready(); err != nil {
+	if err := e.readReady(ctx); err != nil {
 		return api.StateSnapshot{}, err
 	}
 	if err := ctx.Err(); err != nil {
 		return api.StateSnapshot{}, err
 	}
-	result := api.StateSnapshot{Roots: e.roots, RootSet: e.rootSet, Fence: e.publication.Fence()}
+	result := api.StateSnapshot{Roots: e.readRoots(ctx), RootSet: e.readRootSet(ctx), Fence: e.readPublication(ctx).Fence()}
 	return finishReadDelivery(ctx, e, "snapshot", readDeliveryPrincipal(ctx), result, model.SnapshotAnchor{Fence: result.Fence}, "", "", nil)
 }
 
@@ -466,21 +433,28 @@ func (e *Engine) CloseContext(ctx context.Context) error {
 	if err := e.waitViews(ctx); err != nil {
 		return err
 	}
+	if err := e.writerMu.LockContext(ctx); err != nil {
+		return err
+	}
+	defer e.writerMu.Unlock()
 	if err := e.mu.LockContext(ctx); err != nil {
 		return err
 	}
-	defer e.mu.Unlock()
 	if e.closed {
+		e.mu.Unlock()
 		return nil
 	}
 	e.closing = true
+	e.mu.Unlock()
 	if e.journal != nil {
 		if err := e.journal.Close(); err != nil {
 			return err
 		}
 	}
+	e.mu.Lock()
 	e.closed = true
 	e.retired.Store(true)
+	e.mu.Unlock()
 	return nil
 }
 

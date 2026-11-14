@@ -78,6 +78,39 @@ func TestEntriesLimitAndCancellationNeverReturnPartialSnapshot(t *testing.T) {
 		t.Fatal("bad hash accepted")
 	}
 }
+
+func TestEntriesWithPrefixSkipsUnrelatedRadixBranches(t *testing.T) {
+	ctx := t.Context()
+	reader := newMemoryReader()
+	delta, err := Apply(ctx, reader, testSpace, EmptyRoot, []Mutation{
+		{Key: []byte("execution/alpha/one"), Value: valueID("one")},
+		{Key: []byte("execution/alpha/two"), Value: valueID("two")},
+		{Key: []byte("execution/beta"), Value: valueID("beta")},
+		{Key: []byte("packet/gamma"), Value: valueID("gamma")},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	install(t, reader, delta)
+	before := reader.reads
+	all, err := Entries(ctx, reader, testSpace, delta.Root, ScanLimits{})
+	if err != nil || len(all) != 4 {
+		t.Fatalf("all = %v, %v", all, err)
+	}
+	fullReads := reader.reads - before
+	before = reader.reads
+	got, err := EntriesWithPrefix(ctx, reader, testSpace, delta.Root, []byte("execution/al"), ScanLimits{})
+	if err != nil || !reflect.DeepEqual(got, all[:2]) || reader.reads-before >= fullReads {
+		t.Fatalf("scoped = %v, %v; read %d/%d", got, err, reader.reads-before, fullReads)
+	}
+	for _, prefix := range []string{"execution/alphaz", "execution/alpha/one-more", "nonexistent"} {
+		got, err := EntriesWithPrefix(ctx, reader, testSpace, delta.Root, []byte(prefix), ScanLimits{})
+		if err != nil || len(got) != 0 {
+			t.Fatalf("missing prefix %q = %v, %v", prefix, got, err)
+		}
+	}
+}
+
 func TestEntriesMatchesIndependentMapAfterPathSplitAndCollapse(t *testing.T) {
 	reader := newMemoryReader()
 	root := EmptyRoot

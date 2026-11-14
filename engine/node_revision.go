@@ -125,6 +125,9 @@ func addRevisionNodes(ctx context.Context, r *nodeQueryReader, entry *viewEntry,
 		for _, parent := range revision.JoinParents {
 			parents = append(parents, model.NodeRef{Kind: model.NodeRevision, Revision: parent})
 		}
+		if p := revision.Producer; p != nil && p.Execution != "" && p.Principal == entry.principal {
+			parents = append(parents, model.NodeRef{Kind: model.NodeEntity, Entity: eventSubject("Execution", string(p.Execution))})
+		}
 		for _, id := range revision.Events {
 			parents = append(parents, model.NodeRef{Kind: model.NodeEvent, Event: id})
 		}

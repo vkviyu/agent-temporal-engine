@@ -277,6 +277,17 @@ func coordinatorLookup(t *testing.T, e *Engine, req api.CommitRequest) api.Looku
 	return r
 }
 
+// Coordinator phase assertions inspect admission directly. Public receipt
+// reads also acquire an outbound grant and can be refused during publication.
+func coordinatorInFlight(t *testing.T, e *Engine, req api.CommitRequest) api.LookupRequestResult {
+	t.Helper()
+	r, found, err := e.inFlight(api.LookupRequestRequest{Space: req.Space, Principal: req.Principal, RequestID: req.RequestID})
+	if err != nil || !found {
+		t.Fatalf("expected admitted request %s: found=%v result=%+v err=%v", req.RequestID, found, r, err)
+	}
+	return r
+}
+
 // The first Err result is captured before notifying the test. Cancellation
 // after checked therefore cannot turn the initial pre-check into an early
 // return; the operation must make its subsequent lock wait cancellable.

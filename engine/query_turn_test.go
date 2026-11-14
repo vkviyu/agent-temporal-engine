@@ -48,7 +48,7 @@ func TestUnmanagedQueryCannotCreateExternalTool(t *testing.T) {
 	authority := agentprofile.AuthorityBinding{Deployment: "host", OwnerEpoch: 1, Incarnation: 1, Holder: "driver"}
 	recoveryCoreControl(t, s, "unmanaged-query-other-authority", agentprofile.ControlCommand{GrantAuthority: &agentprofile.GrantAuthorityCommand{Authority: agentprofile.ExecutionAuthority{Execution: execution.ID, Status: "active", Binding: authority, Evidence: definitionID}}})
 	before = integrationSnapshot(t, s.e)
-	checkpoint := workCheckpoint(t, execution.ID, authority, before.Fence, "unmanaged-query-checkpoint-next", 0)
+	checkpoint := workCheckpoint(t, execution.ID, authority, before.Fence, "unmanaged-query-checkpoint-next", 0, 0)
 	unit := api.WorkUnit{Kind: "checkpoint", Steps: []api.WorkStep{workControl(t, create), checkpoint}}
 	out, err = s.e.ApplyWork(ctx, api.ApplyWorkRequest{Key: agentKey("unbound-query-tool-work"), Unit: unit})
 	if !errors.Is(err, engine.ErrWorkBoundary) || out.Code != api.CodeRejected || integrationSnapshot(t, s.e) != before {
@@ -138,11 +138,11 @@ func runQueryOnlyRecovery(t *testing.T, withTools bool) {
 	}
 	commitExact(*second.Progress.Next)
 	recoveryCoreControl(t, s, "query-dispatch", agentprofile.ControlCommand{DispatchAttempt: &agentprofile.DispatchAttemptCommand{Attempt: "query-attempt", Evidence: proof}})
-	result := agentprofile.ActivityResult{ID: "query-result", Activity: modelSpec.Activity, Attempt: "query-attempt", RequestDigest: modelSpec.RequestDigest, Incarnation: 1, Outcome: "success", Payload: []byte("read file")}
+	result := agentprofile.ActivityResult{Capture: "full", ID: "query-result", Activity: modelSpec.Activity, Attempt: "query-attempt", RequestDigest: modelSpec.RequestDigest, Incarnation: 1, Outcome: "success", Payload: []byte("direct answer")}
 	recoveryCoreControl(t, s, "query-capture", agentprofile.ControlCommand{CaptureResult: &agentprofile.CaptureResultCommand{Result: result}})
 	for name, c := range map[string]agentprofile.ControlCommand{
 		"raw-primary-accept": {AcceptActivity: &agentprofile.AcceptActivityCommand{Activity: modelSpec.Activity, Result: result.ID, ExpectedVersion: 1, Evidence: proof}},
-		"raw-query-answer":   {AnswerQuery: &agentprofile.AnswerQueryCommand{Query: query.ID, Slot: "bypass", Kind: "final", ExpectedVersion: 1, Body: []byte("bypass"), Final: true}},
+		"raw-query-answer":   {AnswerQuery: &agentprofile.AnswerQueryCommand{Query: query.ID, Slot: "bypass", Kind: "final", ExpectedVersion: 1, Body: []byte("bypass"), Final: true, GeneratedFrom: result.ID}},
 	} {
 		tip := integrationSnapshot(t, s.e)
 		if out, err := s.e.Commit(ctx, exact(name, c)); !errors.Is(err, agentprofile.ErrConflict) || out.Code != api.CodeRejected || integrationSnapshot(t, s.e) != tip {
@@ -214,7 +214,13 @@ func runQueryOnlyRecovery(t *testing.T, withTools bool) {
 		if out, err := s.e.ApplyWork(ctx, reused); !errors.Is(err, agentprofile.ErrUniqueSlot) || out.Code != api.CodeRejected || integrationSnapshot(t, s.e) != tip {
 			t.Fatal("old result became fresh decision", out, err)
 		}
-		answer := api.ApplyWorkRequest{Key: agentKey("direct-answer"), Unit: api.WorkUnit{Kind: "query_answer", Query: query.ID, QueryTurn: &api.QueryTurn{ExpectedVersion: 2, Sequence: 1, AdapterVersion: "query/v1", Phase: "answered", Source: packet.Source.Anchor}, Steps: []api.WorkStep{workControl(t, agentprofile.ControlCommand{AnswerQuery: &agentprofile.AnswerQueryCommand{Query: query.ID, Slot: "final", Kind: "final", ExpectedVersion: 1, Body: []byte("direct answer"), Final: true}})}}}
+		answer := api.ApplyWorkRequest{Key: agentKey("direct-answer"), Unit: api.WorkUnit{Kind: "query_answer", Query: query.ID, QueryTurn: &api.QueryTurn{ExpectedVersion: 2, Sequence: 1, AdapterVersion: "query/v1", Phase: "answered", Source: packet.Source.Anchor}, Steps: []api.WorkStep{workControl(t, agentprofile.ControlCommand{AnswerQuery: &agentprofile.AnswerQueryCommand{Query: query.ID, Slot: "final", Kind: "final", ExpectedVersion: 1, Body: []byte("direct answer"), Final: true, GeneratedFrom: result.ID}})}}}
+		changed := answer
+		changed.Key.RequestID = "changed-final-answer-body"
+		changed.Unit.Steps = []api.WorkStep{workControl(t, agentprofile.ControlCommand{AnswerQuery: &agentprofile.AnswerQueryCommand{Query: query.ID, Slot: "final", Kind: "final", ExpectedVersion: 1, Body: []byte("invented answer"), Final: true, GeneratedFrom: result.ID}})}
+		if out, err := s.e.ApplyWork(ctx, changed); !errors.Is(err, agentprofile.ErrConflict) || out.Code != api.CodeRejected || integrationSnapshot(t, s.e) != tip {
+			t.Fatal("final body escaped accepted model result", out, err)
+		}
 		ack := workApply(t, s, answer)
 		if _, err := s.e.CompactAuditFull(ctx); err != nil {
 			t.Fatal(err)
@@ -229,7 +235,7 @@ func runQueryOnlyRecovery(t *testing.T, withTools bool) {
 		}
 		return
 	}
-	premature := api.ApplyWorkRequest{Key: agentKey("premature-answer"), Unit: api.WorkUnit{Kind: "query_answer", Query: query.ID, QueryTurn: &api.QueryTurn{ExpectedVersion: 2, Sequence: 1, AdapterVersion: "query/v1", Phase: "answered", Source: packet.Source.Anchor}, Steps: []api.WorkStep{workControl(t, agentprofile.ControlCommand{AnswerQuery: &agentprofile.AnswerQueryCommand{Query: query.ID, Slot: "premature", Kind: "final", ExpectedVersion: 1, Body: []byte("incorrectly done"), Final: true}})}}}
+	premature := api.ApplyWorkRequest{Key: agentKey("premature-answer"), Unit: api.WorkUnit{Kind: "query_answer", Query: query.ID, QueryTurn: &api.QueryTurn{ExpectedVersion: 2, Sequence: 1, AdapterVersion: "query/v1", Phase: "answered", Source: packet.Source.Anchor}, Steps: []api.WorkStep{workControl(t, agentprofile.ControlCommand{AnswerQuery: &agentprofile.AnswerQueryCommand{Query: query.ID, Slot: "premature", Kind: "final", ExpectedVersion: 1, Body: []byte("incorrectly done"), Final: true, GeneratedFrom: result.ID}})}}}
 	tip = integrationSnapshot(t, s.e)
 	if out, err := s.e.ApplyWork(ctx, premature); !errors.Is(err, engine.ErrWorkBoundary) || out.Code != api.CodeRejected || integrationSnapshot(t, s.e) != tip {
 		t.Fatal("pending action or tool was bypassed", out, err)
@@ -265,16 +271,31 @@ func runQueryOnlyRecovery(t *testing.T, withTools bool) {
 	commitExact(createTool)
 	recoveryCoreControl(t, s, "tool-claim", agentprofile.ControlCommand{ClaimAttempt: &agentprofile.ClaimAttemptCommand{Activity: toolSpec.Activity, Attempt: "tool-attempt", Sequence: 1}})
 	recoveryCoreControl(t, s, "tool-dispatch", agentprofile.ControlCommand{DispatchAttempt: &agentprofile.DispatchAttemptCommand{Attempt: "tool-attempt", Evidence: proof}})
-	toolResult := agentprofile.ActivityResult{ID: "tool-result", Activity: toolSpec.Activity, Attempt: "tool-attempt", RequestDigest: toolSpec.RequestDigest, Incarnation: 1, Outcome: "success", Payload: []byte("file bytes")}
+	toolResult := agentprofile.ActivityResult{Capture: "full", ID: "tool-result", Activity: toolSpec.Activity, Attempt: "tool-attempt", RequestDigest: toolSpec.RequestDigest, Incarnation: 1, Outcome: "success", Payload: []byte("file bytes")}
 	recoveryCoreControl(t, s, "tool-capture", agentprofile.ControlCommand{CaptureResult: &agentprofile.CaptureResultCommand{Result: toolResult}})
-	answer := api.ApplyWorkRequest{Key: agentKey("query-answer"), Unit: api.WorkUnit{Kind: "query_answer", Query: query.ID, QueryTurn: &api.QueryTurn{ExpectedVersion: 3, Sequence: 1, AdapterVersion: "query/v1", Phase: "answered", Source: packet.Source.Anchor}, Steps: []api.WorkStep{workControl(t, agentprofile.ControlCommand{AnswerQuery: &agentprofile.AnswerQueryCommand{Query: query.ID, Slot: "final", Kind: "final", Final: true, Body: []byte("answer from file"), ExpectedVersion: 1}})}}}
+	finalSpec := modelSpec
+	finalSpec.Activity = "final-query-model"
+	finalClaim := exact("final-query-claim", agentprofile.ControlCommand{ClaimAttempt: &agentprofile.ClaimAttemptCommand{Activity: finalSpec.Activity, Attempt: "final-query-attempt", Sequence: 1}})
+	finalOpen := api.ApplyWorkRequest{Key: agentKey("final-query-open"), Unit: api.WorkUnit{Kind: "query_checkpoint", Query: query.ID, QueryTurn: &api.QueryTurn{ExpectedVersion: 3, Sequence: 1, Activity: finalSpec.Activity, AdapterVersion: "query/v1", Phase: "final-model", Source: packet.Source.Anchor, Next: &finalClaim}, Steps: []api.WorkStep{workControl(t, agentprofile.ControlCommand{CreateActivity: &agentprofile.CreateActivityCommand{Spec: finalSpec}})}}}
+	finalOpenBody, err := api.EncodeWorkUnit(finalOpen.Unit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nextFinalModel := api.CommitRequest{Space: query.Space, Principal: query.Owner, RequestID: finalOpen.Key.RequestID, Method: api.MethodApplyWork, Body: finalOpenBody}
+	finalResult := agentprofile.ActivityResult{Capture: "full", ID: "final-query-result", Activity: finalSpec.Activity, Attempt: "final-query-attempt", RequestDigest: finalSpec.RequestDigest, Incarnation: 1, Outcome: "success", Payload: []byte("answer from file")}
+	answer := api.ApplyWorkRequest{Key: agentKey("query-answer"), Unit: api.WorkUnit{Kind: "query_answer", Query: query.ID, QueryTurn: &api.QueryTurn{ExpectedVersion: 5, Sequence: 2, AdapterVersion: "query/v1", Phase: "answered", Source: packet.Source.Anchor}, Steps: []api.WorkStep{workControl(t, agentprofile.ControlCommand{AnswerQuery: &agentprofile.AnswerQueryCommand{Query: query.ID, Slot: "final", Kind: "final", Final: true, Body: finalResult.Payload, ExpectedVersion: 1, GeneratedFrom: finalResult.ID}})}}}
 	answerBody, err := api.EncodeWorkUnit(answer.Unit)
 	if err != nil {
 		t.Fatal(err)
 	}
 	nextAnswer := api.CommitRequest{Space: query.Space, Principal: query.Owner, RequestID: answer.Key.RequestID, Method: api.MethodApplyWork, Body: answerBody}
-	tool := api.ApplyWorkRequest{Key: agentKey("query-tool-result"), Unit: api.WorkUnit{Kind: "query_tool", Query: query.ID, QueryTurn: &api.QueryTurn{ExpectedVersion: 2, Sequence: 1, Activity: toolSpec.Activity, AdapterVersion: "query/v1", Phase: "answer", Source: packet.Source.Anchor, Next: &nextAnswer}, Steps: []api.WorkStep{workControl(t, agentprofile.ControlCommand{AcceptActivity: &agentprofile.AcceptActivityCommand{Activity: toolSpec.Activity, Result: toolResult.ID, ExpectedVersion: 1, Evidence: proof}})}}}
+	tool := api.ApplyWorkRequest{Key: agentKey("query-tool-result"), Unit: api.WorkUnit{Kind: "query_tool", Query: query.ID, QueryTurn: &api.QueryTurn{ExpectedVersion: 2, Sequence: 1, Activity: toolSpec.Activity, AdapterVersion: "query/v1", Phase: "final-model", Source: packet.Source.Anchor, Next: &nextFinalModel}, Steps: []api.WorkStep{workControl(t, agentprofile.ControlCommand{AcceptActivity: &agentprofile.AcceptActivityCommand{Activity: toolSpec.Activity, Result: toolResult.ID, ExpectedVersion: 1, Evidence: proof}})}}}
 	workApply(t, s, tool)
+	workApply(t, s, finalOpen)
+	commitExact(finalClaim)
+	recoveryCoreControl(t, s, "final-query-dispatch", agentprofile.ControlCommand{DispatchAttempt: &agentprofile.DispatchAttemptCommand{Attempt: finalResult.Attempt, Evidence: proof}})
+	recoveryCoreControl(t, s, "final-query-capture", agentprofile.ControlCommand{CaptureResult: &agentprofile.CaptureResultCommand{Result: finalResult}})
+	workApply(t, s, api.ApplyWorkRequest{Key: agentKey("final-query-decision"), Unit: api.WorkUnit{Kind: "query_decision", Query: query.ID, Decision: &api.DecisionBinding{Activity: finalSpec.Activity, Result: finalResult.ID}, QueryTurn: &api.QueryTurn{ExpectedVersion: 4, Sequence: 2, Activity: finalSpec.Activity, AdapterVersion: "query/v1", Phase: "answer", Source: packet.Source.Anchor, Next: &nextAnswer}, Steps: []api.WorkStep{workControl(t, agentprofile.ControlCommand{AcceptActivity: &agentprofile.AcceptActivityCommand{Activity: finalSpec.Activity, Result: finalResult.ID, ExpectedVersion: 1, Evidence: proof}})}}})
 	answerAck := workApply(t, s, answer)
 	if _, err := s.e.CompactAuditFull(ctx); err != nil {
 		t.Fatal(err)

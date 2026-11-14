@@ -4,14 +4,14 @@ import (
 	"testing"
 )
 
-func TestControlV4WorkStartSlotBindsImmutableOriginalIntent(t *testing.T) {
+func TestControlV6WorkStartSlotBindsImmutableOriginalIntent(t *testing.T) {
 	l := New()
 	q := Query{ID: "query", Space: "space", Owner: "owner", Version: 1, Status: "open"}
 	recoveryApply(t, l, "query", Command{Lifecycle: &LifecycleCommand{PutQuery: &q}})
 	start := StartWorkCommand{Query: q.ID, Slot: "work", ExpectedQueryVersion: 1, Task: commandTask(), Execution: commandExecution()}
 	command := ControlCommand{StartWork: &start}
 	recoveryControl(t, l, "start", command)
-	if command.SchemaVersion() != 5 || l.Snapshot().Lifecycle.Recovery.Starts[0].IntentDigest == "" {
+	if command.SchemaVersion() != 6 || l.Snapshot().Lifecycle.Recovery.Starts[0].IntentDigest == "" {
 		t.Fatal("new start slot did not retain original command commitment")
 	}
 	changed := start
@@ -27,7 +27,7 @@ func TestControlV4WorkStartSlotBindsImmutableOriginalIntent(t *testing.T) {
 	}
 }
 
-func TestControlV4ChildSlotRejectsChangedBodyAfterGoalRebase(t *testing.T) {
+func TestControlV6ChildSlotRejectsChangedBodyAfterGoalRebase(t *testing.T) {
 	l, authority := recoveryFixture(t)
 	recoveryControl(t, l, "step", ControlCommand{BeginStep: &BeginStepCommand{Step: commandStep(), Authority: authority}})
 	inv := commandInvocation()

@@ -10,6 +10,7 @@ import (
 
 	ate "github.com/vkviyu/agent-temporal-engine"
 	"github.com/vkviyu/agent-temporal-engine/api"
+	"github.com/vkviyu/agent-temporal-engine/eventlog"
 	"github.com/vkviyu/agent-temporal-engine/model"
 	oracle "github.com/vkviyu/agent-temporal-engine/tests/reference"
 )
@@ -101,7 +102,7 @@ func compareIndependentEventTrace(t *testing.T, store *ate.Store, trace *oracle.
 				}
 				causes = nil
 			} else {
-				if got.SchemaVersion != 2 || got.ProfileRegistryVersion != 1 {
+				if got.SchemaVersion != 2 || got.ProfileRegistryVersion != eventlog.ProfileRegistryVersion {
 					t.Fatal("typed transaction lost registry")
 				}
 				manifest := []string{}

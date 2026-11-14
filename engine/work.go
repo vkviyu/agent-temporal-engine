@@ -32,6 +32,7 @@ func (e *Engine) ApplyWork(ctx context.Context, r api.ApplyWorkRequest) (api.Com
 // intermediate fence, receipt, event or authoritative history entry is created.
 func (e *Engine) workView() *Engine {
 	return &Engine{privateReduction: true, options: e.options, roots: e.roots, rootSet: e.rootSet,
+		replayingEvents: e.replayingEvents, replayEventRegistry: e.replayEventRegistry,
 		publication: e.publication, index: newStagingIndex(e.index), journal: e.journal,
 		history: e.history, baseHistory: e.baseHistory, envelopes: e.envelopes, baseEnvelopes: e.baseEnvelopes,
 		events: e.events, baseEvents: e.baseEvents, eventHeads: e.eventHeads, baseEventHeads: e.baseEventHeads}
@@ -54,114 +55,18 @@ func absorbWorkPlan(ctx context.Context, v *Engine, b *objectBuilder, p *commitP
 }
 
 func (e *Engine) prepareWork(ctx context.Context, req api.CommitRequest, digest model.ObjectID, txID model.TxID, lsn uint64, recorded *operationsRecord) (*commitPlan, error) {
-	if !e.options.AgentProfile {
-		return nil, ErrUnsupportedMethod
-	}
-	if err := validAgentScope(req.Space, req.Principal); err != nil {
-		return nil, err
-	}
-	if req.ExpectedFence != nil && *req.ExpectedFence != e.publication.Fence() {
-		return nil, errCAS
-	}
-	u, err := api.DecodeWorkUnit(req.Body)
+	unit, view, builder, commandID, err := e.prepareWorkInput(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	v, b := e.workView(), newBuilder(ctx, e.index, e.options.MaxObjects)
-	command, err := makeCommand(req)
-	if err != nil {
-		return nil, err
-	}
-	commandID, err := b.add(command, storage.KindObject)
-	if err != nil {
-		return nil, err
-	}
-	if u.Kind == "query_intake" {
-		if err = v.prepareQueryIntake(ctx, req, u, digest, txID, lsn, b); err != nil {
+	if unit.Kind == "query_intake" {
+		if err = view.prepareQueryIntake(ctx, req, unit, digest, txID, lsn, builder); err != nil {
 			return nil, err
 		}
-	} else {
-		seed := initialWorkSeed{tx: txID}
-		if err = v.validateWorkBoundary(ctx, req, u, &seed); err != nil {
-			return nil, err
-		}
-		workCtx := initialWorkContext(ctx, u, &seed)
-		for _, step := range u.Steps {
-			step, err = v.bindWorkContinuation(workCtx, req, step)
-			if err != nil {
-				return nil, err
-			}
-			sub := api.CommitRequest{Space: req.Space, Principal: req.Principal, RequestID: req.RequestID, Method: step.Method, Body: step.Body}
-			var p *commitPlan
-			switch step.Method {
-			case api.MethodApplyAgent:
-				p, err = v.prepareAgent(workCtx, sub, digest, txID, lsn, nil)
-			case api.MethodApplyEmission:
-				p, err = v.prepareEmission(workCtx, sub, digest, txID, lsn, nil)
-			case api.MethodApplyKnowledge:
-				p, err = v.prepareKnowledge(workCtx, sub, digest, txID, lsn, nil)
-			}
-			if err != nil {
-				return nil, err
-			}
-			if err = absorbWorkPlan(ctx, v, b, p); err != nil {
-				return nil, err
-			}
-		}
-		if err = v.verifyWorkContinuation(workCtx, req, u); err != nil {
-			return nil, err
-		}
-		if u.Kind == "query_start" {
-			intake, _, err := v.loadQueryIntake(ctx, req.Space, req.Principal, u.Query)
-			if err != nil {
-				return nil, err
-			}
-			intake.Started = true
-			if err = v.writeQueryIntake(ctx, req, intake, b); err != nil {
-				return nil, err
-			}
-		}
-		if u.Kind == "model_decision" {
-			if err = v.writeWorkRecord(ctx, req.Space, decisionKey(req.Space, req.Principal, u.Decision.Activity), req.Body, b); err != nil {
-				return nil, err
-			}
-		}
-		if u.QueryTurn != nil {
-			if err = v.finishQueryTurn(ctx, req, u, b); err != nil {
-				return nil, err
-			}
-		}
-	}
-	// A RootSet with the *previous* receipt root is the joint transition's
-	// result object. The final receipt is added afterwards by finishPlan, so no
-	// object contains its own hash and no subcommand can be retried on its own.
-	post, err := makeRootSet(v.roots)
-	if err != nil {
+	} else if err = e.prepareWorkSteps(ctx, req, unit, view, builder, digest, txID, lsn); err != nil {
 		return nil, err
 	}
-	postID, err := b.add(post, storage.KindObject)
-	if err != nil {
-		return nil, err
-	}
-	changes := []stateChange{
-		{Key: []byte("execution_knowledge"), Before: e.roots.ExecutionKnowledge, After: v.roots.ExecutionKnowledge},
-		{Key: []byte("live_control"), Before: e.roots.LiveControl, After: v.roots.LiveControl},
-	}
-	ops, err := makeOperations(operationsRecord{Space: req.Space, BeforeRoot: e.rootSet, AfterRoot: postID, Changes: changes})
-	if err != nil {
-		return nil, err
-	}
-	if recorded != nil {
-		expected, er := makeOperations(*recorded)
-		if er != nil || expected.Space != ops.Space || !bytes.Equal(expected.Payload, ops.Payload) {
-			return nil, ErrInvalidStateData
-		}
-	}
-	opsID, err := b.add(ops, storage.KindStateOps)
-	if err != nil {
-		return nil, err
-	}
-	return e.finishPlan(ctx, req, digest, txID, lsn, b, v.roots, postID, commandID, opsID)
+	return e.finishWorkPlan(ctx, req, unit, view, builder, commandID, digest, txID, lsn, recorded)
 }
 
 func workCommandRejection(err error) bool {
@@ -216,11 +121,15 @@ func (e *Engine) writeWorkRecord(ctx context.Context, space model.SpaceID, key, 
 	return nil
 }
 func (e *Engine) readIntakeValue(ctx context.Context, key []byte) (api.QueryIntakeState, bool, error) {
-	id, found, err := state.Get(ctx, e.index, systemSpace, e.roots.LiveControl, key)
+	return e.readIntakeValueAt(ctx, e.readRoots(ctx), key)
+}
+
+func (e *Engine) readIntakeValueAt(ctx context.Context, roots model.RootSet, key []byte) (api.QueryIntakeState, bool, error) {
+	id, found, err := state.Get(ctx, e.reader(ctx), systemSpace, roots.LiveControl, key)
 	if err != nil || !found {
 		return api.QueryIntakeState{}, found, err
 	}
-	o, err := readObject(ctx, e.index, id)
+	o, err := readObject(ctx, e.reader(ctx), id)
 	if err != nil {
 		return api.QueryIntakeState{}, false, err
 	}
@@ -239,7 +148,11 @@ func (e *Engine) readIntakeValue(ctx context.Context, key []byte) (api.QueryInta
 	return s, true, nil
 }
 func (e *Engine) loadQueryIntake(ctx context.Context, space model.SpaceID, owner model.PrincipalID, query string) (api.QueryIntakeState, bool, error) {
-	s, found, err := e.readIntakeValue(ctx, intakeKey(space, owner, query))
+	return e.loadQueryIntakeAt(ctx, e.readRoots(ctx), space, owner, query)
+}
+
+func (e *Engine) loadQueryIntakeAt(ctx context.Context, roots model.RootSet, space model.SpaceID, owner model.PrincipalID, query string) (api.QueryIntakeState, bool, error) {
+	s, found, err := e.readIntakeValueAt(ctx, roots, intakeKey(space, owner, query))
 	if err == nil && found && (s.Intake.Query.Space != space || s.Intake.Query.Owner != owner || s.Intake.Query.ID != query) {
 		return s, false, ErrInvalidStateData
 	}
@@ -328,6 +241,11 @@ func (e *Engine) checkQueryReservation(ctx context.Context, req api.CommitReques
 }
 
 func (e *Engine) GetQueryIntake(ctx context.Context, req api.ReadQueryIntakeRequest) (api.QueryIntakeResult, error) {
+	if ctx.Value(readDeliveryKey{}) == nil {
+		return embeddedReadDelivery(ctx, e, "get_query_intake", req.Principal, req, func(scoped context.Context) (api.QueryIntakeResult, error) {
+			return e.GetQueryIntake(scoped, req)
+		})
+	}
 	if err := validAgentScope(req.Space, req.Principal); err != nil {
 		return api.QueryIntakeResult{}, err
 	}
@@ -340,38 +258,34 @@ func (e *Engine) GetQueryIntake(ctx context.Context, req api.ReadQueryIntakeRequ
 	if err := e.publicGate(); err != nil {
 		return api.QueryIntakeResult{}, err
 	}
-	if err := e.mu.LockContext(ctx); err != nil {
+	if err := e.readReady(ctx); err != nil {
 		return api.QueryIntakeResult{}, err
 	}
-	defer e.mu.Unlock()
-	if err := e.ready(); err != nil {
-		return api.QueryIntakeResult{}, err
-	}
-	a := model.SnapshotAnchor{Space: req.Space, Fence: e.publication.Fence()}
-	v := e.workView()
+	a := model.SnapshotAnchor{Space: req.Space, Fence: e.readPublication(ctx).Fence()}
+	roots := e.readRoots(ctx)
 	if req.Anchor != nil {
 		a = req.Anchor.Clone()
-		if a.Space != req.Space || a.Knowledge != nil || a.Cursor != nil {
+		if a.Validate() != nil || a.Space != req.Space || a.Knowledge != nil || a.Cursor != nil {
 			return api.QueryIntakeResult{}, model.ErrAnchorMismatch
 		}
-		roots, _, err := e.rootsAtFence(ctx, a.Fence, false)
+		var err error
+		roots, _, err = e.rootsAtFence(ctx, a.Fence, false)
 		if err != nil {
 			return api.QueryIntakeResult{}, err
 		}
-		v.roots = roots
 	}
-	s, found, err := v.loadQueryIntake(ctx, req.Space, req.Principal, req.Query)
+	s, found, err := e.loadQueryIntakeAt(ctx, roots, req.Space, req.Principal, req.Query)
 	if err != nil {
-		return api.QueryIntakeResult{}, e.readFailure(err)
+		return api.QueryIntakeResult{}, e.readFailureAt(ctx, err)
 	}
 	var ids []model.ObjectID
 	if found {
-		ids, err = e.checkQueryIntakeDisclosure(ctx, v.roots, req.Space, req.Principal, s.Intake)
+		ids, err = e.checkQueryIntakeDisclosure(ctx, roots, req.Space, req.Principal, s.Intake)
 		if err != nil {
 			if errors.Is(err, memory.ErrHistoryAccessDenied) {
 				return api.QueryIntakeResult{}, err
 			}
-			return api.QueryIntakeResult{}, e.knowledgeReadFailure(err)
+			return api.QueryIntakeResult{}, e.knowledgeReadFailure(ctx, err)
 		}
 	}
 	if err := ctx.Err(); err != nil {

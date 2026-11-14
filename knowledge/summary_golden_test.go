@@ -4,6 +4,7 @@ import (
 	"bytes"
 	_ "embed"
 	"encoding/hex"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -14,10 +15,18 @@ import (
 // Independently generated using Python hashlib + unsigned LEB128 + UTF-8
 // length-prefixed strings, without importing this package or invoking Go.
 //
-//go:embed testdata/summary-schema1.hex
-var summarySchema1Golden string
+//go:embed testdata/summary-schema2.hex
+var summarySchema2Golden string
 
-func TestSummarySchema1IndependentGolden(t *testing.T) {
+// These pre-release bytes are retained only as a rejection fixture.
+//
+//go:embed testdata/summary-schema1.hex
+var summarySchema1Retired string
+
+//go:embed testdata/packet-schema4.hex
+var packetSchema4Retired string
+
+func TestSummarySchema2IndependentGolden(t *testing.T) {
 	anchor := func(lsn uint64) model.SnapshotAnchor {
 		return model.SnapshotAnchor{Space: "s", Fence: model.CommitFence{Store: "r", LSN: lsn, CommitDigest: model.CommitDigest(strings.Repeat("a", 64))}}
 	}
@@ -29,7 +38,7 @@ func TestSummarySchema1IndependentGolden(t *testing.T) {
 	summary := Summary{Space: "s", Source: source, Sources: []SummarySource{{Observation: observation, Content: model.ObjectID(strings.Repeat("f", 64))}}, Topics: []SummaryTopic{{Name: "topic", Observations: []model.ObjectID{observation}}}, Applicability: SummaryApplicability{Goal: "goal", Environment: "env", SchemaVersion: 1, Tags: []string{"tag"}}, Confidence: 700, Generation: SummaryGeneration{Activity: "act", Attempt: "attempt", Result: "result", Model: "model", PromptVersion: "prompt/v1", PolicyVersion: "policy/v1", Input: RecordedContent{Object: model.ObjectID(strings.Repeat("1", 64)), Anchor: anchor(2), Encoding: "application/json"}, Output: RecordedContent{Object: model.ObjectID(strings.Repeat("2", 64)), Anchor: anchor(3), Encoding: "text/plain"}}, GeneratedAt: stamp, VisibleAt: stamp, Validation: SummaryValidation{Status: "unreviewed"}}
 	summary.SourceSetDigest = SummarySourceSetDigest(summary.Source, summary.Sources)
 	summary.ID = SummaryID(summary)
-	golden, err := hex.DecodeString(strings.TrimSpace(summarySchema1Golden))
+	golden, err := hex.DecodeString(strings.TrimSpace(summarySchema2Golden))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,5 +49,22 @@ func TestSummarySchema1IndependentGolden(t *testing.T) {
 	decoded, err := DecodeSummary(golden)
 	if err != nil || decoded.ID != summary.ID || decoded.SourceSetDigest != summary.SourceSetDigest {
 		t.Fatal("independent Summary identity mismatch", decoded.ID, err)
+	}
+}
+
+func TestDerivationCleanCutRejectsPreIndexKnowledgeFormats(t *testing.T) {
+	oldSummary, err := hex.DecodeString(strings.TrimSpace(summarySchema1Retired))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := DecodeSummary(oldSummary); !errors.Is(err, ErrUnsupportedSchema) {
+		t.Fatalf("retired Summary schema 1 was not explicitly unsupported: %v", err)
+	}
+	oldPacket, err := hex.DecodeString(strings.TrimSpace(packetSchema4Retired))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := DecodePacket(oldPacket); !errors.Is(err, ErrUnsupportedSchema) {
+		t.Fatalf("retired Packet schema 4 was not explicitly unsupported: %v", err)
 	}
 }

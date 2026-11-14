@@ -111,7 +111,7 @@ func TestCoordinatorLastWaiterCancellationPreservesQueuedCommandAndOwnsInput(t *
 	defer cancel()
 	interrupted := coordinatorCommit(e, ctx, req)
 	coordinatorFlightWaiters(t, e, req, 1)
-	lookup := coordinatorLookup(t, e, req)
+	lookup := coordinatorInFlight(t, e, req)
 	if lookup.Code != api.CodeInFlight || lookup.Result != (api.CommitResult{}) {
 		t.Fatalf("queued request was reported absent or published: %+v", lookup)
 	}
@@ -267,7 +267,7 @@ func TestCoordinatorStagedPreconditionDecisionWaitsForPublication(t *testing.T) 
 				t.Fatalf("decision based on unpublished predecessor escaped the batch: %+v, %v", got.result, got.err)
 			default:
 			}
-			if got := coordinatorLookup(t, e, dependentReq); got.Code != api.CodeInFlight {
+			if got := coordinatorInFlight(t, e, dependentReq); got.Code != api.CodeInFlight {
 				t.Fatalf("dependent decision ceased being in flight before publication: %+v", got)
 			}
 			groupGate.unblock()
@@ -315,7 +315,7 @@ func TestCoordinatorUnknownBatchFencesAllMembersAndQueuedSuccessors(t *testing.T
 			coordinatorAck(t, coordinatorWait(t, base))
 			coordinatorWait(t, fault.entered)
 			for _, req := range []api.CommitRequest{oneReq, twoReq} {
-				if got := coordinatorLookup(t, e, req); got.Code != api.CodeInFlight || got.Result != (api.CommitResult{}) {
+				if got := coordinatorInFlight(t, e, req); got.Code != api.CodeInFlight || got.Result != (api.CommitResult{}) {
 					t.Fatalf("unpublished batch member exposed absence/old publication: %+v", got)
 				}
 			}

@@ -39,13 +39,14 @@ const (
 )
 
 var (
-	ErrInvalidMemory     = errors.New("invalid memory record")
-	ErrInvalidTransition = errors.New("invalid memory lifecycle transition")
-	ErrSourceUnavailable = errors.New("memory source unavailable")
-	ErrNotFound          = errors.New("memory not found")
-	ErrAlreadyExists     = errors.New("memory already exists")
-	ErrNotEligible       = errors.New("memory is not eligible for reuse")
-	ErrPathInvalid       = errors.New("invalid experience path")
+	ErrInvalidMemory        = errors.New("invalid memory record")
+	ErrInvalidTransition    = errors.New("invalid memory lifecycle transition")
+	ErrSourceUnavailable    = errors.New("memory source unavailable")
+	ErrNotFound             = errors.New("memory not found")
+	ErrAlreadyExists        = errors.New("memory already exists")
+	ErrNotEligible          = errors.New("memory is not eligible for reuse")
+	ErrPathInvalid          = errors.New("invalid experience path")
+	ErrStepEvidenceMismatch = errors.New("experience step node is not a declared source or supporting evidence of its memory")
 )
 
 // Source identifies an immutable source event/activity/run. SourceID is a
@@ -65,6 +66,10 @@ type Applicability struct {
 	SchemaVersion uint32
 	Tags          []string
 }
+
+// Memory is a versioned, scoped assertion with provenance and lifecycle.
+// Promotion records the caller's evidence-backed validation. It does not infer
+// the assertion's truth or adopt it into another execution's context.
 type Memory struct {
 	ID              model.ObjectID
 	Space           model.SpaceID
@@ -92,6 +97,9 @@ type Retraction struct {
 	Reason     string
 	RecordedAt time.Time
 }
+
+// Step selects a supporting node at the owning path's SourceAnchor and a
+// promoted Memory version. Order is procedural sequence, not event causality.
 type Step struct {
 	Node    model.NodeRef
 	Memory  model.ObjectID
@@ -105,6 +113,10 @@ type Validation struct {
 	Counterexamples []Source
 	RecordedAt      time.Time
 }
+
+// ExperiencePath is an ordered composition of promoted memory versions with
+// validation and applicability of its own. Omitted records evidence locations
+// excluded from the procedure, while retaining them for authorized audit.
 type ExperiencePath struct {
 	ID            model.ObjectID
 	Space         model.SpaceID
@@ -117,14 +129,18 @@ type ExperiencePath struct {
 	DerivedFrom   []model.ObjectID
 	Retraction    *Retraction
 }
+
+// Query supplies explicit reuse conditions. An unset scope selector applies no
+// filter for that dimension. AtTime is required for time-limited assertions.
 type Query struct {
-	Space       model.SpaceID
-	Text        string
-	Goal        string
-	Environment string
-	Tags        []string
-	At          model.SnapshotAnchor
-	AtTime      time.Time
+	Space         model.SpaceID
+	Text          string
+	Goal          string
+	Environment   string
+	SchemaVersion uint32
+	Tags          []string
+	At            model.SnapshotAnchor
+	AtTime        time.Time
 }
 type Result struct {
 	Memory Memory

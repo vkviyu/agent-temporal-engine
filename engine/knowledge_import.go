@@ -12,7 +12,7 @@ import (
 // both executions under the authenticated owner, then selects the exact source
 // position before creating new target observations. It does not clone current
 // global state, share authority, advance the source or erase either history.
-func (e *Engine) prepareKnowledgeImport(ctx context.Context, req api.CommitRequest, digest model.ObjectID, txID model.TxID, lsn uint64, recorded *operationsRecord, current knowledge.Snapshot, command knowledge.ImportCommand) (*commitPlan, error) {
+func (e *Engine) prepareKnowledgeImport(ctx context.Context, req api.CommitRequest, digest model.ObjectID, txID model.TxID, lsn uint64, recorded *operationsRecord, index knowledgeIndex, legacy bool, command knowledge.ImportCommand) (*commitPlan, error) {
 	if command.Source.Anchor.Space != req.Space {
 		return nil, knowledge.ErrKnowledgeMismatch
 	}
@@ -32,7 +32,7 @@ func (e *Engine) prepareKnowledgeImport(ctx context.Context, req api.CommitReque
 	if err = e.authorizeKnowledge(ctx, e.roots, req.Space, req.Principal, sourceKey); err != nil {
 		return nil, err
 	}
-	selected, _, _, _, err := e.selectedKnowledge(ctx, roots, command.Source.Anchor, req.Principal)
+	selected, _, _, _, err := e.selectedKnowledgeObservations(ctx, roots, command.Source.Anchor, req.Principal)
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +63,21 @@ func (e *Engine) prepareKnowledgeImport(ctx context.Context, req api.CommitReque
 			}
 		}
 	}
-	next, err := knowledge.ApplyCommand(current, knowledge.Command{Import: &command})
+	if !legacy {
+		sequence, err := index.sequence(ctx, command.Target)
+		if err != nil {
+			return nil, err
+		}
+		if sequence != command.ExpectedSequence {
+			return nil, knowledge.ErrObservationSequence
+		}
+		imported, err := knowledge.ImportedObservations(command, adopted)
+		if err != nil {
+			return nil, err
+		}
+		return e.prepareKnowledgeRecords(ctx, req, digest, txID, lsn, recorded, index, imported, nil, knowledge.Snapshot{})
+	}
+	next, err := knowledge.ApplyCommand(index.legacy, knowledge.Command{Import: &command})
 	if err != nil {
 		return nil, err
 	}

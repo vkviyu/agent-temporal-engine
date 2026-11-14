@@ -53,6 +53,7 @@ func validateControlShape(c ControlCommand) error {
 	case c.AnswerQuery != nil:
 		x := c.AnswerQuery
 		bad = !commandText(x.Query) || !commandText(x.Slot) || x.ExpectedVersion == 0 || len(x.Body) > MaxCommandBytes || (x.Kind != "progress" && x.Kind != "clarification" && x.Kind != "final") || x.Final != (x.Kind == "final")
+		bad = bad || (x.Final && !commandText(x.GeneratedFrom)) || (!x.Final && (x.GeneratedFrom != "" || len(x.Outcomes) > 0 || x.InputEvidence != "")) || len(x.Outcomes) > MaxLifecycleRecords || (x.InputEvidence != "" && !validDigest(x.InputEvidence))
 	case c.StartWork != nil:
 		x := c.StartWork
 		bad = !commandText(x.Query) || !commandText(x.Slot) || x.ExpectedQueryVersion == 0 || Command{CreateTask: &x.Task}.Validate() != nil || Command{Spawn: &x.Execution}.Validate() != nil || x.Execution.Incarnation != 1 || x.Execution.Task != x.Task.ID || x.Execution.Parent != ""
@@ -72,6 +73,9 @@ func validateControlShape(c ControlCommand) error {
 	case c.CreateActivity != nil:
 		x := c.CreateActivity
 		s := x.Spec
+		if s.FinalAnswerInput != "" && (!validDigest(s.FinalAnswerInput) || s.Query == "" || s.Role != "query_decision") {
+			return ErrCommandShape
+		}
 		bad = !commandText(s.Activity) || (s.Execution == "") == (s.Query == "") || !validRole(s.Role) || s.InputFence.Validate() != nil || !validDigest(s.RequestDigest) || !validDigest(s.Request) || !commandText(s.Recipient) || !validEffect(s.Effect) || !validEffectContract(s) || !commandText(s.ResourceScope) || (modelRole(s.Role) && !validDigest(s.ContextPacket)) || (s.Effect == "idempotent" && !commandText(s.IdempotencyKey))
 		if s.Execution != "" {
 			bad = bad || !validBinding(x.Authority) || s.GoalEpoch == 0
@@ -88,6 +92,9 @@ func validateControlShape(c ControlCommand) error {
 	case c.CaptureResult != nil:
 		x := c.CaptureResult.Result
 		bad = !commandText(x.ID) || !commandText(x.Activity) || !commandText(x.Attempt) || x.Incarnation == 0 || !validDigest(x.RequestDigest) || (x.Outcome != "success" && x.Outcome != "failure" && x.Outcome != "unknown") || len(x.Payload) > MaxCommandBytes
+		bad = bad || !validResultCapture(x)
+	case c.CaptureOutputChunk != nil:
+		bad = !validOutputChunk(c.CaptureOutputChunk.Chunk)
 	case c.AcceptActivity != nil:
 		x := c.AcceptActivity
 		bad = !commandText(x.Activity) || !commandText(x.Result) || x.ExpectedVersion == 0 || !validDigest(x.Evidence)

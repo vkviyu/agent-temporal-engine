@@ -16,30 +16,48 @@ func (e *Engine) CompactAuditFull(ctx context.Context) (storage.CompactionReport
 	if err := e.publicGate(); err != nil {
 		return storage.CompactionReport{}, err
 	}
+	if err := e.writerMu.LockContext(ctx); err != nil {
+		return storage.CompactionReport{}, err
+	}
+	defer e.writerMu.Unlock()
 	if err := e.mu.LockContext(ctx); err != nil {
 		return storage.CompactionReport{}, err
 	}
-	defer e.mu.Unlock()
 	if err := e.ready(); err != nil {
+		e.mu.Unlock()
 		return storage.CompactionReport{}, err
 	}
+	roots, rootSet := e.roots, e.rootSet
+	e.publicationPending.Store(true)
+	e.mu.Unlock()
+	defer e.publicationPending.Store(false)
 	candidate := newEngine(e.options)
 	p, count, err := e.journal.VerifyPublished(ctx, candidate.replay)
-	if err == nil && count > 0 && (candidate.roots != e.roots || candidate.rootSet != e.rootSet || candidate.publication.Fence() != p.Fence() || candidate.index.count() != e.index.count()) {
+	if err == nil && count > 0 && (candidate.roots != roots || candidate.rootSet != rootSet || candidate.publication.Fence() != p.Fence() || candidate.index.count() != e.index.count()) {
 		err = ErrInvalidStateData
 	}
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || isLimit(err) {
 			return storage.CompactionReport{}, err
 		}
-		return storage.CompactionReport{}, e.readFailure(err)
+		return storage.CompactionReport{}, e.fenceWriter(err)
+	}
+	e.mu.Lock()
+	err = e.workerReady()
+	e.mu.Unlock()
+	if err != nil {
+		return storage.CompactionReport{}, err
 	}
 	report, err := e.journal.CompactAuditFull(ctx)
+	e.mu.Lock()
 	if report.After.Store != "" {
 		e.publication = report.After
 	}
 	if errors.Is(err, storage.ErrCommitUnknown) || errors.Is(err, storage.ErrStoreFenced) {
 		e.fenced = err
+	}
+	e.mu.Unlock()
+	if errors.Is(err, storage.ErrCommitUnknown) || errors.Is(err, storage.ErrStoreFenced) {
 		e.stopAdmission(err)
 	}
 	return report, err
@@ -49,12 +67,19 @@ func (e *Engine) ReclaimRetired(ctx context.Context) ([]string, int, error) {
 	if err := e.publicGate(); err != nil {
 		return nil, 0, err
 	}
+	if err := e.writerMu.LockContext(ctx); err != nil {
+		return nil, 0, err
+	}
+	defer e.writerMu.Unlock()
 	if err := e.mu.LockContext(ctx); err != nil {
 		return nil, 0, err
 	}
-	defer e.mu.Unlock()
 	if err := e.ready(); err != nil {
+		e.mu.Unlock()
 		return nil, 0, err
 	}
+	e.publicationPending.Store(true)
+	e.mu.Unlock()
+	defer e.publicationPending.Store(false)
 	return e.journal.ReclaimRetired(ctx)
 }

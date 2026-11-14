@@ -68,28 +68,13 @@ func (s *Store) AccessPolicy() AccessPolicy {
 		}
 		p.dependencies[id] = dependencies
 	}
-	nodeID := func(ref model.NodeRef) model.ObjectID {
-		switch ref.Kind {
-		case model.NodeObject:
-			return ref.Object
-		case model.NodeEvent:
-			return model.ObjectID(ref.Event)
-		case model.NodeRevision:
-			return model.ObjectID(ref.Revision)
-		case model.NodeEntity:
-			if ref.Entity.Profile == "memory" {
-				return model.ObjectID(ref.Entity.ID)
-			}
-		}
-		return ""
-	}
 	for id, path := range s.paths {
 		dependencies := append([]model.ObjectID(nil), path.DerivedFrom...)
 		for _, step := range path.Steps {
-			dependencies = append(dependencies, step.Memory, nodeID(step.Node))
+			dependencies = append(dependencies, step.Memory, pathNodeID(step.Node))
 		}
 		for _, omitted := range path.Omitted {
-			dependencies = append(dependencies, nodeID(omitted))
+			dependencies = append(dependencies, pathNodeID(omitted))
 		}
 		for _, source := range append(append([]Source(nil), path.Validation.Evidence...), path.Validation.Counterexamples...) {
 			dependencies = append(dependencies, source.SourceID)
@@ -102,6 +87,22 @@ func (s *Store) AccessPolicy() AccessPolicy {
 		p.dependencies[id] = dependencies
 	}
 	return p
+}
+
+func pathNodeID(ref model.NodeRef) model.ObjectID {
+	switch ref.Kind {
+	case model.NodeObject:
+		return ref.Object
+	case model.NodeEvent:
+		return model.ObjectID(ref.Event)
+	case model.NodeRevision:
+		return model.ObjectID(ref.Revision)
+	case model.NodeEntity:
+		if ref.Entity.Profile == "memory" {
+			return model.ObjectID(ref.Entity.ID)
+		}
+	}
+	return ""
 }
 
 func (p AccessPolicy) HasDisclosureDenials() bool { return p.disclosure }

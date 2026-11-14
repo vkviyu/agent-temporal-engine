@@ -103,7 +103,7 @@ func TestIndependentQueryMultipleToolsKeepExactContractsAcrossPartialRecovery(t 
 	ack(store.Commit(ctx, claim))
 	want.Observe("Control.ClaimAttempt")
 	dispatchQueryActivity(t, store, want, "multi-model-dispatch", modelSpec, "model-attempt", digest("a"), len(input))
-	modelResult := agentprofile.ActivityResult{ID: "model-result", Activity: modelSpec.Activity, Attempt: "model-attempt", RequestDigest: modelSpec.RequestDigest, Incarnation: 1, Outcome: "success", Payload: []byte("read a and b")}
+	modelResult := agentprofile.ActivityResult{Capture: "full", ID: "model-result", Activity: modelSpec.Activity, Attempt: "model-attempt", RequestDigest: modelSpec.RequestDigest, Incarnation: 1, Outcome: "success", Payload: []byte("read a and b")}
 	raw("multi-model-capture", agentprofile.ControlCommand{CaptureResult: &agentprofile.CaptureResultCommand{Result: modelResult}})
 	want.Observe("Control.CaptureResult")
 	calls := []api.QueryInvocation{{ID: "a", Activity: "tool-a", ProviderCallKey: "call-a", Tool: "read", Definition: definitionID, ToolVersion: "read/v1", Arguments: []byte(`{"path":"a.go"}`), DispatchClass: "pure"}, {ID: "b", Activity: "tool-b", ProviderCallKey: "call-b", Tool: "read", Definition: definitionID, ToolVersion: "read/v1", Arguments: []byte(`{"path":"b.go"}`), DispatchClass: "pure"}}
@@ -114,7 +114,7 @@ func TestIndependentQueryMultipleToolsKeepExactContractsAcrossPartialRecovery(t 
 		creates[i] = exact("create-"+inv.ID, agentprofile.ControlCommand{CreateActivity: &agentprofile.CreateActivityCommand{Spec: specs[i]}})
 	}
 	abstractCalls := func(in []api.QueryInvocation) []oracle.QueryInvocation {
-		out := []oracle.QueryInvocation{}
+		var out []oracle.QueryInvocation
 		for _, i := range in {
 			out = append(out, oracle.QueryInvocation{ID: i.ID, Activity: i.Activity, Call: i.ProviderCallKey, Tool: i.Tool, Definition: string(i.Definition), ToolVersion: i.ToolVersion, Arguments: string(i.Arguments), Effect: i.DispatchClass, AcceptedResult: i.AcceptedResult})
 		}
@@ -183,12 +183,21 @@ func TestIndependentQueryMultipleToolsKeepExactContractsAcrossPartialRecovery(t 
 		}
 	}
 	compare("complete call contract")
-	answer := api.ApplyWorkRequest{Key: key("multi-answer"), Unit: api.WorkUnit{Kind: "query_answer", Query: query.ID, QueryTurn: &api.QueryTurn{ExpectedVersion: 4, Sequence: 1, AdapterVersion: "query/v1", Phase: "answered", Source: source}, Steps: []api.WorkStep{step(agentprofile.ControlCommand{AnswerQuery: &agentprofile.AnswerQueryCommand{Query: query.ID, Slot: "final", Kind: "final", Final: true, ExpectedVersion: 1, Body: []byte("a and b compared")}})}}}
+	answer := api.ApplyWorkRequest{Key: key("multi-answer"), Unit: api.WorkUnit{Kind: "query_answer", Query: query.ID, QueryTurn: &api.QueryTurn{ExpectedVersion: 6, Sequence: 2, AdapterVersion: "query/v1", Phase: "answered", Source: source}, Steps: []api.WorkStep{step(agentprofile.ControlCommand{AnswerQuery: &agentprofile.AnswerQueryCommand{Query: query.ID, Slot: "final", Kind: "final", Final: true, ExpectedVersion: 1, Body: []byte("a and b compared"), GeneratedFrom: "final-model-result"}})}}}
 	answerBody, e := api.EncodeWorkUnit(answer.Unit)
 	if e != nil {
 		t.Fatal(e)
 	}
 	answerRequest := api.CommitRequest{Space: "space", Principal: "owner", RequestID: answer.Key.RequestID, Method: api.MethodApplyWork, Body: answerBody}
+	finalSpec := modelSpec
+	finalSpec.Activity = "final-model"
+	finalClaim := exact("final-model-claim", agentprofile.ControlCommand{ClaimAttempt: &agentprofile.ClaimAttemptCommand{Activity: finalSpec.Activity, Attempt: "final-model-attempt", Sequence: 1}})
+	finalOpen := api.ApplyWorkRequest{Key: key("final-model-open"), Unit: api.WorkUnit{Kind: "query_checkpoint", Query: query.ID, QueryTurn: &api.QueryTurn{ExpectedVersion: 4, Sequence: 1, Activity: finalSpec.Activity, AdapterVersion: "query/v1", Phase: "final-model", Source: source, Next: &finalClaim}, Steps: []api.WorkStep{step(agentprofile.ControlCommand{CreateActivity: &agentprofile.CreateActivityCommand{Spec: finalSpec}})}}}
+	finalOpenBody, err := api.EncodeWorkUnit(finalOpen.Unit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	finalOpenRequest := api.CommitRequest{Space: "space", Principal: "owner", RequestID: finalOpen.Key.RequestID, Method: api.MethodApplyWork, Body: finalOpenBody}
 	for i, spec := range specs {
 		ack(store.Commit(ctx, creates[i]))
 		want.Observe("Control.CreateActivity")
@@ -202,11 +211,11 @@ func TestIndependentQueryMultipleToolsKeepExactContractsAcrossPartialRecovery(t 
 		raw("claim-"+calls[i].ID, agentprofile.ControlCommand{ClaimAttempt: &agentprofile.ClaimAttemptCommand{Activity: spec.Activity, Attempt: attempt, Sequence: 1}})
 		want.Observe("Control.ClaimAttempt")
 		dispatchQueryActivity(t, store, want, "dispatch-"+calls[i].ID, spec, attempt, digest("c"), len(input))
-		result := agentprofile.ActivityResult{ID: "result-" + calls[i].ID, Activity: spec.Activity, Attempt: attempt, RequestDigest: spec.RequestDigest, Incarnation: 1, Outcome: "success", Payload: []byte("file-" + calls[i].ID)}
+		result := agentprofile.ActivityResult{Capture: "full", ID: "result-" + calls[i].ID, Activity: spec.Activity, Attempt: attempt, RequestDigest: spec.RequestDigest, Incarnation: 1, Outcome: "success", Payload: []byte("file-" + calls[i].ID)}
 		raw("capture-"+calls[i].ID, agentprofile.ControlCommand{CaptureResult: &agentprofile.CaptureResultCommand{Result: result}})
 		want.Observe("Control.CaptureResult")
-		next := answerRequest
-		phase := "answer"
+		next := finalOpenRequest
+		phase := "final-model"
 		if i == 0 {
 			next = creates[1]
 			phase = "create-b"
@@ -239,7 +248,27 @@ func TestIndependentQueryMultipleToolsKeepExactContractsAcrossPartialRecovery(t 
 			}
 		}
 	}
-	if err := want.Advance("answer", 4, 1, "query/v1", "answered", querySourceIdentity(source), "", "", "", true); err != nil {
+	if err := want.Advance("checkpoint", 4, 1, "query/v1", "final-model", querySourceIdentity(source), queryRequestIdentity(&finalClaim), finalSpec.Activity, "", true); err != nil {
+		t.Fatal(err)
+	}
+	work(finalOpen)
+	want.Observe("Work.query_checkpoint")
+	want.Observe("Control.CreateActivity")
+	ack(store.Commit(ctx, finalClaim))
+	want.Observe("Control.ClaimAttempt")
+	dispatchQueryActivity(t, store, want, "final-model-dispatch", finalSpec, "final-model-attempt", digest("e"), len(input))
+	finalResult := agentprofile.ActivityResult{Capture: "full", ID: "final-model-result", Activity: finalSpec.Activity, Attempt: "final-model-attempt", RequestDigest: finalSpec.RequestDigest, Incarnation: 1, Outcome: "success", Payload: []byte("a and b compared")}
+	raw("final-model-capture", agentprofile.ControlCommand{CaptureResult: &agentprofile.CaptureResultCommand{Result: finalResult}})
+	want.Observe("Control.CaptureResult")
+	finalDecision := api.ApplyWorkRequest{Key: key("final-model-decision"), Unit: api.WorkUnit{Kind: "query_decision", Query: query.ID, Decision: &api.DecisionBinding{Activity: finalSpec.Activity, Result: finalResult.ID}, QueryTurn: &api.QueryTurn{ExpectedVersion: 5, Sequence: 2, Activity: finalSpec.Activity, AdapterVersion: "query/v1", Phase: "answer", Source: source, Next: &answerRequest}, Steps: []api.WorkStep{step(agentprofile.ControlCommand{AcceptActivity: &agentprofile.AcceptActivityCommand{Activity: finalSpec.Activity, Result: finalResult.ID, ExpectedVersion: 1, Evidence: digest("f")}})}}}
+	if err := want.Decide(5, 2, "query/v1", "answer", querySourceIdentity(source), queryRequestIdentity(&answerRequest), finalSpec.Activity, finalResult.ID, true, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	work(finalDecision)
+	want.Observe("Work.query_decision")
+	want.Observe("Control.AcceptActivity")
+	compare("final model accepted")
+	if err := want.Advance("answer", 6, 2, "query/v1", "answered", querySourceIdentity(source), "", "", "", true); err != nil {
 		t.Fatal(err)
 	}
 	answerAck := work(answer)

@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	SummarySchema            uint64 = 1
+	SummarySchema            uint64 = 2
 	MaxSummaryTopics                = 256
 	MaxSummaryReviewEvidence        = 256
 	MaxSummaryReferences            = 4 * MaxItems

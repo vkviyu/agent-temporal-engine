@@ -61,11 +61,15 @@ type viewEntry struct {
 	active     int
 	closing    bool
 	timer      *time.Timer
+	pin        *storage.PinnedReader
+	retiring   bool
 }
 type viewRegistry struct {
 	mu       sync.Mutex
 	entries  map[model.ViewRef]*viewEntry
 	pending  int
+	retiring int
+	readers  int
 	stopping bool
 	changed  chan struct{}
 }
@@ -84,7 +88,7 @@ func (v *viewRegistry) notify() {
 	}
 	v.changed = make(chan struct{})
 }
-func (v *viewRegistry) retire(ref model.ViewRef, entry *viewEntry) {
+func (v *viewRegistry) retire(ref model.ViewRef, entry *viewEntry) *storage.PinnedReader {
 	if entry.closing && entry.active == 0 {
 		if entry.timer != nil {
 			entry.timer.Stop()
@@ -92,27 +96,60 @@ func (v *viewRegistry) retire(ref model.ViewRef, entry *viewEntry) {
 		if v.entries[ref] == entry {
 			delete(v.entries, ref)
 		}
+		pin := entry.pin
+		entry.pin = nil
+		if pin != nil {
+			entry.retiring = true
+			v.retiring++
+		}
 		v.notify()
+		return pin
 	}
+	return nil
+}
+
+// A registry retirement removes admission first. Releasing the physical pin
+// happens outside registry/core locks; Close still waits for that ownership.
+func (e *Engine) finishViewRetirement(entry *viewEntry, pin *storage.PinnedReader) {
+	if pin == nil {
+		return
+	}
+	_ = pin.Close()
+	v := &e.views
+	v.mu.Lock()
+	entry.retiring = false
+	v.retiring--
+	v.notify()
+	v.mu.Unlock()
 }
 func (e *Engine) stopViews() {
 	v := &e.views
 	v.mu.Lock()
-	defer v.mu.Unlock()
 	v.init()
 	v.stopping = true
+	type retiredView struct {
+		entry *viewEntry
+		pin   *storage.PinnedReader
+	}
+	var retired []retiredView
 	for ref, entry := range v.entries {
 		entry.closing = true
-		v.retire(ref, entry)
+		if pin := v.retire(ref, entry); pin != nil {
+			retired = append(retired, retiredView{entry, pin})
+		}
 	}
 	v.notify()
+	v.mu.Unlock()
+	for _, view := range retired {
+		e.finishViewRetirement(view.entry, view.pin)
+	}
 }
 func (e *Engine) waitViews(ctx context.Context) error {
 	v := &e.views
 	for {
 		v.mu.Lock()
 		v.init()
-		if v.pending == 0 && len(v.entries) == 0 {
+		if v.pending == 0 && v.retiring == 0 && v.readers == 0 && len(v.entries) == 0 {
 			v.mu.Unlock()
 			return nil
 		}
@@ -130,6 +167,11 @@ func (e *Engine) waitViews(ctx context.Context) error {
 // registry lock never spans IO; a concurrent close cannot retire resources until
 // the provisional pin has either registered or been released.
 func (e *Engine) OpenView(ctx context.Context, req api.OpenViewRequest) (api.ViewDescriptor, error) {
+	if ctx.Value(readDeliveryKey{}) == nil {
+		return embeddedReadDelivery(ctx, e, "open_view", req.Principal, req, func(scoped context.Context) (api.ViewDescriptor, error) {
+			return e.OpenView(scoped, req)
+		})
+	}
 	if err := ctx.Err(); err != nil {
 		return api.ViewDescriptor{}, err
 	}
@@ -156,8 +198,9 @@ func (e *Engine) OpenView(ctx context.Context, req api.OpenViewRequest) (api.Vie
 		e.mu.Unlock()
 		return api.ViewDescriptor{}, err
 	}
-	anchor := model.SnapshotAnchor{Fence: e.publication.Fence(), Space: req.Space}
-	proof := commitEnvelope{fence: anchor.Fence, rootSet: e.rootSet}
+	publication := e.readPublication(ctx)
+	anchor := model.SnapshotAnchor{Fence: publication.Fence(), Space: req.Space}
+	proof := commitEnvelope{fence: anchor.Fence, rootSet: e.readRootSet(ctx)}
 	if req.Anchor != nil {
 		anchor = req.Anchor.Clone()
 		if err := anchor.Validate(); err != nil {
@@ -165,6 +208,10 @@ func (e *Engine) OpenView(ctx context.Context, req api.OpenViewRequest) (api.Vie
 			return api.ViewDescriptor{}, err
 		}
 		if anchor.Space != req.Space {
+			e.mu.Unlock()
+			return api.ViewDescriptor{}, model.ErrAnchorMismatch
+		}
+		if anchor.Fence.Store != publication.Store || anchor.Fence.LSN > publication.Position.LSN {
 			e.mu.Unlock()
 			return api.ViewDescriptor{}, model.ErrAnchorMismatch
 		}
@@ -195,18 +242,31 @@ func (e *Engine) OpenView(ctx context.Context, req api.OpenViewRequest) (api.Vie
 		e.mu.Unlock()
 		return api.ViewDescriptor{}, storage.ErrClosing
 	}
-	if len(v.entries)+v.pending >= e.options.Views.MaxViews {
+	if len(v.entries)+v.pending+v.retiring >= e.options.Views.MaxViews {
 		v.mu.Unlock()
 		e.mu.Unlock()
 		return api.ViewDescriptor{}, storage.ErrLimit
 	}
 	v.pending++
 	v.mu.Unlock()
+	pin, err := e.journal.PinReader()
 	e.mu.Unlock()
-	defer func() { v.mu.Lock(); v.pending--; v.notify(); v.mu.Unlock() }()
+	transferred := false
+	defer func() {
+		if pin != nil && !transferred {
+			_ = pin.Close()
+		}
+		v.mu.Lock()
+		v.pending--
+		v.notify()
+		v.mu.Unlock()
+	}()
+	if err != nil {
+		return api.ViewDescriptor{}, err
+	}
 	roots := model.RootSet{}
 	if proof.rootSet != "" {
-		obj, err := readObject(ctx, e.index, proof.rootSet)
+		obj, err := readObject(ctx, e.reader(ctx), proof.rootSet)
 		if err != nil {
 			return api.ViewDescriptor{}, e.viewReadFailure(err)
 		}
@@ -255,30 +315,40 @@ func (e *Engine) OpenView(ctx context.Context, req api.OpenViewRequest) (api.Vie
 		return api.ViewDescriptor{}, err
 	}
 	v.mu.Lock()
-	defer v.mu.Unlock()
 	if v.stopping || e.draining.Load() {
+		v.mu.Unlock()
 		return api.ViewDescriptor{}, storage.ErrClosing
 	}
 	if _, ok := v.entries[ref]; ok {
+		v.mu.Unlock()
 		return api.ViewDescriptor{}, fmt.Errorf("%w: view identity collision", ErrInvalidView)
 	}
-	entry := &viewEntry{descriptor: desc, roots: roots, rootSet: proof.rootSet, cursorRoot: cursorRoot, principal: req.Principal, mode: mode, expires: time.Now().Add(e.options.Views.TTL)}
+	entry := &viewEntry{descriptor: desc, roots: roots, rootSet: proof.rootSet, cursorRoot: cursorRoot, principal: req.Principal, mode: mode, expires: time.Now().Add(e.options.Views.TTL), pin: pin}
 	v.entries[ref] = entry
+	transferred = true
 	entry.timer = time.AfterFunc(e.options.Views.TTL, func() {
 		v.mu.Lock()
-		defer v.mu.Unlock()
+		var pin *storage.PinnedReader
 		if v.entries[ref] == entry {
 			entry.closing = true
-			v.retire(ref, entry)
+			pin = v.retire(ref, entry)
 		}
+		v.mu.Unlock()
+		e.finishViewRetirement(entry, pin)
 	})
+	v.mu.Unlock()
 	desc.Anchor = desc.Anchor.Clone()
 	if _, ok := ctx.Value(readDeliveryKey{}).(*readDeliveryCapture); ok {
 		if err := e.mu.LockContext(ctx); err != nil {
+			_ = e.CloseView(context.Background(), api.CloseViewRequest{Ref: ref})
 			return api.ViewDescriptor{}, err
 		}
-		defer e.mu.Unlock()
-		return finishReadDelivery(ctx, e, "open_view", req.Principal, desc, desc.Anchor, desc.Ref, desc.ViewDigest, nil)
+		captured, err := finishReadDelivery(ctx, e, "open_view", req.Principal, desc, desc.Anchor, desc.Ref, desc.ViewDigest, nil)
+		e.mu.Unlock()
+		if err != nil {
+			_ = e.CloseView(context.Background(), api.CloseViewRequest{Ref: ref})
+		}
+		return captured, err
 	}
 	return desc, nil
 }
@@ -307,7 +377,7 @@ func (e *Engine) viewDomainRoot(ctx context.Context, entry *viewEntry) (model.Ob
 	if entry.cursorRoot != nil {
 		return *entry.cursorRoot, nil
 	}
-	return domainRoot(ctx, e.index, entry.roots, entry.descriptor.Anchor.Space)
+	return domainRoot(ctx, e.reader(ctx), entry.roots, entry.descriptor.Anchor.Space)
 }
 
 func (e *Engine) CloseView(ctx context.Context, req api.CloseViewRequest) error {
@@ -320,8 +390,11 @@ func (e *Engine) CloseView(ctx context.Context, req api.CloseViewRequest) error 
 		return nil
 	}
 	entry.closing = true
-	v.retire(req.Ref, entry)
-	for entry.active > 0 {
+	pin := v.retire(req.Ref, entry)
+	v.mu.Unlock()
+	e.finishViewRetirement(entry, pin)
+	v.mu.Lock()
+	for entry.active > 0 || entry.retiring {
 		changed := v.changed
 		v.mu.Unlock()
 		select {
@@ -343,30 +416,35 @@ func (e *Engine) acquireView(ctx context.Context, ref model.ViewRef) (*viewEntry
 	}
 	v := &e.views
 	v.mu.Lock()
-	defer v.mu.Unlock()
 	v.init()
 	if v.stopping || e.draining.Load() {
+		v.mu.Unlock()
 		return nil, storage.ErrClosing
 	}
 	entry := v.entries[ref]
 	if entry == nil || entry.closing {
+		v.mu.Unlock()
 		return nil, ErrInvalidView
 	}
 	if !time.Now().Before(entry.expires) {
 		entry.closing = true
-		v.retire(ref, entry)
+		pin := v.retire(ref, entry)
+		v.mu.Unlock()
+		e.finishViewRetirement(entry, pin)
 		return nil, ErrViewExpired
 	}
 	entry.active++
+	v.mu.Unlock()
 	return entry, nil
 }
 func (e *Engine) releaseView(ref model.ViewRef, entry *viewEntry) {
 	v := &e.views
 	v.mu.Lock()
-	defer v.mu.Unlock()
 	entry.active--
-	v.retire(ref, entry)
+	pin := v.retire(ref, entry)
 	v.notify()
+	v.mu.Unlock()
+	e.finishViewRetirement(entry, pin)
 }
 func (e *Engine) viewOutputGate() error {
 	// Draining already-acquired operations may finish, but a fenced publication
@@ -374,18 +452,27 @@ func (e *Engine) viewOutputGate() error {
 	if e.journal == nil {
 		return storage.ErrClosed
 	}
+	if e.publicationPending.Load() {
+		return api.ErrReadAuthorizationChanged
+	}
 	_, err := e.journal.Published()
+	if err == nil && e.publicationPending.Load() {
+		return api.ErrReadAuthorizationChanged
+	}
 	return err
 }
 func (e *Engine) viewReadFailure(err error) error {
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+	if err == nil || isLimit(err) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, api.ErrReadAuthorizationChanged) {
 		return err
 	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	return e.readFailure(err)
+	return e.fenceWriter(err)
 }
 func (e *Engine) GetViewState(ctx context.Context, req api.ReadViewStateRequest) (api.StateValueResult, error) {
+	if ctx.Value(readDeliveryKey{}) == nil {
+		return embeddedViewReadDelivery(ctx, e, "get_view_state", req.View, req, func(scoped context.Context) (api.StateValueResult, error) {
+			return e.GetViewState(scoped, req)
+		})
+	}
 	if len(req.Key) > api.MaxStateKeyBytes {
 		return api.StateValueResult{}, state.ErrInvalidKey
 	}
@@ -401,13 +488,13 @@ func (e *Engine) GetViewState(ctx context.Context, req api.ReadViewStateRequest)
 	if err != nil {
 		return api.StateValueResult{}, e.viewReadFailure(err)
 	}
-	id, found, err := state.Get(ctx, e.index, entry.descriptor.Anchor.Space, root, req.Key)
+	id, found, err := state.Get(ctx, e.reader(ctx), entry.descriptor.Anchor.Space, root, req.Key)
 	if err != nil {
 		return api.StateValueResult{}, e.viewReadFailure(err)
 	}
 	result := api.StateValueResult{Found: found, StateRoot: root, RootSet: entry.rootSet, Fence: entry.descriptor.Anchor.Fence}
 	if found {
-		obj, err := readObject(ctx, e.index, id)
+		obj, err := readObject(ctx, e.reader(ctx), id)
 		if err != nil {
 			return api.StateValueResult{}, e.viewReadFailure(err)
 		}
@@ -426,17 +513,16 @@ func (e *Engine) GetViewState(ctx context.Context, req api.ReadViewStateRequest)
 	if found && readDeliveryPrincipal(ctx) != "" {
 		dependencies = []model.ObjectID{id}
 	}
-	if found {
-		derived, derivedErr := e.derivedDisclosureIDs(ctx, entry.descriptor.Anchor.Space, []model.ObjectID{id})
-		if derivedErr != nil {
-			return api.StateValueResult{}, e.viewReadFailure(derivedErr)
-		}
-		dependencies = append(dependencies, derived...)
-	}
+
 	return finishViewReadDelivery(ctx, e, entry, "get_view_state", result, dependencies)
 }
 
 func (e *Engine) GetViewEntries(ctx context.Context, req api.ReadViewEntriesRequest) (api.StateEntriesResult, error) {
+	if ctx.Value(readDeliveryKey{}) == nil {
+		return embeddedViewReadDelivery(ctx, e, "get_view_entries", req.View, req, func(scoped context.Context) (api.StateEntriesResult, error) {
+			return e.GetViewEntries(scoped, req)
+		})
+	}
 	entry, err := e.acquireView(ctx, req.View)
 	if err != nil {
 		return api.StateEntriesResult{}, err
@@ -450,7 +536,7 @@ func (e *Engine) GetViewEntries(ctx context.Context, req api.ReadViewEntriesRequ
 	if err != nil {
 		return api.StateEntriesResult{}, e.viewReadFailure(err)
 	}
-	entries, err := state.Entries(ctx, e.index, space, root, state.ScanLimits{
+	entries, err := state.Entries(ctx, e.reader(ctx), space, root, state.ScanLimits{
 		MaxNodes: req.Limits.MaxNodes, MaxEntries: req.Limits.MaxEntries,
 		MaxBytes: req.Limits.MaxBytes, MaxReadBytes: req.Limits.MaxReadBytes,
 	})
@@ -462,7 +548,7 @@ func (e *Engine) GetViewEntries(ctx context.Context, req api.ReadViewEntriesRequ
 	}
 	items := make([]api.StateEntry, len(entries))
 	for i, item := range entries {
-		obj, readErr := readObject(ctx, e.index, item.Value)
+		obj, readErr := readObject(ctx, e.reader(ctx), item.Value)
 		if readErr != nil || obj.Space != space {
 			if readErr == nil {
 				readErr = ErrInvalidStateData
@@ -484,17 +570,7 @@ func (e *Engine) GetViewEntries(ctx context.Context, req api.ReadViewEntriesRequ
 			dependencies[i] = item.Value
 		}
 	}
-	if len(items) != 0 {
-		ids := make([]model.ObjectID, len(items))
-		for i, item := range items {
-			ids[i] = item.Value
-		}
-		derived, derivedErr := e.derivedDisclosureIDs(ctx, space, ids)
-		if derivedErr != nil {
-			return api.StateEntriesResult{}, e.viewReadFailure(derivedErr)
-		}
-		dependencies = append(dependencies, derived...)
-	}
+
 	result := api.StateEntriesResult{Anchor: entry.descriptor.Anchor.Clone(), StateRoot: root, RootSet: entry.rootSet, Fence: entry.descriptor.Anchor.Fence, Items: items}
 	return finishViewReadDelivery(ctx, e, entry, "get_view_entries", result, dependencies)
 }

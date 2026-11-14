@@ -2,9 +2,10 @@ package agentprofile
 
 import (
 	"bytes"
+	"reflect"
+
 	"github.com/vkviyu/agent-temporal-engine/codec"
 	"github.com/vkviyu/agent-temporal-engine/model"
-	"reflect"
 )
 
 func lifecycleSelected(c LifecycleCommand) int {
@@ -53,7 +54,7 @@ func validateLifecycleCommand(c LifecycleCommand) error {
 		}
 	}
 	if r := c.PutResult; r != nil {
-		if !validLife(r.ID) || !validLife(r.Activity) || !validLife(r.Attempt) || r.Incarnation == 0 || r.Outcome == "" || len(r.Payload) > MaxCommandBytes {
+		if !validLife(r.ID) || !validLife(r.Activity) || !validLife(r.Attempt) || r.Incarnation == 0 || r.Outcome == "" || len(r.Payload) > MaxCommandBytes || !validResultCapture(*r) {
 			return ErrCommandShape
 		}
 	}
@@ -137,6 +138,12 @@ func encLifecycle(c LifecycleCommand) ([]byte, error) {
 		b = codec.AppendUint(b, r.Incarnation)
 		put(r.Outcome)
 		bytesPut(r.Payload)
+		put(r.Capture)
+		put(r.Response)
+		b = codec.AppendUint(b, uint64(len(r.OutputChunks)))
+		for _, id := range r.OutputChunks {
+			put(string(id))
+		}
 	case 5:
 		m := c.PutMessage
 		put(m.ID)
@@ -257,6 +264,24 @@ func decodeLifecycleCommand(raw []byte) (*LifecycleCommand, error) {
 		}
 		if e == nil {
 			r.Payload, e = by()
+		}
+		if e == nil {
+			r.Capture, e = str()
+		}
+		if e == nil {
+			r.Response, e = str()
+		}
+		if e == nil {
+			var count uint64
+			count, e = d.Uint()
+			if count > MaxLifecycleRecords {
+				return nil, ErrCommandShape
+			}
+			for i := uint64(0); e == nil && i < count; i++ {
+				var id string
+				id, e = str()
+				r.OutputChunks = append(r.OutputChunks, model.ObjectID(id))
+			}
 		}
 		c.PutResult = &r
 	case 5:

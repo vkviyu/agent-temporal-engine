@@ -2,6 +2,7 @@ package knowledge
 
 import (
 	"bytes"
+	"fmt"
 	"sort"
 	"time"
 
@@ -225,8 +226,12 @@ func DecodeSummary(raw []byte) (Summary, error) {
 		return Summary{}, ErrInvalidSummary
 	}
 	r := summaryReader{d: codec.NewDecoder(raw[len(summaryDomain):])}
-	if r.number() != SummarySchema {
+	version := r.number()
+	if r.err != nil {
 		return Summary{}, ErrInvalidSummary
+	}
+	if version != SummarySchema {
+		return Summary{}, fmt.Errorf("%w: summary %d", ErrUnsupportedSchema, version)
 	}
 	s := Summary{Space: model.SpaceID(r.text(model.MaxIdentityBytes)), Source: r.source()}
 	for n := r.count(MaxItems, 131); n > 0; n-- {

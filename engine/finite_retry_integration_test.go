@@ -37,7 +37,7 @@ func finiteRetryFixture(t *testing.T) (*integrationStore, api.EmissionSpec, agen
 		DispatchAttempt: &agentprofile.DispatchAttemptCommand{Attempt: first, Authority: binding, Evidence: content},
 	})
 	recoveryCoreControl(t, s, "capture-unknown", agentprofile.ControlCommand{
-		CaptureResult: &agentprofile.CaptureResultCommand{Result: agentprofile.ActivityResult{
+		CaptureResult: &agentprofile.CaptureResultCommand{Result: agentprofile.ActivityResult{Capture: "full",
 			ID: "unknown-result", Activity: spec.Activity, Attempt: first,
 			RequestDigest: spec.RequestDigest, Incarnation: binding.Incarnation, Outcome: "unknown",
 		}},

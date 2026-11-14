@@ -135,7 +135,7 @@ func TestIndependentFiniteRetryThroughEmissionWork(t *testing.T) {
 	}
 	claim("claim-first", "first", 1, agentprofile.RetryUse{})
 	dispatch("dispatch-first", issue("first"), agentprofile.RetryUse{})
-	result := agentprofile.ActivityResult{
+	result := agentprofile.ActivityResult{Capture: "full",
 		ID: "unknown-result", Activity: spec.Activity, Attempt: "first",
 		RequestDigest: spec.RequestDigest, Incarnation: 1, Outcome: "unknown",
 	}

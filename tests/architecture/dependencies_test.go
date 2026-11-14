@@ -16,16 +16,21 @@ func TestProductionDependencyDirection(t *testing.T) {
 	const module = "github.com/vkviyu/agent-temporal-engine/"
 	allowed := map[string]string{
 		".":     "api engine storage graph memory knowledge model transfer",
-		"model": "", "codec": "model", "api": "agentprofile annotation model graph memory knowledge transfer",
-		// Annotation is a pure public domain over identities. Like graph and
-		// knowledge it may be consumed by API/engine/transports, never import them.
-		"annotation": "model",
-		"state":      "codec model",
-		"engine":     "agentprofile annotation api codec eventlog graph knowledge memory model state storage transfer", "reference": "api codec model",
+		"model": "", "codec": "model", "api": "agentprofile annotation model graph investigation memory knowledge transfer",
+		// Annotation and investigation are pure public domains over identities.
+		// The API, engine and transports consume their types and codecs.
+		"annotation":    "model",
+		"investigation": "model",
+		"state":         "codec model",
+		"engine":        "agentprofile annotation api codec eventlog graph investigation knowledge memory model state storage transfer", "reference": "api codec model",
 		"tests/reference": "", "formats": "",
 		"transfer": "codec memory model",
 		"eventlog": "codec model",
-		"storage":  "codec model", "journalstore": "model storage", "agentprofile": "codec model journalstore storage", "graphstore": "codec graph model state storage", "knowledge": "codec model journalstore storage", "graph": "codec model", "memory": "codec model journalstore storage", "agentstore": ". agentprofile api model storage", "client": "agentprofile annotation api graph knowledge memory model protocol transfer", "protocol": "api model transfer", "service": "agentprofile annotation api graph knowledge memory model protocol transfer", "cmd/ate": ". api model storage service",
+		"storage":  "codec model", "journalstore": "model storage", "agentprofile": "codec model journalstore storage", "graphstore": "codec graph model state storage", "knowledge": "codec model journalstore storage", "graph": "codec model", "memory": "codec model journalstore storage", "agentstore": ". agentprofile api model storage",
+		"client":   "agentprofile annotation api graph investigation knowledge memory model protocol transfer",
+		"protocol": "api model transfer",
+		"service":  "agentprofile annotation api graph investigation knowledge memory model protocol transfer",
+		"cmd/ate":  ". api model storage service",
 	}
 	root := filepath.Join("..", "..")
 	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {

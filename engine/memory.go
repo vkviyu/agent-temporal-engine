@@ -17,15 +17,15 @@ func memoryStateKey(space model.SpaceID) []byte {
 }
 
 func (e *Engine) loadMemory(ctx context.Context, roots model.RootSet, space model.SpaceID) (*memory.Store, model.ObjectID, bool, error) {
-	root, err := slotSpaceRoot(ctx, e.index, roots.ExecutionKnowledge, space)
+	root, err := slotSpaceRoot(ctx, e.reader(ctx), roots.ExecutionKnowledge, space)
 	if err != nil {
 		return nil, "", false, err
 	}
-	id, found, err := state.Get(ctx, e.index, space, root, memoryStateKey(space))
+	id, found, err := state.Get(ctx, e.reader(ctx), space, root, memoryStateKey(space))
 	if err != nil || !found {
 		return memory.New(), root, found, err
 	}
-	obj, err := readObject(ctx, e.index, id)
+	obj, err := readObject(ctx, e.reader(ctx), id)
 	if err != nil {
 		return nil, "", false, err
 	}
@@ -127,6 +127,12 @@ func (e *Engine) prepareMemory(ctx context.Context, req api.CommitRequest, diges
 			return nil, err
 		}
 	}
+	// Earlier accepted BuildPath transactions wrote only the Memory snapshot.
+	// The strict form also publishes the resolved dependency records in the
+	// same transaction. Replay checks the exact operation set, retaining the
+	// historical reducer for already published legacy paths and their receipts.
+	strictPath := command.BuildPath != nil && (recorded == nil || !legacyPathOperations(recorded, req.Space))
+	var pathDependencies []model.ObjectID
 	if path := command.BuildPath; path != nil {
 		roots, err := e.memoryAnchor(ctx, req, path.Anchor)
 		if err != nil {
@@ -150,15 +156,29 @@ func (e *Engine) prepareMemory(ctx context.Context, req api.CommitRequest, diges
 				return nil, memory.ErrSourceUnavailable
 			}
 		}
+		if strictPath {
+			pathDependencies, err = e.checkExperiencePathReferences(ctx, req, path, prior)
+			if err != nil {
+				return nil, err
+			}
+		}
 	}
-	if _, err = candidate.ApplyCommand(req.Key(), command); err != nil {
+	result, err := candidate.ApplyCommand(req.Key(), command)
+	if err != nil {
 		return nil, err
 	}
 	raw, err := memory.EncodeSnapshot(candidate.Snapshot())
 	if err != nil {
 		return nil, err
 	}
+	if strictPath {
+		return e.prepareExperiencePathValue(ctx, req, digest, txID, lsn, recorded, raw, *result.Path, pathDependencies)
+	}
 	return e.prepareTypedValue(ctx, req, digest, txID, lsn, recorded, memoryStateKey(req.Space), raw)
+}
+
+func legacyPathOperations(recorded *operationsRecord, space model.SpaceID) bool {
+	return len(recorded.Changes) == 1 && string(recorded.Changes[0].Key) == string(memoryStateKey(space))
 }
 
 func (e *Engine) memoryAnchor(ctx context.Context, req api.CommitRequest, anchor model.SnapshotAnchor) (model.RootSet, error) {
@@ -173,7 +193,7 @@ func (e *Engine) memoryAnchor(ctx context.Context, req api.CommitRequest, anchor
 		if err = e.authorizeKnowledge(ctx, roots, req.Space, req.Principal, *k); err != nil {
 			return model.RootSet{}, err
 		}
-		if err = e.authorizeKnowledge(ctx, e.roots, req.Space, req.Principal, *k); err != nil {
+		if err = e.authorizeKnowledge(ctx, e.readRoots(ctx), req.Space, req.Principal, *k); err != nil {
 			return model.RootSet{}, err
 		}
 		if _, _, _, _, err = e.selectedKnowledge(ctx, roots, anchor, req.Principal); err != nil {
@@ -247,6 +267,11 @@ func (e *Engine) visibleTypedKnowledgeSource(ctx context.Context, roots model.Ro
 }
 
 func (e *Engine) GetMemoryState(ctx context.Context, req api.ReadMemoryStateRequest) (api.MemoryStateResult, error) {
+	if ctx.Value(readDeliveryKey{}) == nil {
+		return embeddedReadDelivery(ctx, e, "get_memory", "embedded-host", req, func(scoped context.Context) (api.MemoryStateResult, error) {
+			return e.GetMemoryState(scoped, req)
+		})
+	}
 	if err := ctx.Err(); err != nil {
 		return api.MemoryStateResult{}, err
 	}
@@ -256,18 +281,14 @@ func (e *Engine) GetMemoryState(ctx context.Context, req api.ReadMemoryStateRequ
 	if err := e.publicGate(); err != nil {
 		return api.MemoryStateResult{}, err
 	}
-	if err := e.mu.LockContext(ctx); err != nil {
+	if err := e.readReady(ctx); err != nil {
 		return api.MemoryStateResult{}, err
 	}
-	defer e.mu.Unlock()
-	if err := e.ready(); err != nil {
-		return api.MemoryStateResult{}, err
-	}
-	store, root, found, err := e.loadMemory(ctx, e.roots, req.Space)
+	store, root, found, err := e.loadMemory(ctx, e.readRoots(ctx), req.Space)
 	if err != nil {
-		return api.MemoryStateResult{}, e.readFailure(err)
+		return api.MemoryStateResult{}, e.readFailureAt(ctx, err)
 	}
-	out := api.MemoryStateResult{Found: found, Snapshot: store.Snapshot(), StateRoot: root, Fence: e.publication.Fence(), RootSet: e.rootSet}
+	out := api.MemoryStateResult{Found: found, Snapshot: store.Snapshot(), StateRoot: root, Fence: e.readPublication(ctx).Fence(), RootSet: e.readRootSet(ctx)}
 	ids := make([]model.ObjectID, 0, len(out.Snapshot.Memories)+len(out.Snapshot.Paths))
 	for _, value := range out.Snapshot.Memories {
 		ids = append(ids, value.ID)
@@ -275,7 +296,7 @@ func (e *Engine) GetMemoryState(ctx context.Context, req api.ReadMemoryStateRequ
 	for _, value := range out.Snapshot.Paths {
 		ids = append(ids, value.ID)
 	}
-	if err := store.AccessPolicy().Check(ids, memory.AccessAudit); err != nil {
+	if err := e.checkPolicyIDs(ctx, req.Space, ids, memory.AccessAudit); err != nil {
 		return api.MemoryStateResult{}, err
 	}
 	if err = ctx.Err(); err != nil {
@@ -298,7 +319,7 @@ func memoryCommandRejection(err error) bool {
 	if errors.Is(err, ErrStoredObject) || errors.Is(err, ErrInvalidStateData) || errors.Is(err, ErrObjectIO) || errors.Is(err, ErrSemanticCorruption) {
 		return false
 	}
-	return errors.Is(err, memory.ErrCommandShape) || errors.Is(err, memory.ErrCommandScope) || errors.Is(err, memory.ErrInvalidMemory) || errors.Is(err, memory.ErrInvalidTransition) || errors.Is(err, memory.ErrSourceUnavailable) || errors.Is(err, memory.ErrNotFound) || errors.Is(err, memory.ErrAlreadyExists) || errors.Is(err, memory.ErrNotEligible) || errors.Is(err, memory.ErrPathInvalid) || errors.Is(err, model.ErrAnchorMismatch) || errors.Is(err, ErrUnsupportedMethod) || knowledgeCommandRejection(err)
+	return errors.Is(err, memory.ErrCommandShape) || errors.Is(err, memory.ErrCommandScope) || errors.Is(err, memory.ErrInvalidMemory) || errors.Is(err, memory.ErrInvalidTransition) || errors.Is(err, memory.ErrSourceUnavailable) || errors.Is(err, memory.ErrNotFound) || errors.Is(err, memory.ErrAlreadyExists) || errors.Is(err, memory.ErrNotEligible) || errors.Is(err, memory.ErrPathInvalid) || errors.Is(err, memory.ErrStepEvidenceMismatch) || errors.Is(err, memory.ErrUseDenied) || errors.Is(err, memory.ErrHistoryAccessDenied) || errors.Is(err, model.ErrAnchorMismatch) || errors.Is(err, ErrUnsupportedMethod) || knowledgeCommandRejection(err)
 }
 
 var _ api.MemoryCommands = (*Engine)(nil)

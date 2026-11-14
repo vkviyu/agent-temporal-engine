@@ -76,11 +76,13 @@ func (e *Engine) checkGoalAdoption(ctx context.Context, req api.CommitRequest, l
 	if err != nil {
 		return err
 	}
-	snapshot, _, _, err := e.loadKnowledge(ctx, roots, req.Space, req.Principal)
+	key := model.KnowledgeKey{Actor: x.Actor, Execution: x.ID}
+	anchor.Knowledge = &key
+	snapshot, _, _, _, err := e.selectedKnowledgeObservations(ctx, roots, anchor, req.Principal)
 	if err != nil {
 		return err
 	}
-	_, err = goalKnowledgeObservation(ctx, &cursorReader{source: e.index}, snapshot, model.KnowledgeKey{Actor: x.Actor, Execution: x.ID}, observation, task)
+	_, err = goalKnowledgeObservation(ctx, &cursorReader{source: e.index}, snapshot, key, observation, task)
 	return err
 }
 
@@ -180,7 +182,8 @@ func (e *Engine) checkGoalInputCut(ctx context.Context, req api.CommitRequest, l
 	if err != nil {
 		return err
 	}
-	snapshot, _, _, err := e.loadKnowledge(ctx, roots, req.Space, req.Principal)
+	anchor := model.SnapshotAnchor{Space: req.Space, Fence: fence, Knowledge: &key}
+	snapshot, _, _, _, err := e.selectedKnowledgeObservations(ctx, roots, anchor, req.Principal)
 	if err != nil {
 		return err
 	}

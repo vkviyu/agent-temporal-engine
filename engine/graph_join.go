@@ -295,6 +295,9 @@ func (e *Engine) prepareGraphJoin(ctx context.Context, req api.CommitRequest, di
 	if pruned != nil {
 		return nil, graph.ErrBranchPruned
 	}
+	if branch.Scope != nil {
+		return nil, graph.ErrBranchScope
+	}
 	if branch.Version != c.Expected || branch.Head != c.Left {
 		return nil, errCAS
 	}
@@ -317,6 +320,9 @@ func (e *Engine) prepareGraphJoin(ctx context.Context, req api.CommitRequest, di
 		return nil, err
 	}
 	for _, id := range []model.RevisionID{plan.Base, c.Left, c.Right} {
+		if records[id].Producer != nil {
+			return nil, graph.ErrBranchScope
+		}
 		if err = verifyGraphEntries(ctx, reader, records[id]); err != nil {
 			return nil, err
 		}
@@ -423,6 +429,9 @@ func (e *Engine) prepareGraphPrune(ctx context.Context, req api.CommitRequest, d
 	}
 	if pruned != nil {
 		return nil, graph.ErrBranchPruned
+	}
+	if b.Scope != nil && b.Scope.Principal != req.Principal {
+		return nil, graph.ErrBranchScope
 	}
 	if b.Version != c.Expected || b.Head != c.Head {
 		return nil, errCAS

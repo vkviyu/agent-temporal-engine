@@ -19,7 +19,7 @@ type ImportCommand struct {
 }
 
 func (c ImportCommand) Validate() error {
-	if !validText(string(c.Target.Actor)) || !validText(string(c.Target.Execution)) || c.Source.Validate() != nil || c.Source.Anchor.Knowledge == nil || *c.Source.Anchor.Knowledge == c.Target || c.Source.Anchor.Cursor == nil || c.ExpectedSequence > MaxSnapshotRecords || len(c.Observations) == 0 || len(c.Observations) > MaxItems || uint64(len(c.Observations)) > MaxSnapshotRecords-c.ExpectedSequence {
+	if !validText(string(c.Target.Actor)) || !validText(string(c.Target.Execution)) || c.Source.Validate() != nil || c.Source.Anchor.Knowledge == nil || *c.Source.Anchor.Knowledge == c.Target || c.Source.Anchor.Cursor == nil || len(c.Observations) == 0 || len(c.Observations) > MaxItems || uint64(len(c.Observations)) > ^uint64(0)-c.ExpectedSequence {
 		return ErrKnowledgeMismatch
 	}
 	seen := make(map[model.ObjectID]bool, len(c.Observations))
@@ -119,15 +119,31 @@ func applyImport(s Snapshot, c ImportCommand) (Snapshot, error) {
 		origins[item.ID] = item
 	}
 	out := s.Clone()
+	imported, err := ImportedObservations(c, origins)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	out.Observations = append(out.Observations, imported...)
+	return out, nil
+}
+
+// ImportedObservations derives the ordered target records from origins that
+// the caller has authenticated at the selected source position.
+func ImportedObservations(c ImportCommand, origins map[model.ObjectID]Observation) ([]Observation, error) {
+	if err := c.Validate(); err != nil {
+		return nil, err
+	}
+	out := make([]Observation, 0, len(c.Observations))
+	sequence := c.ExpectedSequence
 	for _, id := range c.Observations {
 		origin, ok := origins[id]
-		if !ok {
-			return Snapshot{}, ErrUnknownObservation
+		if !ok || origin.ID != id || origin.Key != *c.Source.Anchor.Knowledge || origin.Source.Anchor.Space != c.Source.Anchor.Space {
+			return nil, ErrUnknownObservation
 		}
 		sequence++
 		item := Observation{Key: c.Target, Source: c.Source.clone(), Payload: origin.Payload, PayloadKind: origin.PayloadKind, Sequence: sequence, Label: origin.Label, ImportedFrom: origin.ID}
 		item.ID = ObservationID(item)
-		out.Observations = append(out.Observations, item)
+		out = append(out, item)
 	}
 	return out, nil
 }

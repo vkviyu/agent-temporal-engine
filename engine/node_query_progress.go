@@ -2,14 +2,11 @@ package engine
 
 import (
 	"context"
-	"encoding/json"
 	"strconv"
 
 	"github.com/vkviyu/agent-temporal-engine/agentprofile"
-	"github.com/vkviyu/agent-temporal-engine/api"
 	"github.com/vkviyu/agent-temporal-engine/model"
 	"github.com/vkviyu/agent-temporal-engine/state"
-	"github.com/vkviyu/agent-temporal-engine/storage"
 )
 
 // Query progress belongs to the same authenticated LiveControl partition as
@@ -43,19 +40,7 @@ func addQueryProgressNodes(ctx context.Context, r *nodeQueryReader, entry *viewE
 			return ErrInvalidStateData
 		}
 		add := func(kind, id, label string, value any, parents, sources []model.NodeRef) error {
-			if len(c.nodes) >= maxNodeQueryRecords {
-				return storage.ErrLimit
-			}
-			ref := agentEntity(model.EntityKind(kind), id)
-			raw, err := json.Marshal(value)
-			if err != nil {
-				return err
-			}
-			if _, exists := c.nodes[ref]; exists {
-				return ErrInvalidStateData
-			}
-			c.nodes[ref] = nodeProjection{detail: api.NodeDetail{Ref: ref, Summary: api.NodeSummary{Ref: ref, Kind: model.EntityKind(kind), Label: label}, Payload: recordID, Data: raw, Encoding: "agent/" + kind + "/v1+json", Sources: sources, Anchor: anchor.Clone()}, parents: parents}
-			return nil
+			return c.addEntityJSON(anchor, recordID, model.EntityKind(kind), id, label, value, parents, sources, false)
 		}
 		queryRef := agentEntity("Query", query.ID)
 		if err := add("QueryProgress", query.ID, p.Phase, p, []model.NodeRef{queryRef}, nil); err != nil {

@@ -1,6 +1,6 @@
 # ATE API 与协议设计
 
-> 本文保留完整 V1 目标。当前候选格式为 Control 5、Invocation 2、Continuation opcode 8、Work 1、Emission 3 和 Packet 4。2026-11-03 独立审计保留当时的反例和证据边界。本文末尾保留当时审计状态，当前实现收口和验证以文末 2026-11-05 段落为准。 [独立审计](validation/V1_INDEPENDENT_CURRENT_AUDIT_2026-11-03.md) · [格式清单](formats/ate-v1-manifest-2026-11-02.md)
+> 完整 V1 目标保持不变。当前格式：Control 6、Invocation 2、Continuation opcode 8、Work 1、Emission 3、Packet 5、Summary 2。严格验收仍开放；历史日期的已完成结论不能覆盖后续发现的反例。当前实现、验证和真实剩余项以 [2026-11-06 交叉审计](validation/V1_CROSS_AUDIT_2026-11-06.md) 为准。
 >
 > 2026-11-01 实现核对与未收口项见 [文档—代码审计](validation/V1_DOCUMENT_CODE_CROSS_AUDIT_2026-11-01.md)。下文的完整目标保留；有界查询、领域 Cursor 和 Key 筛选的实现不等于 Event、执行知识 Revision 或回收目标已经完成。
 
@@ -192,6 +192,12 @@ ReadContent
 ~~~
 
 这些方法必须等价地执行相同的 View/Anchor/权限/limit 规则。服务端响应还必须消费绑定 method、请求摘要、认证 session、View/Anchor 和来源闭包的一次性 ReadDeliveryGrant。内嵌库会在返回前立即消费同一许可。禁止实现一个同时拥有任意查询和任意写入字段的万能端点。
+
+### 4.4 任务轨迹
+
+`agent/task-trace-v1` 提供 `get_task_trace`、`get_task_trace_evidence` 和 `apply_task_trace`。轨迹按 Space、认证主体和 Query 或 Task 定位。Query 请求可附 Session 核对归属。首次查询返回 Anchor，续页固定相同 Anchor 和筛选条件。范围外的直接因果前驱可通过标记为 `Boundary` 的边展开。服务以连接认证主体为准，并复用普通读取的出站授权。写入以 RequestKey 幂等提交，以 `ExpectedVersion` 检查现有轨迹说明版本。
+
+字段和调用方式见 [API Reference](ATE_API_REFERENCE.md#任务关键轨迹)，本地协议请求定义见 [task_trace.go](../protocol/task_trace.go)。
 
 ## 5. 本地 IPC 协议
 
@@ -405,6 +411,38 @@ Control 5 的 `PutIdempotencyGuarantee` 和 `AuthorizeRetry` 记录有限接收�
 Execution Knowledge 不隐式采用导航判断，旧 Knowledge Cursor 不受全局较新标签改变。
 当前 ACL/Privacy 仍约束历史注解及其事件文本。完整格式见 `formats/annotation-v1.md`。
 
+### 调查检查点 `investigation/v1`
+
+`UpdateInvestigation` 与 `GetInvestigation` 在 Go 库和本地服务共用契约。Unix 方法名为
+`update_investigation` 和 `get_investigation`，所有者取自已认证的连接。调查 ID 在 Space 和
+Principal 内唯一。`ExpectedVersion=0` 与 `Subject` 创建版本 1，后续按同一调查的版本写入，
+每次成功递增 1。版本不符返回 `precondition_failed`，同一 `RequestKey` 和相同命令重试返回原回执。
+其他记录的提交不会推进调查版本。最新检查点保存在 `ExecutionKnowledge` 的独立所有者分区，
+旧版本通过原发布锚点读取。更新经同一个协调器发布和重放。
+
+`Findings` 按 ID 新增或替换，`RemoveFindings` 移除指定判断。`OpenQuestions`、`NextFocus` 和
+`Position` 只在字段出现时更新。判断由调用方提交。ATE 校验各引用的历史成员关系和当前披露权限，
+调用方通过 `Sources` 申报进展文本依赖的其他来源。该字段累积到后续版本。原命令和检查点值的
+来源关系随更新原子发布，撤权覆盖历史检查点和审计事件引用的原命令。每次命令最多 128 KiB，
+检查点最多 256 KiB 和 32 个不同的锚定引用。当前版本的证据引用限定在同一 Store 和 Space 内。
+
+`GetInvestigation.Anchor` 选择检查点的发布切面。恢复浏览时用 `Checkpoint.Position.Focus.Anchor`
+和 `Position.ViewMode()` 打开新的 View，以 `Focus.Ref`、`Mode`、`Sections` 调用 `GetNodeContext`，
+并为每次读取指定 `QueryLimits`。尚无 `Position` 时可从 `Subject` 开始。分页令牌随 View 生命周期结束，
+恢复从保存的节点开始。宿主按模型窗口选择和渲染结果，实际历史模型请求以 `RecordedInput` 为据。
+
 ## 2026-11-05 当前协议收口
 
 当前 wire 和库门面共用 V1 registry。读取方法通过 `ReadDeliveryGrant` capture/consume 绑定认证 session、correlation/request、method、View/Anchor 和来源闭包；没有 grant-capable backend 的本地服务拒绝读取路由。模型与工具派发通过 `emission_dispatch` 原子消费 grant，纯模型调用也受同一边界约束。当前行为与四文档的交叉证据见 [V1 当前交叉验收续记](validation/V1_CURRENT_CROSS_CHECK_2026-11-05.md)。
+
+## 2026-11-06 输出与最终答复契约
+
+Control 6 的 `CaptureOutputChunk`（opcode 34）提交一个 OutputChunk：ID、Activity、Attempt、RequestDigest、Incarnation、Response、Sequence、Payload。序号从 1 连续递增，同一 Attempt 只允许同一个 Response；分块累计字节不超过 1 MiB。ID 是嵌入记录的逻辑内容身份，不是可以任意按 raw core ObjectID 读取的独立对象。统一节点 API 使用 agent/OutputChunk 实体投影进行渐进查看。
+
+`ActivityResult` 新增必填 Capture（full/truncated/partial/unknown）、可选 Response 与按序 OutputChunks。终结清单必须逐项对应所有分块，Payload 必须等于连接后的确切字节。非流式可省略 Response/OutputChunks。partial/unknown 仅作审计事实，不能变成接受结果；模型必须 full。Outcome 保留独立成功/失败含义。
+
+`ActivitySpec.FinalAnswerInput` 是可选的不可变 ValueBytes 见证引用；已启动任务的最终答复必须提供。见证 schema 1 绑定 Query、严格按 Task 排序的完整 Outcomes、ContextPacket、Request、RequestDigest、HostPolicyVersion，必须在 Activity.InputFence 已发布，renderer version 与 Packet.Renderer 相同。原始 provider 请求保持逐字节原样。
+
+`AnswerQuery` 与持久 QueryAnswer 绑定 GeneratedFrom、Outcomes、InputEvidence。GeneratedFrom 必须是本 Query 最新 accepted、full、success 的 query_decision 结果，决策无工具调用；Body 等于其确切 Payload。已启动任务的全部完成成果和验收证据必须与 witness 一致。引擎校验链接与发布切面，宿主 renderer 对请求中的证据呈现语义负责。
+
+当前格式为 Control 6、Packet 5、Summary 2。其它版本的支持范围见格式注册表。普通嵌入式调用和 Unix 服务共用一次性读取交付，任务轨迹同样遵守固定切面与当前披露规则。 [实现与验收 L-01、L-02](validation/V1_CROSS_AUDIT_2026-11-06.md)

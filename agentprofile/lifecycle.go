@@ -58,6 +58,9 @@ type ActivityResult struct {
 	Incarnation           uint64
 	Outcome               string
 	Payload               []byte
+	Capture               string
+	Response              string
+	OutputChunks          []model.ObjectID
 }
 
 type Message struct {
@@ -147,6 +150,7 @@ func cloneLifecycle(s LifecycleSnapshot) LifecycleSnapshot {
 	}
 	for i := range o.Results {
 		o.Results[i].Payload = bytes.Clone(o.Results[i].Payload)
+		o.Results[i].OutputChunks = append([]model.ObjectID(nil), o.Results[i].OutputChunks...)
 	}
 	for i := range o.Messages {
 		o.Messages[i].Payload = bytes.Clone(o.Messages[i].Payload)
@@ -215,6 +219,7 @@ func (l *Ledger) GetActivityResult(id string) (ActivityResult, error) {
 	for _, v := range l.lifecycle.Results {
 		if v.ID == id {
 			v.Payload = bytes.Clone(v.Payload)
+			v.OutputChunks = append([]model.ObjectID(nil), v.OutputChunks...)
 			return v, nil
 		}
 	}
@@ -302,7 +307,7 @@ func (l *Ledger) applyLifecycle(c LifecycleCommand) (Result, error) {
 	}
 	if c.PutResult != nil {
 		v := *c.PutResult
-		if v.ID == "" || v.Activity == "" || v.Attempt == "" || v.Incarnation == 0 || v.Outcome == "" {
+		if v.ID == "" || v.Activity == "" || v.Attempt == "" || v.Incarnation == 0 || v.Outcome == "" || !validResultCapture(v) {
 			return Result{}, ErrInvalid
 		}
 		if _, ok := findLifecycle(s.Activities, func(x Activity) bool { return x.ID == v.Activity }); !ok {
@@ -318,6 +323,7 @@ func (l *Ledger) applyLifecycle(c LifecycleCommand) (Result, error) {
 			return Result{}, nil
 		}
 		v.Payload = bytes.Clone(v.Payload)
+		v.OutputChunks = append([]model.ObjectID(nil), v.OutputChunks...)
 		s.Results = append(s.Results, v)
 		return Result{}, nil
 	}

@@ -13,12 +13,14 @@ func (j *Journal) VerifyPublished(ctx context.Context, replay ReplayFunc) (Publi
 	if err := ctx.Err(); err != nil {
 		return Publication{}, 0, err
 	}
-	j.mu.Lock()
-	defer j.mu.Unlock()
-	if err := j.writable(); err != nil {
+	if err := j.lockWriter(ctx); err != nil {
 		return Publication{}, 0, err
 	}
-	genesis, err := GenesisPosition(j.identity)
+	defer j.writerMu.Unlock()
+	j.mu.Lock()
+	source := j.journalWriterState
+	j.mu.Unlock()
+	genesis, err := GenesisPosition(source.identity)
 	if err != nil {
 		return Publication{}, 0, err
 	}
@@ -32,10 +34,10 @@ func (j *Journal) VerifyPublished(ctx context.Context, replay ReplayFunc) (Publi
 		return nil
 	}
 	var count uint64
-	if len(j.manifest.Segments) == 0 {
-		_, _, count, err = verifyPrefixWithReplay(j.segment, j.identity, j.manifest, genesis, j.options.Limits, j.options.MaxPublishedTransactions, callback)
+	if len(source.manifest.Segments) == 0 {
+		_, _, count, err = verifyPrefixWithReplay(source.segment, source.identity, source.manifest, genesis, source.options.Limits, source.options.MaxPublishedTransactions, callback)
 	} else {
-		_, count, err = verifySegmentedPrefix(j.segments, j.identity, j.manifest, genesis, j.options, callback)
+		_, count, err = verifySegmentedPrefix(source.segments, source.identity, source.manifest, genesis, source.options, callback)
 	}
 	if err != nil {
 		return Publication{}, 0, err
@@ -43,5 +45,8 @@ func (j *Journal) VerifyPublished(ctx context.Context, replay ReplayFunc) (Publi
 	if err = ctx.Err(); err != nil {
 		return Publication{}, 0, err
 	}
-	return j.publication, count, nil
+	if err := j.publicationAllowed(); err != nil {
+		return Publication{}, 0, err
+	}
+	return source.publication, count, nil
 }

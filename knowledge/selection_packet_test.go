@@ -63,8 +63,8 @@ func TestSelectedPacketPersistsFullProposalAndRecomputableResult(t *testing.T) {
 		t.Fatal(err)
 	}
 	raw, err := packet.Canonical()
-	if err != nil || raw[0] != 4 {
-		t.Fatalf("schema4 packet: %x %v", raw, err)
+	if err != nil || raw[0] != byte(PacketSchema) {
+		t.Fatalf("current packet schema: %x %v", raw, err)
 	}
 	decoded, err := DecodePacket(raw)
 	if err != nil {

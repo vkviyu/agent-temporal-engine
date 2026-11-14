@@ -32,7 +32,8 @@ func (ss *session) serveReadRequest(ctx context.Context, req protocol.Request) (
 	case "trace_nodes":
 		read = ss.traceNodes
 	case "get_state", "get_view_state", "get_view_entries", "resolve_publication", "snapshot", "export_transfer", "get_transfer",
-		"get_agent_state", "get_query_intake", "get_query_progress", "get_knowledge", "get_summary", "get_memory", "get_annotations", "get_emission",
+		"get_agent_state", "get_query_intake", "get_query_progress", "get_knowledge", "get_summary", "get_memory", "get_annotations", "get_investigation", "get_emission",
+		"get_task_trace", "get_task_trace_evidence",
 		"get_graph_revision", "get_graph_branch", "diff_graph", "plan_graph_join", "trace_graph":
 		return true, ss.replyDispatchedRead(ctx, req)
 	default:

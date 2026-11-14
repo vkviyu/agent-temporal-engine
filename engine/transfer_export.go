@@ -15,6 +15,11 @@ import (
 )
 
 func (e *Engine) ExportTransfer(ctx context.Context, req api.ExportTransferRequest) (transfer.Manifest, error) {
+	if ctx.Value(readDeliveryKey{}) == nil {
+		return embeddedReadDelivery(ctx, e, "export_transfer", req.Principal, req, func(scoped context.Context) (transfer.Manifest, error) {
+			return e.ExportTransfer(scoped, req)
+		})
+	}
 	if err := ctx.Err(); err != nil {
 		return transfer.Manifest{}, err
 	}
@@ -27,14 +32,12 @@ func (e *Engine) ExportTransfer(ctx context.Context, req api.ExportTransferReque
 	if err := e.publicGate(); err != nil {
 		return transfer.Manifest{}, err
 	}
-	if err := e.mu.LockContext(ctx); err != nil {
+	if err := e.readReady(ctx); err != nil {
 		return transfer.Manifest{}, err
 	}
-	defer e.mu.Unlock()
-	if err := e.ready(); err != nil {
-		return transfer.Manifest{}, err
-	}
-	anchor := model.SnapshotAnchor{Space: req.Space, Fence: e.publication.Fence()}
+	publication := e.readPublication(ctx)
+	rootsNow := e.readRoots(ctx)
+	anchor := model.SnapshotAnchor{Space: req.Space, Fence: publication.Fence()}
 	if req.Anchor != nil {
 		anchor = req.Anchor.Clone()
 	}
@@ -44,11 +47,10 @@ func (e *Engine) ExportTransfer(ctx context.Context, req api.ExportTransferReque
 	if _, _, err := e.rootsAtFence(ctx, anchor.Fence, false); err != nil {
 		return transfer.Manifest{}, err
 	}
-	current, _, _, err := e.loadMemory(ctx, e.roots, req.Space)
+	current, _, _, err := e.loadMemory(ctx, rootsNow, req.Space)
 	if err != nil {
 		return transfer.Manifest{}, err
 	}
-	policy := current.AccessPolicy()
 	omit := map[model.ObjectID]bool{}
 	for _, id := range req.Omit {
 		if !model.ValidDigest(string(id)) || omit[id] {
@@ -66,16 +68,16 @@ func (e *Engine) ExportTransfer(ctx context.Context, req api.ExportTransferReque
 			return transfer.Manifest{}, ErrUnsupportedMethod
 		}
 		if root.Kind == "memory" {
-			if _, err := current.ReusableMemory(root.ID, model.SnapshotAnchor{Space: req.Space, Fence: e.publication.Fence()}); err != nil {
+			if _, err := current.ReusableMemory(root.ID, model.SnapshotAnchor{Space: req.Space, Fence: publication.Fence()}); err != nil {
 				return transfer.Manifest{}, err
 			}
 		} else {
-			if _, err := current.ReusablePath(root.ID, model.SnapshotAnchor{Space: req.Space, Fence: e.publication.Fence()}); err != nil {
+			if _, err := current.ReusablePath(root.ID, model.SnapshotAnchor{Space: req.Space, Fence: publication.Fence()}); err != nil {
 				return transfer.Manifest{}, err
 			}
 		}
 	}
-	m := transfer.Manifest{Schema: transfer.Schema, Source: anchor, Principal: req.Principal, Policy: req.Policy, PolicyFence: e.publication.Fence(), PolicyRoot: e.roots.ExecutionKnowledge, Roots: roots}
+	m := transfer.Manifest{Schema: transfer.Schema, Source: anchor, Principal: req.Principal, Policy: req.Policy, PolicyFence: publication.Fence(), PolicyRoot: rootsNow.ExecutionKnowledge, Roots: roots}
 	queue := append([]transfer.Reference(nil), roots...)
 	seen := map[string]bool{}
 	var disclosed []model.ObjectID
@@ -95,7 +97,7 @@ func (e *Engine) ExportTransfer(ctx context.Context, req api.ExportTransferReque
 		if ref.Anchor.Validate() != nil || ref.Anchor.Space != req.Space || ref.Anchor.Fence.Store != anchor.Fence.Store || ref.Anchor.Fence.LSN > anchor.Fence.LSN {
 			return transfer.Manifest{}, model.ErrAnchorMismatch
 		}
-		if err := policy.Check([]model.ObjectID{ref.ID}, memory.AccessReuse); err != nil {
+		if err := e.checkPolicyIDs(ctx, req.Space, []model.ObjectID{ref.ID}, memory.AccessReuse); err != nil {
 			return transfer.Manifest{}, err
 		}
 		disclosed = append(disclosed, ref.ID)
@@ -118,9 +120,6 @@ func (e *Engine) ExportTransfer(ctx context.Context, req api.ExportTransferReque
 	m.ID = m.Digest()
 	canonical, err := m.Canonical()
 	if err != nil {
-		return transfer.Manifest{}, err
-	}
-	if err := e.viewOutputGate(); err != nil {
 		return transfer.Manifest{}, err
 	}
 	manifest, err := transfer.DecodeManifest(canonical)
@@ -188,7 +187,7 @@ func (e *Engine) transferEntry(ctx context.Context, req api.ExportTransferReques
 		}
 		return entry, "", err
 	}
-	o, err := readObject(ctx, e.index, ref.ID)
+	o, err := readObject(ctx, e.reader(ctx), ref.ID)
 	if err != nil {
 		return entry, "", err
 	}

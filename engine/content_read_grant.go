@@ -92,28 +92,19 @@ func (e *Engine) selectedReadDependencies(ctx context.Context, entry *viewEntry)
 }
 
 func (e *Engine) issueContentRead(ctx context.Context, entry *viewEntry, grant *contentReadGrant, ids []model.ObjectID) error {
-	if err := e.mu.LockContext(ctx); err != nil {
-		return err
-	}
-	defer e.mu.Unlock()
 	space := entry.descriptor.Anchor.Space
 	if key := entry.descriptor.Anchor.Knowledge; key != nil {
-		if err := e.authorizeKnowledge(ctx, e.roots, space, entry.principal, *key); err != nil {
-			return e.knowledgeReadFailure(err)
+		if err := e.authorizeKnowledge(ctx, e.readRoots(ctx), space, entry.principal, *key); err != nil {
+			return e.knowledgeReadFailure(ctx, err)
 		}
 	} else if err := e.checkViewDisclosure(ctx, entry); err != nil {
 		return err
 	}
-	current, _, _, err := e.loadMemory(ctx, e.roots, space)
+	policy, err := e.readPolicy(ctx, space)
 	if err != nil {
 		return err
 	}
-	policy := current.AccessPolicy()
-	derived, err := e.derivedDisclosureIDs(ctx, space, ids)
-	if err != nil {
-		return err
-	}
-	dependencies, err := policy.DependencyClosure(append(append([]model.ObjectID(nil), ids...), derived...))
+	dependencies, err := e.policyDependencyIDs(ctx, space, policy, ids)
 	if err != nil {
 		return err
 	}
@@ -127,13 +118,17 @@ func (e *Engine) issueContentRead(ctx context.Context, entry *viewEntry, grant *
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if err := e.viewOutputGate(); err != nil {
+	if err := e.mu.LockContext(ctx); err != nil {
+		return err
+	}
+	defer e.mu.Unlock()
+	if err := e.checkReadCutLocked(ctx); err != nil {
 		return err
 	}
 	grant.proof.dependencyDigest = dependencyDigest
-	grant.proof.policyFence = e.publication.Fence()
-	grant.proof.policyRoot = e.roots.ExecutionKnowledge
-	grant.proof.controlRoot = e.roots.LiveControl
+	grant.proof.policyFence = e.readPublication(ctx).Fence()
+	grant.proof.policyRoot = e.readRoots(ctx).ExecutionKnowledge
+	grant.proof.controlRoot = e.readRoots(ctx).LiveControl
 	grant.expires = time.Now().Add(readEmissionGrantTTL)
 	return nil
 }

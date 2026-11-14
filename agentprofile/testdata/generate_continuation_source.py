@@ -36,13 +36,13 @@ root = Path(__file__).resolve().parent
 (root / "continuation-source-v1.hex").write_text(wrapped.hex() + "\n")
 # SaveContinuation is the 14th Control operation: Continuation, ExpectedVersion,
 # then AuthorityBinding{Deployment,OwnerEpoch,Incarnation,Holder}.
-control = b"ATE-AGENT-CONTROL\x00" + uint(5) + uint(14) + continuation
+control = b"ATE-AGENT-CONTROL\x00" + uint(6) + uint(14) + continuation
 control += uint(0) + text("d") + uint(1) + uint(1) + text("h")
 corpus_path = root.parents[1] / "formats" / "testdata" / "compatibility.json"
 corpus = json.loads(corpus_path.read_text())
 vectors = [
     {"name": "continuation-source-op8", "family": "agent.continuation", "version": 8, "hex": lifecycle.hex()},
-    {"name": "control-source-v5", "family": "agent.control", "version": 5, "hex": control.hex()},
+    {"name": "control-source-v6", "family": "agent.control", "version": 6, "hex": control.hex()},
 ]
 by_name = {row["name"]: row for row in corpus}
 by_name.update((row["name"], row) for row in vectors)

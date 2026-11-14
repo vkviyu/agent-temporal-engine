@@ -16,39 +16,49 @@ import (
 // changing their projection must not sever that dependency at an output gate.
 func (e *Engine) activityInputDisclosureIDs(ctx context.Context, space model.SpaceID, principal model.PrincipalID, spec agentprofile.ActivitySpec) ([]model.ObjectID, error) {
 	ids := []model.ObjectID{spec.Request, spec.ContextPacket, spec.Contract.Definition}
+	answerIDs, err := e.finalAnswerInputDisclosureIDs(ctx, spec.FinalAnswerInput)
+	if err != nil {
+		return nil, err
+	}
+	ids = append(ids, answerIDs...)
 	if spec.ContextPacket == "" {
 		return ids, nil
 	}
-	roots, _, err := e.rootsAtFence(ctx, spec.InputFence, true)
+	record, err := e.activityPacketAt(ctx, space, principal, spec.InputFence, spec.ContextPacket)
 	if err != nil {
 		return nil, err
 	}
-	snapshot, _, _, err := e.loadKnowledge(ctx, roots, space, principal)
+	dependencies, err := e.packetDependencyIDs(ctx, record.roots, space, principal, record.packet, record.selected)
 	if err != nil {
 		return nil, err
 	}
-	for _, packet := range snapshot.Packets {
-		if packet.ID != spec.ContextPacket {
-			continue
-		}
-		ids = append(ids, packetPolicyIDs(packet, snapshot)...)
-		selected := make(map[model.ObjectID]bool, len(packet.Items))
-		for _, item := range packet.Items {
-			selected[item.Observation] = true
-		}
-		var summaries []model.ObjectID
-		for _, observation := range snapshot.Observations {
-			if selected[observation.ID] && observation.PayloadKind == "summary" {
-				summaries = append(summaries, observation.Payload)
-			}
-		}
-		dependencies, err := e.summaryDependencyIDs(ctx, roots, space, principal, summaries)
-		if err != nil {
-			return nil, err
-		}
-		return append(ids, dependencies...), nil
+	return append(ids, dependencies...), nil
+}
+
+// The attestation is immutable and validated at Activity creation. Its declared
+// evidence remains part of every later disclosure/dispatch dependency closure.
+// Checking only the attestation's own ID would miss withdrawal of an outcome.
+func (e *Engine) finalAnswerInputDisclosureIDs(ctx context.Context, id model.ObjectID) ([]model.ObjectID, error) {
+	if id == "" {
+		return nil, nil
 	}
-	return nil, agentprofile.ErrUnknown
+	object, err := readObject(ctx, e.reader(ctx), id)
+	if err != nil {
+		return nil, err
+	}
+	value, err := readValue(object)
+	if err != nil || value.Kind != api.ValueBytes {
+		return nil, ErrStoredObject
+	}
+	input, err := agentprofile.DecodeFinalAnswerInput(value.Data)
+	if err != nil {
+		return nil, ErrStoredObject
+	}
+	ids := []model.ObjectID{id, input.Request, input.ContextPacket}
+	for _, outcome := range input.Outcomes {
+		ids = append(ids, outcome.Result, outcome.Validation)
+	}
+	return ids, nil
 }
 
 // checkAgentSnapshotDisclosure gates the complete control projection. Like
@@ -56,16 +66,15 @@ func (e *Engine) activityInputDisclosureIDs(ctx context.Context, space model.Spa
 // it never silently redacts bytes and then claims an exact snapshot. The core
 // lock must protect current policy until the caller has finished this check.
 func (e *Engine) checkAgentSnapshotDisclosure(ctx context.Context, roots model.RootSet, space model.SpaceID, principal model.PrincipalID, snapshot agentprofile.Snapshot, collect bool) ([]model.ObjectID, error) {
-	current, _, _, err := e.loadMemory(ctx, e.roots, space)
+	policy, err := e.readPolicy(ctx, space)
 	if err != nil {
 		return nil, err
 	}
-	policy := current.AccessPolicy()
 	if !collect && !policy.HasDisclosureDenials() {
 		return nil, nil
 	}
 	dependencies := agentprofile.ContentReferences(snapshot)
-	if err := policy.Check(dependencies, memory.AccessAudit); err != nil {
+	if err := e.checkPolicyIDs(ctx, space, dependencies, memory.AccessAudit); err != nil {
 		return nil, err
 	}
 	if recovery := snapshot.Lifecycle.Recovery; recovery != nil {
@@ -74,7 +83,7 @@ func (e *Engine) checkAgentSnapshotDisclosure(ctx context.Context, roots model.R
 			if err != nil {
 				return nil, err
 			}
-			if err := policy.Check(ids, memory.AccessAudit); err != nil {
+			if err := e.checkPolicyIDs(ctx, space, ids, memory.AccessAudit); err != nil {
 				return nil, err
 			}
 			if collect {
@@ -85,14 +94,14 @@ func (e *Engine) checkAgentSnapshotDisclosure(ctx context.Context, roots model.R
 	// Query-only tool definitions live in QueryProgress, outside the execution
 	// Invocation collection. They remain provenance for inline request bytes.
 	for _, query := range snapshot.Lifecycle.Queries {
-		id, present, err := state.Get(ctx, e.index, systemSpace, roots.LiveControl, queryProgressKey(space, principal, query.ID))
+		id, present, err := state.Get(ctx, e.reader(ctx), systemSpace, roots.LiveControl, queryProgressKey(space, principal, query.ID))
 		if err != nil {
 			return nil, err
 		}
 		if !present {
 			continue
 		}
-		object, err := readObject(ctx, e.index, id)
+		object, err := readObject(ctx, e.reader(ctx), id)
 		if err != nil {
 			return nil, err
 		}
@@ -106,7 +115,7 @@ func (e *Engine) checkAgentSnapshotDisclosure(ctx context.Context, roots model.R
 				ids = append(ids, invocation.Definition)
 			}
 		}
-		if err := policy.Check(ids, memory.AccessAudit); err != nil {
+		if err := e.checkPolicyIDs(ctx, space, ids, memory.AccessAudit); err != nil {
 			return nil, err
 		}
 		if collect {
@@ -151,7 +160,7 @@ func (e *Engine) checkQueryIntakeDisclosure(ctx context.Context, roots model.Roo
 	if err := e.checkDisclosureIDs(ctx, space, ids); err != nil {
 		return nil, err
 	}
-	ledger, _, _, err := loadAgentLedger(ctx, e.index, roots.LiveControl, space, principal)
+	ledger, _, _, err := loadAgentLedger(ctx, e.reader(ctx), roots.LiveControl, space, principal)
 	if err != nil {
 		return nil, err
 	}

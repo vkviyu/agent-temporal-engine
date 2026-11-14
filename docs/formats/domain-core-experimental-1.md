@@ -28,6 +28,10 @@ Fork 拒绝重复 Branch，Advance 校验当前版本并要求目标 Revision �
 的已发布 occurrence stream 中才可进入 Revision；Join 同时 CAS branch/domain roots 并校验完整
 resolutions，Prune 只改变导航 tombstone，不删除共享祖先。
 
+Graph command schema 2 增加 `ForkLocal`、`WriteBranch`、`JoinLocal` 和 `PublishBranch`。Branch schema 2 记录写入主体、可选执行身份、分叉基线与最近发布的分支版本。Revision schema 3 记录生成它的分支版本和经引擎核验的执行授权来源。历史 Graph command schema 1、Branch schema 1、Revision schema 2 保留原字节语义。
+
+局部分支写入从固定的分支头读取状态树，并原子推进该分支。局部合并固定两个分支头，只推进目标分支。`PublishBranch` 从最近发布的分支版本或分叉基线计算差异，在 Space 根的版本检查和受影响键的冲突检查通过后，原子更新 Space 和发布进度。原 `Join` 的作用域是整个 Space，局部分支只能使用局部合并及显式发布。
+
 ## Memory
 
 七操作命令复用 memory 的有界二进制 codec。候选不能注入已经验证/晋升的状态；普通 Transition
@@ -40,9 +44,16 @@ resolutions，Prune 只改变导航 tombstone，不删除共享祖先。
 二进制命令 envelope。Snapshot 的有效 JSON 编码仍受规范重编码和界限校验；不能以 wire JSON 身份
 替代领域 command digest。
 
-Knowledge partition key 为 UTF-8 ASCII `ate/knowledge/v1/` 加 lowercase hex SHA-256。
-哈希输入为 codec.AppendString(Space) || codec.AppendString(Principal)。该 key 属于上述 Space radix；
-同 Space 的不同 Principal 即使使用相同 Actor/Execution ID，也不会共享观察序号或内容。
+Knowledge 命令 envelope 版本 2 将新记录写入 owner radix，分区 key 为 ASCII `ate/knowledge/v2/`
+加 lowercase hex SHA-256。哈希输入为 codec.AppendString(Space) || codec.AppendString(Principal)。
+观察按逻辑 ID 和执行序号索引，上下文包按逻辑 ID 和执行索引。包不推进观察序号。每条记录使用原有
+canonical payload；同一次命令原子更新记录索引、来源依赖及回执。同 Space 的不同 Principal 即使
+使用相同 Actor/Execution ID，也不会共享观察序号或内容。
+
+版本 1 的命令按原 reducer 重放，使用 `ate/knowledge/v1/` 下的 JSON 快照。迁入版本 2 后，
+这份快照仍可从历史锚点读取，也作为新索引的只读前缀。新写入无需重编码它。已发布的
+ObservationID、PacketID、Knowledge Revision 和 Frontier 保持原算法。全量读取依旧受显式读取限制；
+旧 JSON 快照的总量上限只适用于版本 1 的编解码与发布。
 
 每个 partition 中以 (Space,Actor,Execution) 保持连续 Observation sequence。合法摘要还必须等于
 ObservationID/PacketID 的实际 canonical 身份。Packet 的成员、载荷和 Key 必须一致；核心进一步认证
@@ -58,7 +69,7 @@ memory/experience_path 逻辑引用，schema=4 同时保存 typed 引用和 Impo
 能由核心在对应历史 Memory 根中解析，不能当作 raw codec object；撤回或替代后新的模型
 派发拒绝使用。
 
-ContextPacket 当前仅接受 schema 4。既有字段依次为 Space、可选 KnowledgeKey、SourceAnchor、GoalRef、
+ContextPacket 当前仅接受 schema 5。既有字段依次为 Space、可选 KnowledgeKey、SourceAnchor、GoalRef、
 有序 Items、Renderer、Tokenizer 和 EstimatedTokens。随后依次写 RecordedInput、Selection、Requirements
 三个 uint presence（0/1），每个 presence 为 1 时紧随对应记录，最后写 PacketID。
 RecordedInput 依次保存 Object、精确历史 Anchor（以无 ViewDigest/Frontier 的 SourceAnchor 编码）和
@@ -75,8 +86,8 @@ Facts count，以及按 `(Kind, ID)` 严格排序的 `Kind, ID, Observation, Con
 执行级 `primary_decision` 要求 `agent_mandatory_context/v1`，引擎从 packet 的历史控制切面重新导出完整结构化集合，
 并逐项核对该 KnowledgeKey 已采用的 raw ValueBytes。`GoalRef` 必须匹配当前执行所属 Task 的目标事实的 Content。
 Requirements 在一般 Packet 记录中可选。HostPolicyVersion
-标识宿主的渲染、语义候选和计数策略。PacketID 由 `ATE-CONTEXT-PACKET` + NUL 和不含 ID 的完整 schema-4 字节哈希得出。
-预发布 Packet schemas 1–3 不在当前解码边界内。
+标识宿主的渲染、语义候选和计数策略。PacketID 由 `ATE-CONTEXT-PACKET` + NUL 和不含 ID 的完整 schema-5 字节哈希得出。
+预发布 Packet schemas 1–4 不在当前解码边界内。
 
 `knowledge.SelectContext` 使用有界边际收益/成本启发式和稳定 BundleID tie-break；相同证据只计一次，
 必要结论的支撑/反例闭包不能拆除。mandatory 超输入容量返回 ErrContextBudgetUnsatisfied，没有半份计划。
@@ -104,3 +115,11 @@ schema4 的字段顺序为既有 Observation 字段、PayloadKind、ImportedFrom
 先前实验曾让三个受保护 method 携带 StateBatch；这种编码不再接受，也不会自动解释或迁移为
 新 canonical intent。当前机器 registry 记录 V1 候选格式边界。旧实验 store 需要使用产生它的版本检查/导出，再显式
 迁移到新 store。不能通过关闭校验把旧 mutation 当成受保护的 typed command。
+
+## 2026-11-06 atomic derivation contract
+
+Packet 5 and Summary 2 publish explicit source adjacency in the same P1 transaction as their primary record. Earlier Packet 4 / Summary 1 bytes are rejection-only pre-release fixtures, not supported replay inputs. Unknown versions return `knowledge.ErrUnsupportedSchema`. Summary 2 changes both its canonical version and source-set digest version; the independent generator is `knowledge/testdata/generate_summary.py`.
+
+The `knowledge.derivation` family uses `ATE-DERIVATION` + NUL, uint schema=1, string ObjectID, uint source count and strictly sorted unique source ID strings. The object cannot depend on itself in an adjacency record. Global closure handles cycles between a packet and its raw input using a visited set. Per identity, declarations are unioned monotonically.
+
+ExecutionKnowledge stores Packet/Summary links under the Space radix; LiveControl stores final-answer Activity links under a canonical tuple containing Space and ObjectID. A record's core Value object belongs to that Space. Current policy walks both slots with cumulative limits (16,384 nodes, 65,536 edges and bounded IO), including raw provider requests and raw summary outputs. No knowledge partition scan is used to discover provenance.

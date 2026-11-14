@@ -146,12 +146,26 @@ type journalSegment struct {
 	closed     bool
 }
 
-// Journal is a segmented physical publisher. It serializes all IO
-// and retains its owner lock until Close. Transaction inputs must not be mutated
+// Journal is a segmented physical publisher. It serializes publication and
+// retains read layouts and its owner lock until Close. Inputs must not be mutated
 // during preparation. It deliberately does not implement api.Committer: domain execution,
 // durable receipt lookup, authorization and state replay belong above it.
 type Journal struct {
-	mu               sync.Mutex
+	mu       sync.Mutex
+	writerMu sync.Mutex
+	journalWriterState
+	state          JournalState
+	fenceCause     error
+	closeRequested bool
+	readerPins     map[*PinnedReader]struct{}
+	activeReads    map[*logicalReader]struct{}
+	readsDone      chan struct{}
+}
+
+// The writer owns this mutex-free state while preparing P1. Published layout
+// fields are installed together under Journal.mu; readers retain value snapshots.
+// txIDs and physical retirement progress belong exclusively to writerMu.
+type journalWriterState struct {
 	io               DurableIO
 	owner            OwnerLock
 	segment          DurableFile
@@ -165,14 +179,9 @@ type Journal struct {
 	publication      Publication
 	prefix           hash.Hash
 	txIDs            map[model.TxID]struct{}
-	state            JournalState
-	fenceCause       error
 	segmentClosed    bool
 	ownerClosed      bool
 	manifest         Manifest
-	maintenanceDone  chan struct{}
-	closeRequested   bool
-	readerPins       map[*PinnedReader]struct{}
 	retiredSegments  []*retiredSegment
 	retirementIntent string
 }
@@ -306,11 +315,11 @@ func CreateJournal(d DurableIO, options JournalOptions) (_ *Journal, err error) 
 		return nil, err
 	}
 	p := publicationFor(id, m)
-	return &Journal{io: d, owner: owner, segment: segment, identity: id, identityDigest: idDigest, headerDigest: headerDigest,
-		segmentID: segmentID, options: o, publication: p, prefix: prefix, txIDs: make(map[model.TxID]struct{}), state: JournalReady, manifest: m,
+	return &Journal{state: JournalReady, journalWriterState: journalWriterState{io: d, owner: owner, segment: segment, identity: id, identityDigest: idDigest, headerDigest: headerDigest,
+		segmentID: segmentID, options: o, publication: p, prefix: prefix, txIDs: make(map[model.TxID]struct{}), manifest: m,
 		segments: []*journalSegment{{descriptor: SegmentDescriptor{SegmentID: segmentID, HeaderSize: SegmentHeaderSize,
 			HeaderDigest: headerDigest, DataEnd: SegmentHeaderSize, PrefixDigest: hashDigest(prefix), LogicalStart: SegmentHeaderSize,
-			LogicalEnd: SegmentHeaderSize, StartPosition: genesis, EndPosition: genesis}, file: segment, prefix: prefix}}}, nil
+			LogicalEnd: SegmentHeaderSize, StartPosition: genesis, EndPosition: genesis}, file: segment, prefix: prefix}}}}, nil
 }
 
 func publicationFor(id Identity, m Manifest) Publication {
@@ -368,34 +377,7 @@ func (j *Journal) Publish(ctx context.Context, tx Transaction) (Publication, err
 }
 
 func (j *Journal) publish(ctx context.Context, tx Transaction) (PublishedTransaction, error) {
-	if err := ctx.Err(); err != nil {
-		return PublishedTransaction{}, err
-	}
-	j.mu.Lock()
-	defer j.mu.Unlock()
-	if err := j.writable(); err != nil {
-		return PublishedTransaction{}, err
-	}
-	if err := ctx.Err(); err != nil {
-		return PublishedTransaction{}, err
-	}
-	if j.publication.Generation == ^uint64(0) || j.publication.Position.LSN == ^uint64(0) ||
-		j.publication.Position.LSN >= j.options.MaxPublishedTransactions {
-		return PublishedTransaction{}, ErrLimit
-	}
-	// Keep the single-transaction precondition and duplicate rejection ahead
-	// of encoding, as in the original publisher.
-	if tx.LSN != j.publication.Position.LSN+1 || tx.PreviousDigest != j.publication.Position.Digest {
-		return PublishedTransaction{}, ErrPrecondition
-	}
-	if _, exists := j.txIDs[tx.TxID]; exists {
-		return PublishedTransaction{}, ErrDuplicateTransaction
-	}
-	prepared, err := PrepareTransaction(tx, j.options.Limits)
-	if err != nil {
-		return PublishedTransaction{}, err
-	}
-	batch, err := j.publishPreparedBatchLocked(ctx, []*PreparedTransaction{prepared})
+	batch, err := j.publishBatch(ctx, nil, &tx)
 	if err != nil {
 		return PublishedTransaction{}, err
 	}
@@ -409,22 +391,37 @@ func (j *Journal) publish(ctx context.Context, tx Transaction) (PublishedTransac
 // its DurableIO object after Journal.Close succeeds.
 func (j *Journal) Close() error {
 	j.mu.Lock()
-	for j.maintenanceDone != nil {
-		j.closeRequested = true
-		done := j.maintenanceDone
-		j.mu.Unlock()
-		<-done
-		j.mu.Lock()
-	}
-	defer j.mu.Unlock()
 	if j.state == JournalClosed {
+		j.mu.Unlock()
+		return nil
+	}
+	// Close revokes new grants before waiting for the IO owner. A running P1
+	// or maintenance operation keeps its writer ownership until completion.
+	j.closeRequested = true
+	j.mu.Unlock()
+	j.writerMu.Lock()
+	defer j.writerMu.Unlock()
+	j.mu.Lock()
+	if j.state == JournalClosed {
+		j.mu.Unlock()
 		return nil
 	}
 	j.state = JournalClosing
 	if len(j.readerPins) > 0 {
+		j.mu.Unlock()
 		return ErrReadersPinned
 	}
-	for _, pending := range pendingCleanups(j.fenceCause) {
+	for len(j.activeReads) > 0 {
+		done := j.readsDone
+		j.mu.Unlock()
+		<-done
+		j.mu.Lock()
+	}
+	cause := j.fenceCause
+	j.mu.Unlock()
+	// These handles and their retry flags belong to writerMu. The metadata
+	// mutex stays available while a native Close or owner unlock is stalled.
+	for _, pending := range pendingCleanups(cause) {
 		if err := pending.Close(); err != nil {
 			return err
 		}
@@ -478,6 +475,8 @@ func (j *Journal) Close() error {
 		}
 		j.ownerClosed = true
 	}
+	j.mu.Lock()
 	j.state = JournalClosed
+	j.mu.Unlock()
 	return nil
 }

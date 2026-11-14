@@ -10,20 +10,35 @@ import (
 )
 
 const CommandSchema uint64 = 1
+const LocalCommandSchema uint64 = 2
 const MaxCommandBytes = 1 << 20
 const commandDomain = "ATE-GRAPH-COMMAND\x00"
 
 var ErrCommandShape = errors.New("graph command must select one valid operation")
 
+// LocalCommand reports whether the command selects the local command schema.
+// It recognizes the envelope even when its body is malformed.
+func LocalCommand(raw []byte) bool {
+	if !bytes.HasPrefix(raw, []byte(commandDomain)) {
+		return false
+	}
+	version, err := codec.NewDecoder(raw[len(commandDomain):]).Uint()
+	return err == nil && version == LocalCommandSchema
+}
+
 // Command is the small, closed graph command set used by the embedded
 // API. The canonical intent is admitted before the core validates it against
 // its private BranchRefs candidate. Callers cannot submit replacement state.
 type Command struct {
-	AddRevision *AddRevisionCommand
-	Fork        *ForkCommand
-	Advance     *AdvanceBranchCommand
-	Join        *JoinCommand
-	Prune       *PruneBranchCommand
+	AddRevision   *AddRevisionCommand
+	Fork          *ForkCommand
+	Advance       *AdvanceBranchCommand
+	Join          *JoinCommand
+	Prune         *PruneBranchCommand
+	ForkLocal     *ForkLocalCommand
+	WriteBranch   *WriteBranchCommand
+	JoinLocal     *JoinLocalCommand
+	PublishBranch *PublishBranchCommand
 }
 
 type AddRevisionCommand struct {
@@ -43,7 +58,8 @@ type AdvanceBranchCommand struct {
 	Head     model.RevisionID
 }
 
-// JoinCommand names immutable inputs and the exact live roots to replace.
+// JoinCommand merges historical revisions and replaces the current domain root
+// of the entire Space. Use JoinLocal and PublishBranch for isolated branches.
 // The engine computes the resulting tree and Revision; no output root is
 // supplied by the caller. Resolutions may address existing conflicts only.
 type JoinCommand struct {
@@ -77,6 +93,14 @@ func (c Command) Kind() string {
 		return "join"
 	case c.Prune != nil:
 		return "prune"
+	case c.ForkLocal != nil:
+		return "fork_local"
+	case c.WriteBranch != nil:
+		return "write_branch"
+	case c.JoinLocal != nil:
+		return "join_local"
+	case c.PublishBranch != nil:
+		return "publish_branch"
 	default:
 		return ""
 	}
@@ -99,6 +123,11 @@ func (c Command) selected() int {
 	if c.Prune != nil {
 		n++
 	}
+	for _, selected := range []bool{c.ForkLocal != nil, c.WriteBranch != nil, c.JoinLocal != nil, c.PublishBranch != nil} {
+		if selected {
+			n++
+		}
+	}
 	return n
 }
 
@@ -108,6 +137,9 @@ func (c Command) selected() int {
 func EncodeCommand(space model.SpaceID, c Command) ([]byte, error) {
 	if !validText(string(space)) || c.selected() != 1 {
 		return nil, ErrCommandShape
+	}
+	if c.ForkLocal != nil || c.WriteBranch != nil || c.JoinLocal != nil || c.PublishBranch != nil {
+		return encodeLocalCommand(space, c)
 	}
 	b := codec.AppendUint([]byte(commandDomain), CommandSchema)
 	b, _ = codec.AppendString(b, string(space))
@@ -220,6 +252,9 @@ func DecodeCommand(raw []byte) (model.SpaceID, Command, error) {
 	v, err := d.Uint()
 	if err != nil {
 		return "", Command{}, err
+	}
+	if v == LocalCommandSchema {
+		return decodeLocalCommand(raw, d)
 	}
 	if v != CommandSchema {
 		return "", Command{}, ErrUnsupportedSchema

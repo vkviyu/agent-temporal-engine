@@ -38,12 +38,12 @@
       "id": "agent.control",
       "selector": "schema",
       "domain": "ATE-AGENT-CONTROL\\0",
-      "layout": "control5-effect-contract-retry-v1",
+      "layout": "control6-output-capture-final-answer-effect-retry-v1",
       "status": "frozen",
       "migration": "preserve-history",
       "versions": [
         {
-          "number": 5,
+          "number": 6,
           "decode": true,
           "replay": true,
           "write": true
@@ -69,6 +69,7 @@
       "id": "agent.snapshot",
       "selector": "schema",
       "domain": "ATE-AGENT-SNAPSHOT\\0",
+      "layout": "output-capture-stream-and-final-answer-v1",
       "status": "frozen",
       "migration": "preserve-history",
       "versions": [
@@ -302,6 +303,12 @@
           "number": 1,
           "decode": true,
           "replay": true,
+          "write": false
+        },
+        {
+          "number": 2,
+          "decode": true,
+          "replay": true,
           "write": true
         }
       ]
@@ -315,6 +322,12 @@
       "versions": [
         {
           "number": 1,
+          "decode": true,
+          "replay": true,
+          "write": true
+        },
+        {
+          "number": 2,
           "decode": true,
           "replay": true,
           "write": true
@@ -333,6 +346,12 @@
           "decode": true,
           "replay": true,
           "write": true
+        },
+        {
+          "number": 2,
+          "decode": true,
+          "replay": true,
+          "write": true
         }
       ]
     },
@@ -348,6 +367,44 @@
           "decode": true,
           "replay": true,
           "write": true
+        },
+        {
+          "number": 3,
+          "decode": true,
+          "replay": true,
+          "write": true
+        }
+      ]
+    },
+    {
+      "id": "investigation.checkpoint",
+      "selector": "schema",
+      "domain": "ATE-INVESTIGATION-CHECKPOINT\\0v1\\0",
+      "layout": "canonical-json-owner-versioned-v1",
+      "status": "frozen",
+      "migration": "preserve-history",
+      "versions": [
+        {
+          "number": 1,
+          "decode": true,
+          "replay": true,
+          "write": true
+        }
+      ]
+    },
+    {
+      "id": "investigation.update",
+      "selector": "schema",
+      "domain": "ATE-INVESTIGATION-UPDATE\\0v1\\0",
+      "layout": "canonical-json-versioned-delta-v1",
+      "status": "frozen",
+      "migration": "preserve-history",
+      "versions": [
+        {
+          "number": 1,
+          "decode": true,
+          "replay": true,
+          "write": true
         }
       ]
     },
@@ -355,6 +412,22 @@
       "id": "knowledge.command",
       "selector": "schema",
       "domain": "ATE-KNOWLEDGE-COMMAND\\0",
+      "status": "frozen",
+      "migration": "preserve-history",
+      "versions": [
+        {
+          "number": 1,
+          "decode": true,
+          "replay": true,
+          "write": true
+        }
+      ]
+    },
+    {
+      "id": "knowledge.derivation",
+      "selector": "schema",
+      "domain": "ATE-DERIVATION\\0",
+      "layout": "object-sorted-source-adjacency-v1",
       "status": "frozen",
       "migration": "preserve-history",
       "versions": [
@@ -403,12 +476,12 @@
       "id": "knowledge.packet",
       "selector": "schema",
       "domain": "ContextPacket",
-      "layout": "packet4-context-requirements-v1",
+      "layout": "packet5-requirements-atomic-derivation-v1",
       "status": "frozen",
       "migration": "preserve-history",
       "versions": [
         {
-          "number": 4,
+          "number": 5,
           "decode": true,
           "replay": true,
           "write": true
@@ -423,7 +496,7 @@
       "migration": "preserve-history",
       "versions": [
         {
-          "number": 1,
+          "number": 2,
           "decode": true,
           "replay": true,
           "write": true
@@ -625,6 +698,14 @@
   ],
   "capabilities": [
     {
+      "id": "agent/task-trace-v1",
+      "methods": [
+        "apply_task_trace",
+        "get_task_trace",
+        "get_task_trace_evidence"
+      ]
+    },
+    {
       "id": "agent/v1",
       "methods": [
         "apply_agent",
@@ -708,6 +789,13 @@
         "apply_graph",
         "get_graph_branch",
         "get_graph_revision"
+      ]
+    },
+    {
+      "id": "investigation/v1",
+      "methods": [
+        "get_investigation",
+        "update_investigation"
       ]
     },
     {

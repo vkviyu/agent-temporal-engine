@@ -32,7 +32,7 @@ func ContentReferences(s Snapshot) []model.ObjectID {
 		refs = append(refs, invocation.ToolDefinition)
 	}
 	for _, a := range r.ActivitySpecs {
-		refs = append(refs, a.Request, a.Contract.Definition)
+		refs = append(refs, a.Request, a.Contract.Definition, a.FinalAnswerInput)
 	}
 	for _, a := range r.Actions {
 		refs = append(refs, a.InputObjects...)

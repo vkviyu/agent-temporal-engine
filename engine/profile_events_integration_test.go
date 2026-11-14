@@ -88,7 +88,7 @@ func TestProfileEventsBindWorkSubjectsStreamsAndReplayIdentity(t *testing.T) {
 			}
 		}
 	}
-	if manifest == nil || manifest.SchemaVersion != 2 || manifest.ProfileRegistryVersion != 1 || len(manifest.ProfileEvents) != len(start.Unit.Steps)+1 || len(facts) != len(start.Unit.Steps)+1 {
+	if manifest == nil || manifest.SchemaVersion != 2 || manifest.ProfileRegistryVersion != eventlog.ProfileRegistryVersion || len(manifest.ProfileEvents) != len(start.Unit.Steps)+1 || len(facts) != len(start.Unit.Steps)+1 {
 		t.Fatalf("Work event manifest=%+v facts=%+v", manifest, facts)
 	}
 	streams := map[string]bool{}
@@ -160,7 +160,7 @@ func TestProfileAttemptCausalityIsDistinctFromStreamOrder(t *testing.T) {
 	recoveryCoreControl(t, s, "cause-create", agentprofile.ControlCommand{CreateActivity: &agentprofile.CreateActivityCommand{Spec: spec, Authority: authority}})
 	recoveryCoreControl(t, s, "cause-claim", agentprofile.ControlCommand{ClaimAttempt: &agentprofile.ClaimAttemptCommand{Activity: spec.Activity, Attempt: "cause-attempt", Sequence: 1, Authority: authority}})
 	recoveryCoreControl(t, s, "cause-dispatch", agentprofile.ControlCommand{DispatchAttempt: &agentprofile.DispatchAttemptCommand{Attempt: "cause-attempt", Authority: authority, Evidence: proof}})
-	result := agentprofile.ActivityResult{ID: "cause-result", Activity: spec.Activity, Attempt: "cause-attempt", RequestDigest: spec.RequestDigest, Incarnation: 1, Outcome: "success", Payload: []byte("done")}
+	result := agentprofile.ActivityResult{Capture: "full", ID: "cause-result", Activity: spec.Activity, Attempt: "cause-attempt", RequestDigest: spec.RequestDigest, Incarnation: 1, Outcome: "success", Payload: []byte("done")}
 	recoveryCoreControl(t, s, "cause-capture", agentprofile.ControlCommand{CaptureResult: &agentprofile.CaptureResultCommand{Result: result}})
 	recoveryCoreControl(t, s, "cause-accept", agentprofile.ControlCommand{AcceptActivity: &agentprofile.AcceptActivityCommand{Activity: spec.Activity, Result: result.ID, ExpectedVersion: 1, Authority: authority, Evidence: proof}})
 	facts := map[string]model.Event{}

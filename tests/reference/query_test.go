@@ -140,7 +140,7 @@ func TestIndependentQueryProgressExactRecoveryAndReceiptHistory(t *testing.T) {
 	ack(store.Commit(ctx, claim))
 	want.Observe("Control.ClaimAttempt")
 	dispatchQueryActivity(t, store, want, "model-dispatch", spec, "model-attempt", digest("a"), len(input))
-	result := agentprofile.ActivityResult{ID: "model-result", Activity: spec.Activity, Attempt: "model-attempt", RequestDigest: spec.RequestDigest, Incarnation: 1, Outcome: "success", Payload: []byte("answer")}
+	result := agentprofile.ActivityResult{Capture: "full", ID: "model-result", Activity: spec.Activity, Attempt: "model-attempt", RequestDigest: spec.RequestDigest, Incarnation: 1, Outcome: "success", Payload: []byte("persisted answer")}
 	ack(store.Commit(ctx, control("model-capture", agentprofile.ControlCommand{CaptureResult: &agentprofile.CaptureResultCommand{Result: result}})))
 	want.Observe("Control.CaptureResult")
 	next := control("model-settle", agentprofile.ControlCommand{SettleActivity: &agentprofile.SettleActivityCommand{Activity: spec.Activity, Status: "settled", Evidence: digest("b")}})
@@ -166,7 +166,7 @@ func TestIndependentQueryProgressExactRecoveryAndReceiptHistory(t *testing.T) {
 	want.Observe("Work.query_decision")
 	want.Observe("Control.AcceptActivity")
 	compare("decision", nil, want.Progress)
-	answer := api.ApplyWorkRequest{Key: key("query-answer"), Unit: api.WorkUnit{Kind: "query_answer", Query: q.ID, QueryTurn: &api.QueryTurn{ExpectedVersion: 2, Sequence: 1, AdapterVersion: "query/v1", Phase: "answered", Source: source}, Steps: []api.WorkStep{step(agentprofile.ControlCommand{AnswerQuery: &agentprofile.AnswerQueryCommand{Query: q.ID, Slot: "final", Kind: "final", Final: true, ExpectedVersion: 1, Body: []byte("persisted answer")}})}}}
+	answer := api.ApplyWorkRequest{Key: key("query-answer"), Unit: api.WorkUnit{Kind: "query_answer", Query: q.ID, QueryTurn: &api.QueryTurn{ExpectedVersion: 2, Sequence: 1, AdapterVersion: "query/v1", Phase: "answered", Source: source}, Steps: []api.WorkStep{step(agentprofile.ControlCommand{AnswerQuery: &agentprofile.AnswerQueryCommand{Query: q.ID, Slot: "final", Kind: "final", Final: true, ExpectedVersion: 1, Body: []byte("persisted answer"), GeneratedFrom: result.ID}})}}}
 	if err := want.Advance("answer", 2, 1, "query/v1", "answered", querySourceIdentity(source), "", "", "", false); err == nil {
 		t.Fatal("oracle allowed unreceipted continuation")
 	}
@@ -186,6 +186,15 @@ func TestIndependentQueryProgressExactRecoveryAndReceiptHistory(t *testing.T) {
 	want.Observe("Control.AnswerQuery")
 	compareQueryEventFacts(t, store, want)
 	compare("answer", nil, want.Progress)
+	// This is a true Query-only completion: no Task was ever started, so the
+	// final AnswerQuery is valid without manufacturing a TaskOutcome.
+	finalState, e := store.GetAgentState(ctx, api.ReadAgentStateRequest{Space: "space", Principal: "owner"})
+	if e != nil {
+		t.Fatal(e)
+	}
+	if len(finalState.Snapshot.Tasks) != 0 || len(finalState.Snapshot.Executions) != 0 || len(finalState.Snapshot.Steps) != 0 {
+		t.Fatal("query-only answer crossed into the task lifecycle")
+	}
 	firstAnchor := model.SnapshotAnchor{Space: "space", Fence: openAck.Fence}
 	compare("historical open", &firstAnchor, initialProgress)
 	other := firstRead

@@ -113,16 +113,19 @@ func (r *replayReader) release() {
 	r.reader.reader = nil
 }
 
-// ReadAt reads only the current published prefix and serializes with publish,
-// close, and fencing. Underlying read failures remain IO failures; callers that
-// authenticate semantic content can explicitly Fence after a verification error.
+// ReadAt captures the current published prefix under the state mutex and reads
+// its retained files outside that mutex. Underlying read failures remain IO
+// failures; a concurrent semantic Fence suppresses the in-progress result.
 func (j *Journal) ReadAt(p []byte, off int64) (int, error) {
 	j.mu.Lock()
-	defer j.mu.Unlock()
 	if err := j.ready(); err != nil {
+		j.mu.Unlock()
 		return 0, err
 	}
-	return j.logicalReader().ReadAt(p, off)
+	reader := j.beginRead(j.logicalReader())
+	j.mu.Unlock()
+	n, err := reader.ReadAt(p, off)
+	return j.finishRead(reader, p, n, err)
 }
 
 // Fence disables new reads and publications after a trusted semantic layer

@@ -1,0 +1,2 @@
+open err=replay transaction 2: unsupported knowledge schema: packet 4 verified=false scanned=0
+exit status 1

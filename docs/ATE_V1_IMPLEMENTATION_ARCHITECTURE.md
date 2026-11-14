@@ -1,6 +1,6 @@
 # ATE 第一版实施架构
 
-> 本文保留完整 V1 目标。当前候选格式为 Control 5、Invocation 2、Continuation opcode 8、Work 1、Emission 3 和 Packet 4。2026-11-03 独立审计保留当时的反例和证据边界。本文末尾记录当前实现与待验收项，严格 V1 验收仍开放。 [独立审计](validation/V1_INDEPENDENT_CURRENT_AUDIT_2026-11-03.md) · [格式清单](formats/ate-v1-manifest-2026-11-02.md)
+> 完整 V1 目标保持不变。当前格式：Control 6、Invocation 2、Continuation opcode 8、Work 1、Emission 3、Packet 5、Summary 2。严格验收仍开放；历史日期的已完成结论不能覆盖后续发现的反例。当前实现、验证和真实剩余项以 [2026-11-06 交叉审计](validation/V1_CROSS_AUDIT_2026-11-06.md) 为准。
 >
 > 2026-11-01 的领域命令、Key/Cursor 与 Node 边界核对见 [文档—代码审计](validation/V1_DOCUMENT_CODE_CROSS_AUDIT_2026-11-01.md)。以下保留完整实施目标；未收口项不能通过改写文档被称为已完成。
 
@@ -696,6 +696,14 @@ Fenced 不接收新 RecordResult，未持久的外部回执不能承诺不丢；
 
 未来通知只是已发布事实的交付层。稳定 ID、LSN/ordinal、SnapshotAnchor、明确保留闭包、唯一动作槽与原子命令保留扩展空间；第一版不建消费者账本。
 
+### 12.5 长程任务的三个发布面
+
+执行事实由 Agent Profile 与 Event Registry 生成，任务轨迹使用可重建的事件索引。索引按 Space、认证主体以及 Query、Task、Execution 查找发生记录。读取先固定发布位置，再有界遍历记录中的因果边。宿主提交的解释作为独立版本写入 ExecutionKnowledge，保留引用与派生依赖。
+
+上下文记录由执行知识分区保存。Observation 的序列索引、按 ID 的索引及 ContextPacket 指向不可变记录。新写入追加选定记录和索引键，固定位置的读取和恢复沿用同一索引。派发验证重新检查当前可用性。过去已派发的 Packet 仍可用于受控审计。
+
+状态探索由 BranchRefs 持有。局部分支推进以分支版本和执行授权为前置条件。显式发布以分支已发布位置及领域根为前置条件，只应用变更集。选中子执行结果、采用其知识以及合并其状态分别由各自命令确认。
+
 ## 13. 库服务与本地协议
 
 ### 13.1 组装关系
@@ -997,7 +1005,7 @@ archive 不写 LiveControl、DomainStates 或本地 authority；formats registry
 
 ## 20. Strict V1 实施审计状态（2026-11-04）
 
-当前候选格式为 Control 5、Invocation 2、Continuation opcode 8、Work 1、Emission 3 和 Packet 4。
+当前验收格式为 Control 6、Invocation 2、Continuation opcode 8、Work 1、Emission 3、Packet 5 和 Summary 2。
 同一 reducer 校验已发布的当前 V1 命令、StateOps、receipt、event 和 snapshot。被替换的预发布
 Control、Invocation、Continuation、Emission、Packet 字节在对应解码边界拒绝。
 
@@ -1037,3 +1045,9 @@ cut 只按显式 adoption 决定成员。当前披露门还校验历史注解 pr
 11-02 和 11-03 段落中的“历史”状态只描述当时审计快照。当前源树已将 Work 原子门禁、有限重试、ToolDefinition、Emission dispatch、ReadDeliveryGrant 和 Packet 派生来源检查接入共享协调器。格式清单已加入 ToolDefinition schema 1，所有模型与工具派发经过 `emission_dispatch`。
 
 当前逐项交叉证据、普通/race/vet/build/Linux 交叉编译命令、真实模型工件和仍然需要外部平台证明的边界记录在 [V1 当前交叉验收续记](validation/V1_CURRENT_CROSS_CHECK_2026-11-05.md)。
+
+## 2026-11-06 实施校验
+
+Control 6 的流分块与显式 Capture、最终模型见证、Packet 5 / Summary 2 的原子来源邻接已经落地。邻接由固定 reducer 生成，和主记录进入同一个 StateOps、receipt 和 P1 边界；重放由当前协议重建同一写集。旧预发布 Packet 4 / Summary 1 明确 unsupported，不添加兼容 reducer。
+
+§6.2、§6.3、§11.3 的读切面、发布短锁和 writer 锁拆分已实现并完成回归。普通嵌入式读取在返回前消费同一种单次出站许可。新增普通读取接口按相同路径接入，包括任务轨迹和轨迹证据。 [实现与验收 L-01、L-02](validation/V1_CROSS_AUDIT_2026-11-06.md)

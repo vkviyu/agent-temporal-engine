@@ -48,7 +48,7 @@ func TestAgentPublicationUnknownNeverInstallsCandidate(t *testing.T) {
 			io.arm("current", gate)
 			pending := coordinatorCommit(e, context.Background(), request)
 			coordinatorWait(t, gate.entered)
-			if lookup := coordinatorLookup(t, e, request); lookup.Code != api.CodeInFlight || lookup.Result != (api.CommitResult{}) {
+			if lookup := coordinatorInFlight(t, e, request); lookup.Code != api.CodeInFlight || lookup.Result != (api.CommitResult{}) {
 				t.Fatalf("candidate escaped its admission flight: %+v", lookup)
 			}
 			gate.unblock()
@@ -118,7 +118,7 @@ func TestAgentWaiterCancellationDoesNotCancelAdmittedTransition(t *testing.T) {
 	coordinatorWait(t, gate.entered)
 	cancel()
 	coordinatorInterrupted(t, coordinatorWait(t, pending), context.Canceled)
-	if lookup := coordinatorLookup(t, e, request); lookup.Code != api.CodeInFlight {
+	if lookup := coordinatorInFlight(t, e, request); lookup.Code != api.CodeInFlight {
 		t.Fatalf("canceled waiter erased owned command: %+v", lookup)
 	}
 	retry := coordinatorCommit(e, context.Background(), request)

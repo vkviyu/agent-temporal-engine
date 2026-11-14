@@ -3,6 +3,8 @@ package engine
 import (
 	"context"
 	"errors"
+	"maps"
+	"slices"
 	"strings"
 	"testing"
 
@@ -14,6 +16,14 @@ import (
 )
 
 func TestProfileEventsMixedLegacyJournalReplaysWithoutInventingOldFacts(t *testing.T) {
+	t.Run("core-only", func(t *testing.T) { testMixedEventRegistry(t, 0, 1) })
+	t.Run("profile-registry-1", func(t *testing.T) {
+		testMixedEventRegistry(t, eventlog.LegacyProfileRegistryVersion, 2)
+	})
+}
+
+func testMixedEventRegistry(t *testing.T, registry uint64, oldCount int) {
+	t.Helper()
 	ctx := context.Background()
 	e, disk := coordinatorStore(t, Options{AgentProfile: true, EventProfile: true})
 	task := profileCoordinatorTask("legacy-event-task")
@@ -23,18 +33,26 @@ func TestProfileEventsMixedLegacyJournalReplaysWithoutInventingOldFacts(t *testi
 		t.Fatal(err)
 	}
 	var old api.CommitResult
+	historical := map[model.EventID]bool{}
 	func() {
 		e.mu.Lock()
 		defer e.mu.Unlock()
 		e.replayingEvents = true
-		e.replayEventRegistry = 0
+		e.replayEventRegistry = registry
 		defer func() { e.replayingEvents = false }()
 		plan, err := e.prepare(ctx, req, digest, model.TxID(strings.Repeat("a", 32)), 1, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if plan.event == nil || plan.event.SchemaVersion != 1 || len(plan.profileEvents) != 0 {
-			t.Fatal("fixture did not emit historical core1")
+		if plan.event == nil || plan.event.ProfileRegistryVersion != registry || len(plan.profileEvents) != oldCount-1 {
+			t.Fatal("fixture did not emit the historical registry")
+		}
+		historical[plan.event.ID] = true
+		for _, event := range plan.profileEvents {
+			if event.Attribution.Task != "" {
+				t.Fatal("fixture attached modern task attribution to a historical event")
+			}
+			historical[event.ID] = true
 		}
 		published, err := e.journal.PublishWithRecords(ctx, plan.transaction)
 		if err != nil {
@@ -54,8 +72,8 @@ func TestProfileEventsMixedLegacyJournalReplaysWithoutInventingOldFacts(t *testi
 			_ = current.Close()
 		}
 	})
-	if len(current.events) != 1 {
-		t.Fatal("upgrade invented profile facts for legacy transaction")
+	if got, want := slices.Sorted(maps.Keys(current.events)), slices.Sorted(maps.Keys(historical)); !slices.Equal(got, want) {
+		t.Fatalf("upgrade changed historical identities: got %v want %v", got, want)
 	}
 	if retry, err := current.Commit(ctx, req); err != nil || retry != old {
 		t.Fatalf("legacy retry changed: %+v %v", retry, err)
@@ -63,8 +81,9 @@ func TestProfileEventsMixedLegacyJournalReplaysWithoutInventingOldFacts(t *testi
 	x := agentprofile.Execution{ID: "new-execution", Task: task.ID, Actor: "actor", Incarnation: 1, AcceptedGoalEpoch: 1, Status: agentprofile.ExecutionReady}
 	modern := profileCoordinatorRequest(t, "new-execution", agentprofile.Command{Spawn: &x})
 	ack := coordinatorAck(t, coordinatorWait(t, coordinatorCommit(current, ctx, modern)))
-	if len(current.events) != 3 {
-		t.Fatalf("expected old core + new profile/core, got %d", len(current.events))
+	want := slices.Sorted(maps.Keys(current.events))
+	if len(want) != oldCount+2 {
+		t.Fatalf("expected old events + new profile/core, got %d", len(want))
 	}
 	if _, err := current.CompactAuditFull(ctx); err != nil {
 		t.Fatal(err)
@@ -77,7 +96,7 @@ func TestProfileEventsMixedLegacyJournalReplaysWithoutInventingOldFacts(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(current.events) != 3 {
+	if !slices.Equal(slices.Sorted(maps.Keys(current.events)), want) {
 		t.Fatal("mixed replay changed event identities")
 	}
 	if retry, err := current.Commit(ctx, modern); err != nil || retry != ack {

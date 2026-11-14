@@ -12,6 +12,42 @@ import (
 	"github.com/vkviyu/agent-temporal-engine/model"
 )
 
+func TestLegacyCompleteStepCannotBypassWorkWithoutAuthority(t *testing.T) {
+	ctx := context.Background()
+	s := newIntegrationStore(t, engine.Options{AgentProfile: true})
+	task := agentTask("unmanaged-task")
+	coreAgentCommit(t, s.e, api.ApplyAgentRequest{Key: agentKey("unmanaged-task"), Command: agentprofile.Command{CreateTask: &task}})
+	execution := agentprofile.Execution{ID: "unmanaged-execution", Task: task.ID, Actor: "driver", Incarnation: 1, AcceptedGoalEpoch: 1, Status: agentprofile.ExecutionReady}
+	created := coreAgentCommit(t, s.e, api.ApplyAgentRequest{Key: agentKey("unmanaged-execution"), Command: agentprofile.Command{Spawn: &execution}})
+	step := agentprofile.Step{Execution: execution.ID, Sequence: 1, GoalEpoch: 1, InputAnchor: created.Fence, Status: agentprofile.StepOpen}
+	coreAgentCommit(t, s.e, api.ApplyAgentRequest{Key: agentKey("unmanaged-step"), Command: agentprofile.Command{StartStep: &step}})
+	command := agentprofile.Command{CompleteStep: &agentprofile.CompleteStepCommand{Execution: execution.ID, Sequence: 1, Epoch: 1}}
+	body, err := agentprofile.EncodeCommand(command)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := integrationSnapshot(t, s.e)
+	for _, raw := range []bool{false, true} {
+		key := agentKey("unmanaged-complete-typed")
+		var out api.CommitResult
+		if raw {
+			key = agentKey("unmanaged-complete-raw")
+			out, err = s.e.Commit(ctx, api.CommitRequest{Space: key.Space, Principal: key.Principal, RequestID: key.RequestID, Method: api.MethodApplyAgent, Body: body})
+		} else {
+			out, err = s.e.ApplyAgent(ctx, api.ApplyAgentRequest{Key: key, Command: command})
+		}
+		lookup := integrationLookup(t, s.e, key)
+		if !errors.Is(err, engine.ErrWorkBoundary) || out.Code != api.CodeRejected || integrationSnapshot(t, s.e) != before || lookup.Code != api.CodeNotFoundAtFence {
+			t.Fatalf("legacy completion changed publication or receipts: %+v %v %+v", out, err, lookup)
+		}
+	}
+	s.reopen()
+	state, err := s.e.GetAgentState(ctx, api.ReadAgentStateRequest{Space: "host-space", Principal: "host-principal"})
+	if err != nil || len(state.Snapshot.Steps) != 1 || state.Snapshot.Steps[0].Status != agentprofile.StepOpen || len(state.Snapshot.Lifecycle.Continuations) != 0 {
+		t.Fatalf("legacy rejection changed the recovered step: %+v %v", state, err)
+	}
+}
+
 func TestFinishStepRequiresAtomicCheckpointAtFinalKnowledgeCut(t *testing.T) {
 	ctx := context.Background()
 	s, payload, source := knowledgeFixture(t)
@@ -41,8 +77,8 @@ func TestFinishStepRequiresAtomicCheckpointAtFinalKnowledgeCut(t *testing.T) {
 	out, err = s.e.ApplyAgent(ctx, api.ApplyAgentRequest{Key: agentKey("typed"), Command: agentprofile.Command{Control: &finish}})
 	reject("typed", out, err)
 
-	closeCheckpoint := workCheckpoint(t, "one", auth, before.Fence, "after-step", 0, nil, uint64(1))
-	foreignCheckpoint := workCheckpoint(t, "two", auth, before.Fence, "foreign-action", 0)
+	closeCheckpoint := workCheckpoint(t, "one", auth, before.Fence, "after-step", 0, 1)
+	foreignCheckpoint := workCheckpoint(t, "two", auth, before.Fence, "foreign-action", 0, 0)
 	second := knowledgeObservation(payload, source, "one", 2)
 	adopt, err := api.KnowledgeWorkStep(knowledge.Command{Observation: &second})
 	if err != nil {

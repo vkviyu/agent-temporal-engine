@@ -134,7 +134,7 @@ func (h *harness) primaryResult(execution string) string {
 	attempt := "primary-attempt-" + execution
 	h.raw(h.control(agentprofile.ControlCommand{ClaimAttempt: &agentprofile.ClaimAttemptCommand{Activity: spec.Activity, Attempt: attempt, Sequence: 1, Authority: auth}}))
 	h.raw(h.control(agentprofile.ControlCommand{DispatchAttempt: &agentprofile.DispatchAttemptCommand{Attempt: attempt, Authority: auth, Evidence: digest("d")}}))
-	result := agentprofile.ActivityResult{ID: resultID, Activity: spec.Activity, Attempt: attempt, RequestDigest: spec.RequestDigest, Incarnation: auth.Incarnation, Outcome: "success", Payload: []byte("delegate child")}
+	result := agentprofile.ActivityResult{Capture: "full", ID: resultID, Activity: spec.Activity, Attempt: attempt, RequestDigest: spec.RequestDigest, Incarnation: auth.Incarnation, Outcome: "success", Payload: []byte("delegate child")}
 	h.raw(h.control(agentprofile.ControlCommand{CaptureResult: &agentprofile.CaptureResultCommand{Result: result}}))
 	h.raw(h.control(agentprofile.ControlCommand{AcceptActivity: &agentprofile.AcceptActivityCommand{Activity: spec.Activity, Result: resultID, ExpectedVersion: 1, Authority: auth, Evidence: digest("e")}}))
 	h.decisions[execution] = resultID

@@ -150,6 +150,9 @@ func (ss *session) hello(raw []byte, correlation string) error {
 	if b, ok := ss.server.backend.(interface{ EventProfileEnabled() bool }); ok && b.EventProfileEnabled() {
 		capabilities = append(capabilities, "event/v1")
 	}
+	if b, ok := ss.server.backend.(taskTraceBackend); ok && b.TaskTraceEnabled() {
+		capabilities = append(capabilities, "agent/task-trace-v1")
+	}
 	if _, ok := ss.server.backend.(api.GraphQueries); ok {
 		capabilities = append(capabilities, "graph/query-v1")
 	}
@@ -165,12 +168,28 @@ func (ss *session) hello(raw []byte, correlation string) error {
 	if _, ok := ss.server.backend.(api.AnnotationCommands); ok {
 		capabilities = append(capabilities, "annotation/v1")
 	}
+	if _, ok := ss.server.backend.(investigationBackend); ok {
+		capabilities = append(capabilities, "investigation/v1")
+	}
 	if _, ok := ss.server.backend.(api.TransferCommands); ok {
 		capabilities = append(capabilities, "transfer/archive-v1")
 	}
 	return ss.reply(protocol.Response{Version: protocol.Version, CorrelationID: correlation, Body: mustJSON(protocol.HelloResult{Principal: ss.principal, Spaces: cred.Spaces, Capabilities: capabilities})})
 }
 func (ss *session) allowed(space model.SpaceID) bool { return ss.spaces[space] }
+
+func dispatchTyped[T any](ss *session, ctx context.Context, req protocol.Request, call func(context.Context, []byte) (T, error)) protocol.Response {
+	result, err := call(ctx, req.Body)
+	if err != nil {
+		return protocol.Response{
+			Version: protocol.Version, CorrelationID: req.CorrelationID,
+			Body:  mustJSON(result),
+			Error: &protocol.Error{Code: ss.classify(err), Message: err.Error()},
+		}
+	}
+	return protocol.Response{Version: protocol.Version, CorrelationID: req.CorrelationID, Body: mustJSON(result)}
+}
+
 func (ss *session) dispatch(ctx context.Context, req protocol.Request) protocol.Response {
 	fail := func(err error, body any) protocol.Response {
 		return protocol.Response{Version: protocol.Version, CorrelationID: req.CorrelationID, Body: mustJSON(body), Error: &protocol.Error{Code: ss.classify(err), Message: err.Error()}}
@@ -179,272 +198,70 @@ func (ss *session) dispatch(ctx context.Context, req protocol.Request) protocol.
 		return protocol.Response{Version: protocol.Version, CorrelationID: req.CorrelationID, Body: mustJSON(body)}
 	}
 	switch req.Method {
+	case "commit", "mutate", "lookup_request", "get_state", "snapshot":
+		return ss.dispatchCore(ctx, req, fail, ok)
+	case "open_view", "close_view", "get_view_state", "get_view_entries":
+		return ss.dispatchView(ctx, req, fail, ok)
+	}
+	switch req.Method {
 	case "resolve_publication":
-		r, err := ss.resolvePublication(ctx, req.Body)
-		if err != nil {
-			return fail(err, r)
-		}
-		return ok(r)
+		return dispatchTyped(ss, ctx, req, ss.resolvePublication)
 	case "diff_graph":
-		r, err := ss.diffGraph(ctx, req.Body)
-		if err != nil {
-			return fail(err, r)
-		}
-		return ok(r)
+		return dispatchTyped(ss, ctx, req, ss.diffGraph)
 	case "plan_graph_join":
-		r, err := ss.planGraphJoin(ctx, req.Body)
-		if err != nil {
-			return fail(err, r)
-		}
-		return ok(r)
+		return dispatchTyped(ss, ctx, req, ss.planGraphJoin)
 	case "trace_graph":
-		r, err := ss.traceGraph(ctx, req.Body)
-		if err != nil {
-			return fail(err, r)
-		}
-		return ok(r)
+		return dispatchTyped(ss, ctx, req, ss.traceGraph)
 	case "get_query_intake":
-		r, err := ss.getQueryIntake(ctx, req.Body)
-		if err != nil {
-			return fail(err, r)
-		}
-		return ok(r)
+		return dispatchTyped(ss, ctx, req, ss.getQueryIntake)
 	case "get_query_progress":
-		r, err := ss.getQueryProgress(ctx, req.Body)
-		if err != nil {
-			return fail(err, r)
-		}
-		return ok(r)
+		return dispatchTyped(ss, ctx, req, ss.getQueryProgress)
 	case "export_transfer":
-		r, err := ss.exportTransfer(ctx, req.Body)
-		if err != nil {
-			return fail(err, r)
-		}
-		return ok(r)
+		return dispatchTyped(ss, ctx, req, ss.exportTransfer)
 	case "import_transfer":
-		r, err := ss.importTransfer(ctx, req.Body)
-		if err != nil {
-			return fail(err, r)
-		}
-		return ok(r)
+		return dispatchTyped(ss, ctx, req, ss.importTransfer)
 	case "get_transfer":
-		r, err := ss.getTransfer(ctx, req.Body)
-		if err != nil {
-			return fail(err, r)
-		}
-		return ok(r)
+		return dispatchTyped(ss, ctx, req, ss.getTransfer)
 	case "apply_annotation":
-		r, err := ss.applyAnnotation(ctx, req.Body)
-		if err != nil {
-			return fail(err, r)
-		}
-		return ok(r)
+		return dispatchTyped(ss, ctx, req, ss.applyAnnotation)
 	case "get_annotations":
-		r, err := ss.getAnnotations(ctx, req.Body)
-		if err != nil {
-			return fail(err, r)
-		}
-		return ok(r)
+		return dispatchTyped(ss, ctx, req, ss.getAnnotations)
+	case "update_investigation":
+		return dispatchTyped(ss, ctx, req, ss.updateInvestigation)
+	case "get_investigation":
+		return dispatchTyped(ss, ctx, req, ss.getInvestigation)
+	case "apply_task_trace":
+		return dispatchTyped(ss, ctx, req, ss.applyTaskTrace)
+	case "get_task_trace":
+		return dispatchTyped(ss, ctx, req, ss.getTaskTrace)
+	case "get_task_trace_evidence":
+		return dispatchTyped(ss, ctx, req, ss.getTaskTraceEvidence)
 	case "apply_summary":
-		r, err := ss.applySummary(ctx, req.Body)
-		if err != nil {
-			return fail(err, r)
-		}
-		return ok(r)
+		return dispatchTyped(ss, ctx, req, ss.applySummary)
 	case "get_summary":
-		r, err := ss.getSummary(ctx, req.Body)
-		if err != nil {
-			return fail(err, r)
-		}
-		return ok(r)
+		return dispatchTyped(ss, ctx, req, ss.getSummary)
 	case "apply_emission":
-		r, err := ss.applyEmission(ctx, req.Body)
-		if err != nil {
-			return fail(err, r)
-		}
-		return ok(r)
+		return dispatchTyped(ss, ctx, req, ss.applyEmission)
 	case "get_emission":
-		r, err := ss.getEmission(ctx, req.Body)
-		if err != nil {
-			return fail(err, r)
-		}
-		return ok(r)
+		return dispatchTyped(ss, ctx, req, ss.getEmission)
 	case "apply_agent":
-		r, err := ss.applyAgent(ctx, req.Body)
-		if err != nil {
-			return fail(err, r)
-		}
-		return ok(r)
+		return dispatchTyped(ss, ctx, req, ss.applyAgent)
 	case "get_agent_state":
-		r, err := ss.getAgentState(ctx, req.Body)
-		if err != nil {
-			return fail(err, r)
-		}
-		return ok(r)
+		return dispatchTyped(ss, ctx, req, ss.getAgentState)
 	case "apply_graph":
-		r, err := ss.applyGraph(ctx, req.Body)
-		if err != nil {
-			return fail(err, r)
-		}
-		return ok(r)
+		return dispatchTyped(ss, ctx, req, ss.applyGraph)
 	case "get_graph_revision":
-		r, err := ss.getGraphRevision(ctx, req.Body)
-		if err != nil {
-			return fail(err, r)
-		}
-		return ok(r)
+		return dispatchTyped(ss, ctx, req, ss.getGraphRevision)
 	case "get_graph_branch":
-		r, err := ss.getGraphBranch(ctx, req.Body)
-		if err != nil {
-			return fail(err, r)
-		}
-		return ok(r)
+		return dispatchTyped(ss, ctx, req, ss.getGraphBranch)
 	case "apply_memory":
-		r, err := ss.applyMemory(ctx, req.Body)
-		if err != nil {
-			return fail(err, r)
-		}
-		return ok(r)
+		return dispatchTyped(ss, ctx, req, ss.applyMemory)
 	case "get_memory":
-		r, err := ss.getMemory(ctx, req.Body)
-		if err != nil {
-			return fail(err, r)
-		}
-		return ok(r)
+		return dispatchTyped(ss, ctx, req, ss.getMemory)
 	case "apply_knowledge":
-		r, err := ss.applyKnowledge(ctx, req.Body)
-		if err != nil {
-			return fail(err, r)
-		}
-		return ok(r)
+		return dispatchTyped(ss, ctx, req, ss.applyKnowledge)
 	case "get_knowledge":
-		r, err := ss.getKnowledge(ctx, req.Body)
-		if err != nil {
-			return fail(err, r)
-		}
-		return ok(r)
-	case "commit":
-		var w protocol.CommitRequest
-		if err := protocol.DecodeStrict(req.Body, &w); err != nil {
-			return fail(err, api.CommitResult{Code: api.CodeNotSubmitted})
-		}
-		if !ss.allowed(w.Space) {
-			return fail(ErrSpaceDenied, api.CommitResult{Code: api.CodeNotSubmitted, RequestID: w.RequestID})
-		}
-		r, err := ss.server.backend.Commit(ctx, api.CommitRequest{Space: w.Space, Principal: ss.principal, RequestID: w.RequestID, Method: w.Method, Body: w.Body, ExpectedFence: w.ExpectedFence})
-		if err != nil {
-			return fail(err, r)
-		}
-		return ok(r)
-	case "mutate":
-		var w protocol.MutateRequest
-		if err := protocol.DecodeStrict(req.Body, &w); err != nil {
-			return fail(err, api.CommitResult{Code: api.CodeNotSubmitted})
-		}
-		if !ss.allowed(w.Space) {
-			return fail(ErrSpaceDenied, api.CommitResult{Code: api.CodeNotSubmitted, RequestID: w.RequestID})
-		}
-		r, err := ss.server.backend.Mutate(ctx, api.MutateRequest{Key: model.RequestKey{Space: w.Space, Principal: ss.principal, RequestID: w.RequestID}, Batch: w.Batch, ExpectedFence: w.ExpectedFence})
-		if err != nil {
-			return fail(err, r)
-		}
-		return ok(r)
-	case "lookup_request":
-		var w protocol.LookupRequest
-		if err := protocol.DecodeStrict(req.Body, &w); err != nil {
-			return fail(err, api.LookupRequestResult{Code: api.CodeIndeterminate})
-		}
-		if !ss.allowed(w.Space) {
-			return fail(ErrSpaceDenied, api.LookupRequestResult{Code: api.CodeIndeterminate})
-		}
-		r, err := ss.server.backend.LookupRequest(ctx, api.LookupRequestRequest{Space: w.Space, Principal: ss.principal, RequestID: w.RequestID})
-		if err != nil {
-			return fail(err, r)
-		}
-		return ok(r)
-	case "get_state":
-		var w protocol.ReadStateRequest
-		if err := protocol.DecodeStrict(req.Body, &w); err != nil {
-			return fail(err, api.StateValueResult{})
-		}
-		if !ss.allowed(w.Space) {
-			return fail(ErrSpaceDenied, api.StateValueResult{})
-		}
-		r, err := ss.server.backend.GetState(ctx, api.ReadStateRequest{Space: w.Space, Key: w.Key})
-		if err != nil {
-			return fail(err, r)
-		}
-		return ok(r)
-	case "snapshot":
-		var empty protocol.Empty
-		if err := protocol.DecodeStrict(req.Body, &empty); err != nil {
-			return fail(err, api.StateSnapshot{})
-		}
-		if !ss.globalSnapshot {
-			return fail(ErrUnauthorized, api.StateSnapshot{})
-		}
-		r, err := ss.server.backend.Snapshot(ctx)
-		if err != nil {
-			return fail(err, r)
-		}
-		return ok(r)
-	case "open_view":
-		var w protocol.OpenViewRequest
-		if err := protocol.DecodeStrict(req.Body, &w); err != nil {
-			return fail(err, api.ViewDescriptor{})
-		}
-		if !ss.allowed(w.Space) {
-			return fail(ErrSpaceDenied, api.ViewDescriptor{})
-		}
-		r, err := ss.server.backend.OpenView(ctx, api.OpenViewRequest{Space: w.Space, Principal: ss.principal, Anchor: w.Anchor, Knowledge: w.Knowledge, Mode: w.Mode})
-		if err != nil {
-			return fail(err, r)
-		}
-		ss.views[r.Ref] = struct{}{}
-		return ok(r)
-	case "close_view":
-		var w protocol.CloseViewRequest
-		if err := protocol.DecodeStrict(req.Body, &w); err != nil {
-			return fail(err, struct{}{})
-		}
-		if _, owned := ss.views[w.Ref]; !owned {
-			return fail(ErrUnauthorized, struct{}{})
-		}
-		if err := ss.server.backend.CloseView(ctx, api.CloseViewRequest{Ref: w.Ref}); err != nil {
-			return fail(err, struct{}{})
-		}
-		delete(ss.views, w.Ref)
-		return ok(struct{}{})
-	case "get_view_state":
-		var w protocol.ReadViewRequest
-		if err := protocol.DecodeStrict(req.Body, &w); err != nil {
-			return fail(err, api.StateValueResult{})
-		}
-		if _, owned := ss.views[w.View]; !owned {
-			return fail(ErrUnauthorized, api.StateValueResult{})
-		}
-		r, err := ss.server.backend.GetViewState(ctx, api.ReadViewStateRequest{View: w.View, Key: w.Key})
-		if err != nil {
-			return fail(err, r)
-		}
-		return ok(r)
-	case "get_view_entries":
-		var w protocol.ReadViewEntriesRequest
-		if err := protocol.DecodeStrict(req.Body, &w); err != nil {
-			return fail(err, api.StateEntriesResult{})
-		}
-		if _, owned := ss.views[w.View]; !owned {
-			return fail(ErrUnauthorized, api.StateEntriesResult{})
-		}
-		backend, hasEntries := ss.server.backend.(entriesBackend)
-		if !hasEntries {
-			return fail(fmt.Errorf("%w: view entries", apiError(api.ErrorUnsupported)), api.StateEntriesResult{})
-		}
-		r, err := backend.GetViewEntries(ctx, api.ReadViewEntriesRequest{View: w.View, Limits: w.Limits})
-		if err != nil {
-			return fail(err, r)
-		}
-		return ok(r)
+		return dispatchTyped(ss, ctx, req, ss.getKnowledge)
 	default:
 		return fail(fmt.Errorf("%w: method", apiError(api.ErrorUnsupported)), struct{}{})
 	}

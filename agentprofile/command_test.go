@@ -209,7 +209,7 @@ func TestLifecycleCommandsRoundTripAndRestore(t *testing.T) {
 		{Lifecycle: &LifecycleCommand{PutQuery: &q}},
 		{Lifecycle: &LifecycleCommand{PutActivity: &Activity{ID: "a1", Execution: "exec", Kind: "tool", Step: 1, Status: "running", Version: 1}}},
 		{Lifecycle: &LifecycleCommand{PutAttempt: &Attempt{ID: "at1", Activity: "a1", Sequence: 1, Incarnation: 1, Status: "running"}}},
-		{Lifecycle: &LifecycleCommand{PutResult: &ActivityResult{ID: "r1", Activity: "a1", Attempt: "at1", Incarnation: 1, Outcome: "success", Payload: []byte("ok")}}},
+		{Lifecycle: &LifecycleCommand{PutResult: &ActivityResult{Capture: "full", ID: "r1", Activity: "a1", Attempt: "at1", Incarnation: 1, Outcome: "success", Payload: []byte("ok")}}},
 		{Lifecycle: &LifecycleCommand{PutMessage: &Message{ID: "m1", Sender: "exec", Recipient: "exec", GoalEpoch: 1, Payload: []byte("msg")}}},
 		{Lifecycle: &LifecycleCommand{ConsumeMessage: &MessageConsumption{Message: "m1", Recipient: "exec", Incarnation: 1, GoalEpoch: 1}}},
 	}

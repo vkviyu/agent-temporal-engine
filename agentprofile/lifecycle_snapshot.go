@@ -54,7 +54,7 @@ func validateLifecycleSnapshot(s LifecycleSnapshot) error {
 	}
 	seen = map[string]bool{}
 	for _, v := range s.Results {
-		if v.ID == "" || v.Activity == "" || v.Attempt == "" || v.Incarnation == 0 || v.Outcome == "" || seen[v.ID] {
+		if v.ID == "" || v.Activity == "" || v.Attempt == "" || v.Incarnation == 0 || v.Outcome == "" || !validResultCapture(v) || seen[v.ID] {
 			return ErrInvalid
 		}
 		seen[v.ID] = true

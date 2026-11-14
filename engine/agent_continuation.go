@@ -27,7 +27,7 @@ func (e *Engine) checkContinuationKnowledge(ctx context.Context, req api.CommitR
 				return err
 			}
 			anchor := model.SnapshotAnchor{Space: req.Space, Fence: e.publication.Fence(), Cursor: source.Cursor, Knowledge: source.Knowledge}
-			_, _, _, _, err := e.selectedKnowledge(ctx, e.roots, anchor, req.Principal)
+			_, _, _, _, err := e.selectedKnowledgeObservations(ctx, e.roots, anchor, req.Principal)
 			return err
 		}
 		// A public save may only name a real published producer. Earlier private
@@ -54,7 +54,7 @@ func (e *Engine) checkContinuationKnowledge(ctx context.Context, req api.CommitR
 		if err = e.authorizeKnowledge(ctx, e.roots, req.Space, req.Principal, *source.Knowledge); err != nil {
 			return err
 		}
-		_, _, _, _, err = e.selectedKnowledge(ctx, roots, anchor, req.Principal)
+		_, _, _, _, err = e.selectedKnowledgeObservations(ctx, roots, anchor, req.Principal)
 		return err
 	}
 	if p.KnowledgeFence == (model.CommitFence{}) && p.KnowledgeCursor == (model.Cursor{}) && p.KnowledgeKey == (model.KnowledgeKey{}) {
@@ -66,20 +66,17 @@ func (e *Engine) checkContinuationKnowledge(ctx context.Context, req api.CommitR
 		if err != nil {
 			return err
 		}
-		snapshot, _, _, err := e.loadKnowledge(ctx, e.roots, req.Space, req.Principal)
+		index, _, err := e.knowledgeIndexAt(ctx, e.roots, req.Space, req.Principal)
 		if err != nil {
 			return err
 		}
 		key := model.KnowledgeKey{Actor: execution.Actor, Execution: execution.ID}
-		for _, observation := range snapshot.Observations {
-			if observation.Key == key {
-				return model.ErrAnchorMismatch
-			}
+		sequence, err := index.sequence(ctx, key)
+		if err != nil {
+			return err
 		}
-		for _, packet := range snapshot.Packets {
-			if packet.Key != nil && *packet.Key == key {
-				return model.ErrAnchorMismatch
-			}
+		if sequence > 0 {
+			return model.ErrAnchorMismatch
 		}
 		return nil
 	}
@@ -91,6 +88,6 @@ func (e *Engine) checkContinuationKnowledge(ctx context.Context, req api.CommitR
 	if err := e.authorizeKnowledge(ctx, roots, req.Space, req.Principal, p.KnowledgeKey); err != nil {
 		return err
 	}
-	_, _, _, _, err = e.selectedKnowledge(ctx, roots, anchor, req.Principal)
+	_, _, _, _, err = e.selectedKnowledgeObservations(ctx, roots, anchor, req.Principal)
 	return err
 }

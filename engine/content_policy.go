@@ -88,11 +88,7 @@ func observationSummaryIDs(observations []knowledge.Observation) []model.ObjectI
 // checkDisclosureIDs is called while the engine lock protects the current
 // control roots. It never rewrites historical content after a withdrawal.
 func (e *Engine) checkDisclosureIDs(ctx context.Context, space model.SpaceID, ids []model.ObjectID) error {
-	current, _, _, err := e.loadMemory(ctx, e.roots, space)
-	if err != nil {
-		return err
-	}
-	return current.AccessPolicy().Check(ids, memory.AccessAudit)
+	return e.checkPolicyIDs(ctx, space, ids, memory.AccessAudit)
 }
 
 // checkViewDisclosure conservatively rejects a fixed View containing explicit
@@ -102,14 +98,13 @@ func (e *Engine) checkViewDisclosure(ctx context.Context, entry *viewEntry) erro
 	// This gate is called with the core lock held. Catalog expansion may read
 	// historical event metadata; its private cut must not reacquire that lock.
 	lockedEntry := *entry
-	lockedEntry.coreLocked = true
+	lockedEntry.coreLocked = e.readCut(ctx) == nil
 	entry = &lockedEntry
 	space := entry.descriptor.Anchor.Space
-	current, _, _, err := e.loadMemory(ctx, e.roots, space)
+	policy, err := e.readPolicy(ctx, space)
 	if err != nil {
 		return err
 	}
-	policy := current.AccessPolicy()
 	if !policy.HasDisclosureDenials() {
 		return nil
 	}
@@ -128,7 +123,7 @@ func (e *Engine) checkViewDisclosure(ctx context.Context, entry *viewEntry) erro
 		}
 	}
 	if e.options.AgentProfile && entry.descriptor.Anchor.Knowledge == nil {
-		ledger, _, found, err := loadAgentLedger(ctx, e.index, entry.roots.LiveControl, space, entry.principal)
+		ledger, _, found, err := loadAgentLedger(ctx, e.reader(ctx), entry.roots.LiveControl, space, entry.principal)
 		if err != nil {
 			return err
 		}
@@ -147,7 +142,7 @@ func (e *Engine) checkViewDisclosure(ctx context.Context, entry *viewEntry) erro
 		if err != nil {
 			return err
 		}
-		if err = policy.Check(append(knowledgePolicyIDs(snap), ids...), memory.AccessAudit); err != nil {
+		if err = e.checkPolicyIDs(ctx, space, append(knowledgePolicyIDs(snap), ids...), memory.AccessAudit); err != nil {
 			return err
 		}
 	}
@@ -165,21 +160,22 @@ func (e *Engine) checkViewDisclosure(ctx context.Context, entry *viewEntry) erro
 			ids = append(ids, model.ObjectID(ref.Entity.ID))
 		}
 	}
-	return policy.Check(ids, memory.AccessAudit)
+	return e.checkPolicyIDs(ctx, space, ids, memory.AccessAudit)
 }
 
 // checkCurrentActivityUse runs against the current candidate roots at each
 // managed dispatch stage. A packet's historical input cut does not allow a
-// later claim or dispatch to ignore a published source withdrawal. This checks
+// later claim or dispatch to ignore a source withdrawal or a superseded
+// memory. This checks
 // explicitly recorded provenance; it cannot detect arbitrary copied bytes and
 // is not an out-of-process network grant/revoke protocol.
 func (e *Engine) checkCurrentActivityUse(ctx context.Context, req api.CommitRequest, ledger *agentprofile.Ledger, spec agentprofile.ActivitySpec) error {
-	current, _, _, err := e.loadMemory(ctx, e.roots, req.Space)
+	ids := []model.ObjectID{spec.Request}
+	answerIDs, err := e.finalAnswerInputDisclosureIDs(ctx, spec.FinalAnswerInput)
 	if err != nil {
 		return err
 	}
-	policy := current.AccessPolicy()
-	ids := []model.ObjectID{spec.Request}
+	ids = append(ids, answerIDs...)
 	if spec.Contract.Definition != "" {
 		ids = append(ids, spec.Contract.Definition)
 	}
@@ -206,40 +202,29 @@ func (e *Engine) checkCurrentActivityUse(ctx context.Context, req api.CommitRequ
 			ids = append(ids, invocation.ToolDefinition)
 		}
 	}
-	if err := policy.Check(ids, memory.AccessReuse); err != nil {
+	if err := e.checkPolicyIDs(ctx, req.Space, ids, memory.AccessReuse); err != nil {
 		return err
 	}
 	if spec.ContextPacket == "" {
 		return nil
 	}
-	roots, _, err := e.rootsAtFence(ctx, spec.InputFence, true)
+	record, err := e.activityPacketAt(ctx, req.Space, req.Principal, spec.InputFence, spec.ContextPacket)
 	if err != nil {
 		return err
 	}
-	snapshot, _, _, err := e.loadKnowledge(ctx, roots, req.Space, req.Principal)
+	dependencies, err := e.packetDependencyIDs(ctx, record.roots, req.Space, req.Principal, record.packet, record.selected)
 	if err != nil {
 		return err
 	}
-	for _, packet := range snapshot.Packets {
-		if packet.ID == spec.ContextPacket {
-			selected := map[model.ObjectID]bool{}
-			for _, item := range packet.Items {
-				selected[item.Observation] = true
-			}
-			var summaries []model.ObjectID
-			for _, o := range snapshot.Observations {
-				if selected[o.ID] && o.PayloadKind == "summary" {
-					summaries = append(summaries, o.Payload)
-				}
-			}
-			dependencies, err := e.summaryDependencyIDs(ctx, roots, req.Space, req.Principal, summaries)
-			if err != nil {
-				return err
-			}
-			return policy.Check(append(packetPolicyIDs(packet, snapshot), dependencies...), memory.AccessReuse)
-		}
+	if err = e.checkPolicyIDs(ctx, req.Space, dependencies, memory.AccessReuse); err != nil {
+		return err
 	}
-	return agentprofile.ErrUnknown
+	// Historical dispatches using a v1 packet predate the eligibility gate.
+	// New dispatches always enforce it, including those using a legacy packet.
+	if isModelActivityRole(spec.Role) && (!e.replayingEvents || record.indexed) {
+		return e.validateCurrentTypedPacket(ctx, record.packet, record.selected, req.Space, req.Principal, false)
+	}
+	return nil
 }
 
 func activitySpecInSnapshot(snapshot agentprofile.Snapshot, id string) (agentprofile.ActivitySpec, error) {

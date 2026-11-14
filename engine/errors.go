@@ -3,11 +3,13 @@ package engine
 import (
 	"context"
 	"errors"
+
 	"github.com/vkviyu/agent-temporal-engine/agentprofile"
 	"github.com/vkviyu/agent-temporal-engine/annotation"
 	"github.com/vkviyu/agent-temporal-engine/api"
 	"github.com/vkviyu/agent-temporal-engine/codec"
 	"github.com/vkviyu/agent-temporal-engine/graph"
+	"github.com/vkviyu/agent-temporal-engine/investigation"
 	"github.com/vkviyu/agent-temporal-engine/knowledge"
 	"github.com/vkviyu/agent-temporal-engine/memory"
 	"github.com/vkviyu/agent-temporal-engine/model"
@@ -47,7 +49,7 @@ func ClassifyError(err error) api.ErrorClass {
 		return api.ErrorAnchorMismatch
 	case isLimit(err):
 		return api.ErrorResourceLimit
-	case errors.Is(err, annotation.ErrUnsupported) || errors.Is(err, ErrUnsupportedMethod) || errors.Is(err, ErrUnsupportedSchema) || errors.Is(err, storage.ErrUnsupported) || errors.Is(err, agentprofile.ErrCommandVersion):
+	case errors.Is(err, annotation.ErrUnsupported) || errors.Is(err, investigation.ErrUnsupported) || errors.Is(err, ErrUnsupportedMethod) || errors.Is(err, ErrUnsupportedSchema) || errors.Is(err, knowledge.ErrUnsupportedSchema) || errors.Is(err, storage.ErrUnsupported) || errors.Is(err, agentprofile.ErrCommandVersion):
 		return api.ErrorUnsupported
 	case errors.Is(err, api.ErrReadEmissionDenied) || errors.Is(err, agentprofile.ErrDurableScope) || errors.Is(err, agentprofile.ErrCommandScope) || errors.Is(err, memory.ErrCommandScope) || errors.Is(err, memory.ErrHistoryAccessDenied) || errors.Is(err, memory.ErrUseDenied):
 		return api.ErrorUnauthorized
@@ -55,7 +57,7 @@ func ClassifyError(err error) api.ErrorClass {
 		return api.ErrorInvalidRequest
 	case transferCommandRejection(err):
 		return api.ErrorInvalidRequest
-	case errors.Is(err, annotation.ErrInvalid) || errors.Is(err, knowledge.ErrInvalid) || errors.Is(err, knowledge.ErrDuplicateItem) || errors.Is(err, graph.ErrCommandShape) || errors.Is(err, memory.ErrCommandShape):
+	case errors.Is(err, annotation.ErrInvalid) || errors.Is(err, investigation.ErrInvalid) || errors.Is(err, knowledge.ErrInvalid) || errors.Is(err, knowledge.ErrDuplicateItem) || errors.Is(err, graph.ErrCommandShape) || errors.Is(err, memory.ErrCommandShape):
 		return api.ErrorInvalidRequest
 	case errors.Is(err, api.ErrReadAuthorizationChanged) || errors.Is(err, ErrWorkBoundary) || summaryCommandRejection(err) || annotationCommandRejection(err):
 		return api.ErrorConflict

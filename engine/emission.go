@@ -92,11 +92,11 @@ func decodeEmissionRecord(b []byte) (api.EmissionRecord, error) {
 
 func (e *Engine) loadEmission(ctx context.Context, roots model.RootSet, space model.SpaceID, principal model.PrincipalID, id string) (api.EmissionRecord, bool, error) {
 	root := roots.LiveControl
-	oid, found, err := state.Get(ctx, e.index, systemSpace, root, emissionStorageKey(space, principal, id))
+	oid, found, err := state.Get(ctx, e.reader(ctx), systemSpace, root, emissionStorageKey(space, principal, id))
 	if err != nil || !found {
 		return api.EmissionRecord{}, found, err
 	}
-	obj, err := readObject(ctx, e.index, oid)
+	obj, err := readObject(ctx, e.reader(ctx), oid)
 	if err != nil {
 		return api.EmissionRecord{}, false, err
 	}
@@ -148,11 +148,7 @@ func (e *Engine) checkEmissionContent(ctx context.Context, req api.CommitRequest
 }
 
 func (e *Engine) checkEmissionReuse(ctx context.Context, space model.SpaceID, ids []model.ObjectID) error {
-	current, _, _, err := e.loadMemory(ctx, e.roots, space)
-	if err != nil {
-		return err
-	}
-	return current.AccessPolicy().Check(ids, memory.AccessReuse)
+	return e.checkPolicyIDs(ctx, space, ids, memory.AccessReuse)
 }
 
 func (e *Engine) ApplyEmission(ctx context.Context, req api.ApplyEmissionRequest) (api.CommitResult, error) {
@@ -322,6 +318,11 @@ func emissionCommandRejection(err error) bool {
 }
 
 func (e *Engine) GetEmission(ctx context.Context, req api.ReadEmissionRequest) (api.EmissionResult, error) {
+	if ctx.Value(readDeliveryKey{}) == nil {
+		return embeddedReadDelivery(ctx, e, "get_emission", req.Principal, req, func(scoped context.Context) (api.EmissionResult, error) {
+			return e.GetEmission(scoped, req)
+		})
+	}
 	if err := ctx.Err(); err != nil {
 		return api.EmissionResult{}, err
 	}
@@ -334,14 +335,10 @@ func (e *Engine) GetEmission(ctx context.Context, req api.ReadEmissionRequest) (
 	if err := e.publicGate(); err != nil {
 		return api.EmissionResult{}, err
 	}
-	if err := e.mu.LockContext(ctx); err != nil {
+	if err := e.readReady(ctx); err != nil {
 		return api.EmissionResult{}, err
 	}
-	defer e.mu.Unlock()
-	if err := e.ready(); err != nil {
-		return api.EmissionResult{}, err
-	}
-	a := model.SnapshotAnchor{Space: req.Space, Fence: e.publication.Fence()}
+	a := model.SnapshotAnchor{Space: req.Space, Fence: e.readPublication(ctx).Fence()}
 	if req.Anchor != nil {
 		a = req.Anchor.Clone()
 	}
@@ -350,11 +347,11 @@ func (e *Engine) GetEmission(ctx context.Context, req api.ReadEmissionRequest) (
 	}
 	roots, root, err := e.rootsAtFence(ctx, a.Fence, false)
 	if err != nil {
-		return api.EmissionResult{}, e.knowledgeReadFailure(err)
+		return api.EmissionResult{}, e.knowledgeReadFailure(ctx, err)
 	}
 	r, found, err := e.loadEmission(ctx, roots, req.Space, req.Principal, req.ID)
 	if err != nil {
-		return api.EmissionResult{}, e.knowledgeReadFailure(err)
+		return api.EmissionResult{}, e.knowledgeReadFailure(ctx, err)
 	}
 	var ids []model.ObjectID
 	if found {

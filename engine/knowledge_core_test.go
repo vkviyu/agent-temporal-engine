@@ -220,11 +220,25 @@ func TestStateReadPublishesOneCoherentCutUnderConcurrentWrites(t *testing.T) {
 	}()
 	for i := 0; i < 30; i++ {
 		got, err := s.e.GetState(ctx, api.ReadStateRequest{Space: "host-space", Key: key})
+		if errors.Is(err, api.ErrReadAuthorizationChanged) {
+			continue
+		}
 		if err != nil {
 			t.Fatal(err)
 		}
 		anchor := model.SnapshotAnchor{Space: "host-space", Fence: got.Fence}
-		past, err := s.e.GetStateForMethodAnchor(ctx, api.ReadStateRequest{Space: "host-space", Key: key}, api.MethodMutateState, &anchor)
+		view, err := s.e.OpenView(ctx, api.OpenViewRequest{Space: "host-space", Principal: "host-principal", Anchor: &anchor})
+		if errors.Is(err, api.ErrReadAuthorizationChanged) {
+			continue
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		past, err := s.e.GetViewState(ctx, api.ReadViewStateRequest{View: view.Ref, Key: key})
+		_ = s.e.CloseView(ctx, api.CloseViewRequest{Ref: view.Ref})
+		if errors.Is(err, api.ErrReadAuthorizationChanged) {
+			continue
+		}
 		if err != nil || !reflect.DeepEqual(got, past) {
 			t.Fatalf("read cut mixed: got=%+v past=%+v err=%v", got, past, err)
 		}

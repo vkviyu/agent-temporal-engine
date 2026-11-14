@@ -30,7 +30,7 @@ func eventStreamKey(space model.SpaceID, owner model.PrincipalID) string {
 }
 func (e *Engine) EventProfileEnabled() bool { return e.options.EventProfile }
 
-func (e *Engine) prepareAppliedEvent(req api.CommitRequest, txID model.TxID, commandID, opsID model.ObjectID, profileEvents []model.Event) (model.Event, codec.Object, error) {
+func (e *Engine) prepareAppliedEvent(req api.CommitRequest, txID model.TxID, commandID, opsID model.ObjectID, profileEvents []model.Event, registry uint64) (model.Event, codec.Object, error) {
 	key := eventStreamKey(req.Space, req.Principal)
 	head, ok := e.eventHeads[key]
 	if !ok {
@@ -54,7 +54,7 @@ func (e *Engine) prepareAppliedEvent(req api.CommitRequest, txID model.TxID, com
 	}
 	if len(profileEvents) > 0 {
 		event.SchemaVersion = 2
-		event.ProfileRegistryVersion = eventlog.ProfileRegistryVersion
+		event.ProfileRegistryVersion = registry
 		event.PreviousInStream = head.ID
 		event.CausalParents = nil
 		for _, v := range profileEvents {
@@ -86,12 +86,25 @@ func (e *Engine) installEvent(p *commitPlan) {
 	if e.eventHeads == nil {
 		e.eventHeads = make(map[string]eventHead)
 	}
+	block := &eventMetadataBlock{previous: e.eventBlocks}
 	for _, event := range p.profileEvents {
 		e.events[event.ID] = eventEntry{Space: event.Space, Principal: event.RecordedBy, LSN: p.transaction.LSN, Transaction: event.Transaction}
+		item := eventMetadataItem{id: event.ID, entry: e.events[event.ID], operation: event.Attribution.Operation, ordinal: event.Attribution.Ordinal}
+		block.entries = append(block.entries, item)
+		if e.traceEventMeta == nil {
+			e.traceEventMeta = make(map[model.EventID]eventMetadataItem)
+		}
+		e.traceEventMeta[event.ID] = item
+		e.indexTaskTraceEvent(event, e.events[event.ID])
 		e.eventHeads[profileStreamKey(event.Space, event.RecordedBy, event.Stream)] = eventHead{ID: event.ID, Sequence: event.Sequence}
 		e.eventHeads[profileFactKey(event.Space, event.RecordedBy, event.Attribution.Operation, string(event.Attribution.Subject.ID))] = eventHead{ID: event.ID}
 	}
+	for key, head := range p.profileEventAliases {
+		e.eventHeads[key] = head
+	}
 	e.events[x.ID] = eventEntry{Space: x.Space, Principal: x.RecordedBy, LSN: p.transaction.LSN, Transaction: x.Transaction}
+	block.entries = append(block.entries, eventMetadataItem{id: x.ID, entry: e.events[x.ID]})
+	e.eventBlocks = block
 	e.eventHeads[eventStreamKey(x.Space, x.RecordedBy)] = eventHead{ID: x.ID, Sequence: x.Sequence}
 }
 
@@ -117,7 +130,7 @@ func profileFactKey(space model.SpaceID, principal model.PrincipalID, operation,
 	return string(b)
 }
 
-func (e *Engine) prepareProfileEvents(req api.CommitRequest, txID model.TxID, commandID, opsID model.ObjectID, drafts []profileEventDraft) ([]model.Event, []codec.Object, error) {
+func (e *Engine) prepareProfileEvents(req api.CommitRequest, txID model.TxID, commandID, opsID model.ObjectID, drafts []profileEventDraft, aliases map[string]eventHead) ([]model.Event, []codec.Object, error) {
 	if len(drafts) > eventlog.MaxProfileEvents {
 		return nil, nil, storage.ErrLimit
 	}
@@ -146,6 +159,15 @@ func (e *Engine) prepareProfileEvents(req api.CommitRequest, txID model.TxID, co
 		}
 		x := model.Event{Space: req.Space, Transaction: txID, Stream: d.stream, Sequence: head.Sequence + 1, RecordedBy: req.Principal, Kind: eventlog.KindAgentTransition, SchemaVersion: 1, Method: req.Method, Payload: opsID, Command: commandID, PreviousInStream: head.ID, Attribution: &a}
 		seen := map[model.EventID]bool{}
+		for _, id := range d.eventParents {
+			if !e.eventKnown(id, req.Space, req.Principal) {
+				return nil, nil, ErrInvalidStateData
+			}
+			if !seen[id] {
+				x.CausalParents = append(x.CausalParents, id)
+				seen[id] = true
+			}
+		}
 		for _, cause := range d.causes {
 			id := lookup(profileFactKey(req.Space, req.Principal, cause.operation, cause.subject)).ID
 			if id != "" && !seen[id] {
@@ -154,6 +176,9 @@ func (e *Engine) prepareProfileEvents(req api.CommitRequest, txID model.TxID, co
 			}
 		}
 		sort.Slice(x.CausalParents, func(i, j int) bool { return x.CausalParents[i] < x.CausalParents[j] })
+		if len(x.CausalParents) > eventlog.MaxParents {
+			return nil, nil, storage.ErrLimit
+		}
 		o, err := eventlog.Object(x)
 		if err != nil {
 			return nil, nil, err
@@ -165,6 +190,11 @@ func (e *Engine) prepareProfileEvents(req api.CommitRequest, txID model.TxID, co
 		x.ID = model.EventID(id)
 		heads[key] = eventHead{ID: x.ID, Sequence: x.Sequence}
 		heads[profileFactKey(req.Space, req.Principal, a.Operation, string(a.Subject.ID))] = eventHead{ID: x.ID}
+		for _, alias := range d.factAliases {
+			key := profileFactKey(req.Space, req.Principal, alias.operation, alias.subject)
+			value := eventHead{ID: x.ID}
+			heads[key], aliases[key] = value, value
+		}
 		events = append(events, x)
 		objects = append(objects, o)
 	}
@@ -180,9 +210,9 @@ func (e *Engine) eventKnown(id model.EventID, space model.SpaceID, principal mod
 }
 
 func (e *Engine) visibleEvent(ctx context.Context, id model.EventID, anchor model.SnapshotAnchor, principal model.PrincipalID) (model.Event, error) {
-	entry, ok := e.events[id]
-	if !ok {
-		entry, ok = e.baseEvents[id]
+	entry, ok, err := e.readEventEntry(ctx, id)
+	if err != nil {
+		return model.Event{}, err
 	}
 	if !ok || entry.Space != anchor.Space || entry.Principal != principal || entry.LSN > anchor.Fence.LSN {
 		return model.Event{}, ErrNodeNotFound
@@ -190,7 +220,7 @@ func (e *Engine) visibleEvent(ctx context.Context, id model.EventID, anchor mode
 	if _, _, err := e.rootsAtFence(ctx, anchor.Fence, true); err != nil {
 		return model.Event{}, err
 	}
-	obj, err := readObject(ctx, e.index, model.ObjectID(id))
+	obj, err := readObject(ctx, e.reader(ctx), model.ObjectID(id))
 	if err != nil {
 		return model.Event{}, err
 	}
@@ -209,6 +239,24 @@ func (e *Engine) visibleEvent(ctx context.Context, id model.EventID, anchor mode
 func (e *Engine) selectedEventIDs(ctx context.Context, entry *viewEntry) ([]model.EventID, error) {
 	if !e.options.EventProfile {
 		return nil, ErrUnsupportedMethod
+	}
+	if cut := e.readCut(ctx); cut != nil {
+		var ids []model.EventID
+		for block := cut.events; block != nil; block = block.previous {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+			for _, item := range block.entries {
+				x := item.entry
+				if x.Space == entry.descriptor.Anchor.Space && x.Principal == entry.principal && x.LSN <= entry.descriptor.Anchor.Fence.LSN {
+					if len(ids) >= maxNodeQueryRecords {
+						return nil, storage.ErrLimit
+					}
+					ids = append(ids, item.id)
+				}
+			}
+		}
+		return ids, nil
 	}
 	if !entry.coreLocked {
 		if err := e.mu.LockContext(ctx); err != nil {

@@ -63,7 +63,7 @@ func TestRegistryPolicyAndOwnership(t *testing.T) {
 	if _, err := r.PlanMigration("agent.invocation", 1, 2); !errors.Is(err, formats.ErrUnsupported) {
 		t.Fatal("legacy invocation version unexpectedly registered", err)
 	}
-	for family, current := range map[string]uint64{"agent.control": 5, "knowledge.packet": 4} {
+	for family, current := range map[string]uint64{"agent.control": 6, "knowledge.packet": knowledge.PacketSchema, "knowledge.summary": knowledge.SummarySchema} {
 		for version := uint64(1); version < current; version++ {
 			if err := r.Check(family, version, formats.Decode); !errors.Is(err, formats.ErrUnsupported) {
 				t.Fatalf("%s accepted retired schema %d: %v", family, version, err)
@@ -86,7 +86,7 @@ func TestRegistryPolicyAndOwnership(t *testing.T) {
 		t.Fatal("caller mutated embedded registry")
 	}
 	f, _ = again.Family("agent.control")
-	if f.Versions[0].Number != 5 {
+	if f.Versions[0].Number != 6 {
 		t.Fatal("Family returned shared versions")
 	}
 }
@@ -179,7 +179,8 @@ func TestRegistryMatchesPublishedCodecConstants(t *testing.T) {
 	}{
 		{"agent.command", agentprofile.CommandSchema}, {"agent.snapshot", agentprofile.SnapshotVersion},
 		{"graph.command", graph.CommandSchema}, {"graph.revision", graph.RevisionSchema}, {"graph.branch", graph.BranchSchema},
-		{"knowledge.observation", knowledge.Schema}, {"knowledge.summary", knowledge.SummarySchema},
+		{"graph.command", graph.LocalCommandSchema}, {"graph.revision", graph.ProducedRevisionSchema}, {"graph.branch", graph.ScopedBranchSchema},
+		{"knowledge.observation", knowledge.Schema}, {"knowledge.packet", knowledge.PacketSchema}, {"knowledge.summary", knowledge.SummarySchema},
 		{"local.protocol", uint64(protocol.Version)}, {"state.radix", state.NodeVersion}, {"storage.frame", uint64(storage.FrameVersion)},
 		{"event.profile-registry", eventlog.ProfileRegistryVersion},
 	} {

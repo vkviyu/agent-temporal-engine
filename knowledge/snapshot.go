@@ -17,7 +17,7 @@ const (
 	MaxCommandBytes    = MaxRecordBytes + 64
 	snapshotPrefix     = "ATE-KNOWLEDGE-SNAPSHOT\x00"
 	commandPrefix      = "ATE-KNOWLEDGE-COMMAND\x00"
-	commandVersion     = 1
+	commandVersion     = 2
 )
 
 // Snapshot contains immutable, content-addressed observations and packets.
@@ -35,7 +35,12 @@ type Command struct {
 	Observation *Observation
 	Packet      *ContextPacket
 	Import      *ImportCommand
+	version     uint64
 }
+
+// UsesLegacySnapshot reports whether this command was encoded before indexed
+// record publication. Replay must use the original reducer for those bytes.
+func (c Command) UsesLegacySnapshot() bool { return c.version == 1 }
 
 // Keep this struct and prefix stable so previously valid JSON snapshots retain
 // their exact bytes. JSON transport commands are not content identity.
@@ -67,16 +72,14 @@ func (s Snapshot) Validate() error {
 	}
 	observations := make(map[model.ObjectID]Observation, len(s.Observations))
 	sequences := make(map[snapshotScope]map[uint64]struct{})
-	used := 0
 	for _, o := range s.Observations {
 		raw, err := o.Canonical() // verifies the claimed ID, not only fields
 		if err != nil {
 			return err
 		}
-		if len(raw) > MaxRecordBytes || len(raw) > MaxSnapshotBytes-used {
+		if len(raw) > MaxRecordBytes {
 			return ErrInvalid
 		}
-		used += len(raw)
 		if _, exists := observations[o.ID]; exists {
 			return ErrDuplicateItem
 		}
@@ -103,10 +106,9 @@ func (s Snapshot) Validate() error {
 		if err != nil {
 			return err
 		}
-		if len(raw) > MaxRecordBytes || len(raw) > MaxSnapshotBytes-used {
+		if len(raw) > MaxRecordBytes {
 			return ErrInvalid
 		}
-		used += len(raw)
 		if _, exists := packets[p.ID]; exists {
 			return ErrDuplicateItem
 		}
@@ -202,6 +204,13 @@ func (c Command) Validate() error {
 }
 
 func EncodeCommand(c Command) ([]byte, error) {
+	if c.UsesLegacySnapshot() {
+		return encodeCommandVersion(c, 1)
+	}
+	return encodeCommandVersion(c, commandVersion)
+}
+
+func encodeCommandVersion(c Command, version uint64) ([]byte, error) {
 	if err := c.Validate(); err != nil {
 		return nil, err
 	}
@@ -220,7 +229,7 @@ func EncodeCommand(c Command) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	b := codec.AppendUint([]byte(commandPrefix), commandVersion)
+	b := codec.AppendUint([]byte(commandPrefix), version)
 	b = codec.AppendUint(b, operation)
 	return codec.AppendBytes(b, raw)
 }
@@ -231,7 +240,7 @@ func DecodeCommand(raw []byte) (Command, error) {
 	}
 	d := codec.NewDecoder(raw[len(commandPrefix):])
 	version, err := d.Uint()
-	if err != nil || version != commandVersion {
+	if err != nil || (version != 1 && version != commandVersion) {
 		return Command{}, ErrInvalid
 	}
 	operation, err := d.Uint()
@@ -246,6 +255,9 @@ func DecodeCommand(raw []byte) (Command, error) {
 		return Command{}, err
 	}
 	c := Command{}
+	if version != commandVersion {
+		c.version = version
+	}
 	switch operation {
 	case 1:
 		value, e := DecodeObservation(body)
@@ -268,7 +280,7 @@ func DecodeCommand(raw []byte) (Command, error) {
 	default:
 		return Command{}, ErrInvalid
 	}
-	canonical, err := EncodeCommand(c)
+	canonical, err := encodeCommandVersion(c, version)
 	if err != nil || !bytes.Equal(canonical, raw) {
 		return Command{}, ErrInvalid
 	}

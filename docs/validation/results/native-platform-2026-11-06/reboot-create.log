@@ -1,0 +1,4 @@
+=== RUN   TestNativeExt4RebootPreservesAcknowledgedPrefix
+    native_reboot_linux_test.go:108: created synced external witness: boot_id=8e779063-6474-46cf-ad82-c79cdf454280 lsn=8 segments=8
+--- PASS: TestNativeExt4RebootPreservesAcknowledgedPrefix (0.06s)
+PASS

@@ -11,9 +11,9 @@ import (
 
 // Independently assembled with Python SHA-256 and unsigned-varint framing;
 // fields are explicitly ordered, without calling either Go codec.
-const controlPutActionV4Golden = "4154452d4147454e542d434f4d4d414e4400010dd4024154452d4147454e542d434f4e54524f4c000513016b0101730170017240303464633562323133363332386130646362313839646639373733346337633732653565313232376661306330333436396136636536303866333266316236360573746f726500406464646464646464646464646464646464646464646464646464646464646464646464646464646464646464646464646464646464646464646464646464646401650770656e64696e670007686f73742f763103636d64016401010168014065656565656565656565656565656565656565656565656565656565656565656565656565656565656565656565656565656565656565656565656565656565010573746f7265074064646464646464646464646464646464646464646464646464646464646464646464646464646464646464646464646464646464646464646464646464646464016401010168"
+const controlPutActionV6Golden = "4154452d4147454e542d434f4d4d414e4400010dd4024154452d4147454e542d434f4e54524f4c000613016b0101730170017240303464633562323133363332386130646362313839646639373733346337633732653565313232376661306330333436396136636536303866333266316236360573746f726500406464646464646464646464646464646464646464646464646464646464646464646464646464646464646464646464646464646464646464646464646464646401650770656e64696e670007686f73742f763103636d64016401010168014065656565656565656565656565656565656565656565656565656565656565656565656565656565656565656565656565656565656565656565656565656565010573746f7265074064646464646464646464646464646464646464646464646464646464646464646464646464646464646464646464646464646464646464646464646464646464016401010168"
 
-func TestControlV4ExpectedFenceGolden(t *testing.T) {
+func TestControlV6ExpectedFenceGolden(t *testing.T) {
 	binding := AuthorityBinding{Deployment: "d", OwnerEpoch: 1, Incarnation: 1, Holder: "h"}
 	input := model.CommitFence{Store: "store", CommitDigest: model.CommitDigest(digest('d'))}
 	expected := input
@@ -25,17 +25,17 @@ func TestControlV4ExpectedFenceGolden(t *testing.T) {
 		{Checkpoint: &CheckpointCommand{Intent: intent, Continuation: continuation, Authority: binding}},
 		{RebindAction: &RebindActionCommand{Key: "k", ExpectedGeneration: 1, NewRequest: intent.Action.Request, Method: intent.Method, ExactCommand: intent.ExactCommand, CommandDigest: intent.Action.CommandDigest, Authority: binding, FenceEvidence: digest('f'), ExpectedFence: &expected}},
 	}
-	want, err := hex.DecodeString(controlPutActionV4Golden)
+	want, err := hex.DecodeString(controlPutActionV6Golden)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for index, c := range commands {
 		raw, err := EncodeCommand(Command{Control: &c})
-		if err != nil || c.SchemaVersion() != 5 {
-			t.Fatalf("schema4 encode=%v version=%d", err, c.SchemaVersion())
+		if err != nil || c.SchemaVersion() != 6 {
+			t.Fatalf("schema6 encode=%v version=%d", err, c.SchemaVersion())
 		}
 		if index == 0 && !bytes.Equal(raw, want) {
-			t.Fatalf("schema4 golden changed: got=%x want=%x", raw, want)
+			t.Fatalf("schema6 golden changed: got=%x want=%x", raw, want)
 		}
 		decoded, err := DecodeCommand(raw)
 		if err != nil {

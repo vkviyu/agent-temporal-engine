@@ -105,7 +105,7 @@ func verifySegmentedPrefix(segments []*journalSegment, id Identity, m Manifest, 
 		}
 		segment.prefix = h
 	}
-	reader := logicalReader{segments: segments, end: m.PublishedEnd}
+	reader := logicalReader{segments: snapshotReadSegments(segments), end: m.PublishedEnd}
 	scanner, err := NewScanner(io.NewSectionReader(reader, SegmentHeaderSize, int64(m.PublishedEnd-SegmentHeaderSize)), genesis, o.Limits)
 	if err != nil {
 		return nil, 0, err

@@ -24,7 +24,7 @@ func workControl(t *testing.T, c agentprofile.ControlCommand) api.WorkStep {
 	}
 	return s
 }
-func workCheckpoint(t *testing.T, e model.ExecutionID, a agentprofile.AuthorityBinding, f model.CommitFence, key string, version uint64, position ...any) api.WorkStep {
+func workCheckpoint(t *testing.T, e model.ExecutionID, a agentprofile.AuthorityBinding, f model.CommitFence, key string, version, step uint64) api.WorkStep {
 	t.Helper()
 	body, err := engine.EncodeStateBatch(api.StateBatch{Operations: []api.StateMutation{integrationPut([]byte(key), integrationBytes('r'))}})
 	if err != nil {
@@ -32,15 +32,6 @@ func workCheckpoint(t *testing.T, e model.ExecutionID, a agentprofile.AuthorityB
 	}
 	sum := sha256.Sum256(body)
 	intent := agentprofile.ActionIntent{Action: agentprofile.PendingAction{Key: key, Owner: e, Generation: 1, Status: agentprofile.ActionPending, Request: agentKey("next-" + key), InputFence: f, CommandDigest: model.ObjectID(hex.EncodeToString(sum[:]))}, Method: api.MethodMutateState, ExactCommand: body, Authority: a}
-	step := uint64(0)
-	if len(position) > 0 {
-		_ = position[0]
-	}
-	if len(position) > 1 {
-		if v, ok := position[1].(uint64); ok {
-			step = v
-		}
-	}
 	continuation := agentprofile.Continuation{Execution: e, Version: version + 1, Incarnation: a.Incarnation, PendingKey: key, PendingGeneration: 1, InputFence: f, Phase: "pending-render", Position: &agentprofile.ContinuationPosition{Space: "host-space", Principal: "host-principal", Step: step, AdapterVersion: "work/v1", NextActions: []agentprofile.PendingActionRef{{Key: key, Generation: 1}}}}
 	return workControl(t, agentprofile.ControlCommand{Checkpoint: &agentprofile.CheckpointCommand{Intent: intent, Continuation: continuation, ExpectedVersion: version, Authority: a}})
 }
@@ -72,7 +63,7 @@ func workIntake(t *testing.T, s *integrationStore) (api.ApplyWorkRequest, api.Ap
 	start := api.ApplyWorkRequest{Key: agentKey("exact-start"), Unit: api.WorkUnit{Kind: "query_start", Query: "query", Steps: []api.WorkStep{
 		workControl(t, agentprofile.ControlCommand{StartWork: &agentprofile.StartWorkCommand{Query: "query", Slot: "root", ExpectedQueryVersion: 1, Task: task, Execution: x}}),
 		workControl(t, agentprofile.ControlCommand{GrantAuthority: &agentprofile.GrantAuthorityCommand{Authority: agentprofile.ExecutionAuthority{Execution: x.ID, Status: "active", Binding: a, Evidence: model.ObjectID(integrationID('a'))}}}),
-		querySeed, goalSeed, workCheckpoint(t, x.ID, a, f, "first-root-action", 0),
+		querySeed, goalSeed, workCheckpoint(t, x.ID, a, f, "first-root-action", 0, 0),
 	}}}
 	b, err := api.EncodeWorkUnit(start.Unit)
 	if err != nil {
@@ -195,7 +186,7 @@ func newMessageWorkFixture(t *testing.T) messageWorkFixture {
 		t.Fatal(err)
 	}
 	consume := workControl(t, agentprofile.ControlCommand{ConsumeMessage: &agentprofile.ConsumeMessageCommand{Consumption: agentprofile.MessageConsumption{Message: message.ID, Recipient: "one", Incarnation: 1, GoalEpoch: 1}, Authority: a}})
-	checkpoint := workCheckpoint(t, "one", a, source, "after-message", 0, model.ActorID("same-actor"))
+	checkpoint := workCheckpoint(t, "one", a, source, "after-message", 0, 0)
 	unit := api.WorkUnit{Kind: "message_consume", Steps: []api.WorkStep{consume, observe, checkpoint}}
 	req := api.ApplyWorkRequest{Key: agentKey("consume-work"), Unit: unit}
 	return messageWorkFixture{store: s, request: req, prior: prior, observed: o, priorAck: priorAck}
@@ -372,7 +363,7 @@ func workChildFixture(t *testing.T) (*integrationStore, api.ApplyWorkRequest, ag
 	unit := api.WorkUnit{Kind: "child_spawn", Steps: []api.WorkStep{
 		workControl(t, agentprofile.ControlCommand{SpawnChild: &agentprofile.SpawnChildCommand{Parent: "one", Invocation: inv.ID, Task: childTask, Execution: child, InheritedEpoch: 1, Compatibility: model.ObjectID(integrationID('a')), Authority: a}}),
 		workControl(t, agentprofile.ControlCommand{GrantAuthority: &agentprofile.GrantAuthorityCommand{Authority: agentprofile.ExecutionAuthority{Execution: child.ID, Binding: childAuthority, Status: "active", Evidence: model.ObjectID(integrationID('a'))}}}),
-		seed, goalSeed, workCheckpoint(t, child.ID, childAuthority, source, "child-first-action", 0, model.ActorID("same-actor")),
+		seed, goalSeed, workCheckpoint(t, child.ID, childAuthority, source, "child-first-action", 0, 0),
 	}}
 	req := api.ApplyWorkRequest{Key: agentKey("atomic-child"), Unit: unit}
 	return s, req, child, o

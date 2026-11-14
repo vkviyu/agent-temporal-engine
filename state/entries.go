@@ -77,6 +77,16 @@ type scanFrame struct {
 // mounted at different prefixes are visited separately; only active-path IDs
 // detect cycles. The stack grows with path depth, not the breadth of the tree.
 func Entries(ctx context.Context, reader ObjectReader, space model.SpaceID, root model.ObjectID, limits ScanLimits) ([]Entry, error) {
+	return EntriesWithPrefix(ctx, reader, space, root, nil, limits)
+}
+
+// EntriesWithPrefix reads only matching paths in a fixed radix snapshot.
+// Limits include the nodes needed to find the prefix; unrelated siblings are
+// never loaded. As with Entries, a bounded failure returns no partial result.
+func EntriesWithPrefix(ctx context.Context, reader ObjectReader, space model.SpaceID, root model.ObjectID, prefix []byte, limits ScanLimits) ([]Entry, error) {
+	if len(prefix) > MaxKeyBytes {
+		return nil, ErrLimit
+	}
 	l, err := limits.checked()
 	if err != nil {
 		return nil, err
@@ -105,7 +115,7 @@ func Entries(ctx context.Context, reader ObjectReader, space model.SpaceID, root
 		frame := &stack[len(stack)-1]
 		if !frame.emitted {
 			frame.emitted = true
-			if frame.node.value != "" {
+			if frame.node.value != "" && bytes.HasPrefix(frame.key, prefix) {
 				cost := len(frame.key) + 64
 				if len(out) >= l.MaxEntries || cost > l.MaxBytes-used {
 					return nil, ErrLimit
@@ -121,6 +131,9 @@ func Entries(ctx context.Context, reader ObjectReader, space model.SpaceID, root
 		}
 		edge := frame.node.children[frame.child]
 		frame.child++
+		if len(frame.key) < len(prefix) && (!bytes.HasPrefix(prefix, frame.key) || edge.label != prefix[len(frame.key)]) {
+			continue
+		}
 		if active[edge.ref] {
 			return nil, fmt.Errorf("%w: radix cycle", ErrInvalidNode)
 		}
@@ -135,6 +148,9 @@ func Entries(ctx context.Context, reader ObjectReader, space model.SpaceID, root
 		key := append(bytes.Clone(frame.key), child.prefix...)
 		if len(key) > MaxKeyBytes {
 			return nil, ErrInvalidNode
+		}
+		if !bytes.HasPrefix(key, prefix) && !bytes.HasPrefix(prefix, key) {
+			continue
 		}
 		active[edge.ref] = true
 		stack = append(stack, scanFrame{id: edge.ref, node: child, key: key})

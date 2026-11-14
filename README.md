@@ -79,6 +79,15 @@ They describe different facts:
 
 They are connected by explicit references and events. A child finishing does not automatically mean that its parent has consumed its result. A Graph merge does not automatically merge a Git workspace. A memory stored in one execution is not automatically visible to another execution.
 
+### Query-only and task-backed queries
+
+A Query can complete in either of two explicit modes.
+
+- A Query-only flow uses `QueryProgress` and `(Query, DecisionSequence)` for its controller state. It may record query-scoped model or tool Activities, but it does not create a synthetic `Task`, `Execution`, or `Step`. If it starts no Task, its final answer has no `TaskOutcome` requirement.
+- A task-backed Query explicitly starts one or more Tasks. Each started Task must produce its own Execution and accepted `TaskOutcome` before the Query can publish a final answer. The final answer remains Query-scoped, but it cannot omit or invent the outcomes of the Tasks it started.
+
+The distinction is semantic. A short conversation, routing decision, or read-only tool interaction does not gain an artificial execution history merely because it is durable. Work that crosses into a Task must declare that transition and then follow the Task and Execution lifecycle.
+
 ## Core concepts
 
 | Concept                | Meaning                                                            |
@@ -158,6 +167,8 @@ The five authoritative roots separate domain state, execution knowledge, branch 
 
 ## Reading guide
 
+For Go SDK and Unix Socket methods, parameters, return values, and examples, see the [ATE API reference](docs/ATE_API_REFERENCE.md) (Chinese).
+
 If you are new to the project, read in this order:
 
 1. [`docs/AGENT_TEMPORAL_ENGINE_DESIGN.md`](docs/AGENT_TEMPORAL_ENGINE_DESIGN.md) — overall design and semantics.
@@ -181,4 +192,4 @@ For state-store initialization, recovery, local service usage and format details
 
 ## Project status
 
-ATE is an experimental V1 implementation. The core state, Agent profile, Graph, Knowledge, Memory, query, recovery and local-service paths are implemented and covered by package and integration tests. Strict V1 acceptance, Linux native durability, device power-loss certification and broad external exactly-once guarantees remain explicit evidence boundaries.
+ATE is an experimental V1 implementation. The core state, Agent profile, Graph, Knowledge, Memory, query, recovery and local-service paths are implemented and covered by package and integration tests. Strict V1 acceptance remains open. Native evidence covers Darwin/arm64 APFS and Linux/arm64 ext4, including real ENOSPC and an orderly guest reboot; see [platform scope](docs/PLATFORM_SUPPORT.md). Device power-loss certification and broad external exactly-once guarantees are not claimed. Current gaps and verification are tracked in the [2026-11-06 cross-audit](docs/validation/V1_CROSS_AUDIT_2026-11-06.md).

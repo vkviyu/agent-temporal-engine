@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"bytes"
 	"context"
 
 	"github.com/vkviyu/agent-temporal-engine/agentprofile"
@@ -11,9 +12,10 @@ import (
 	"github.com/vkviyu/agent-temporal-engine/state"
 )
 
-func (e *Engine) profileEventDrafts(ctx context.Context, req api.CommitRequest, builder state.ObjectReader, roots model.RootSet) ([]profileEventDraft, error) {
+func (e *Engine) profileEventDrafts(ctx context.Context, req api.CommitRequest, builder state.ObjectReader, roots model.RootSet, registry uint64) ([]profileEventDraft, error) {
+	linked := registry >= eventlog.ProfileRegistryVersion
 	if req.Method != api.MethodApplyAgent && req.Method != api.MethodApplyWork {
-		return e.domainEventDrafts(ctx, req, builder, roots)
+		return e.domainEventDrafts(ctx, req, builder, roots, linked)
 	}
 	ledger, _, _, err := loadAgentLedger(ctx, builder, roots.LiveControl, req.Space, req.Principal)
 	if err != nil {
@@ -25,7 +27,7 @@ func (e *Engine) profileEventDrafts(ctx context.Context, req api.CommitRequest, 
 		if err != nil {
 			return nil, err
 		}
-		d, err := agentEventDraft(c, snapshot)
+		d, err := agentEventDraft(c, snapshot, linked)
 		if err == nil {
 			err = bindQueryEventDecision(ctx, builder, roots, req, &d)
 		}
@@ -55,7 +57,7 @@ func (e *Engine) profileEventDrafts(ctx context.Context, req api.CommitRequest, 
 			if err != nil {
 				return nil, err
 			}
-			d, err := agentEventDraft(c, snapshot)
+			d, err := agentEventDraft(c, snapshot, linked)
 			if err != nil {
 				return nil, err
 			}
@@ -76,7 +78,12 @@ func (e *Engine) profileEventDrafts(ctx context.Context, req api.CommitRequest, 
 			if err != nil {
 				return nil, err
 			}
-			d := knowledgeWorkEventDraft(c, snapshot)
+			d := knowledgeWorkEventDraft(c, snapshot, linked)
+			if linked && c.Import != nil {
+				if err := linkImportedObservationFacts(ctx, builder, roots, req, *c.Import, &d); err != nil {
+					return nil, err
+				}
+			}
 			if !eventlog.RegisteredAgentOperation(d.attribution.Operation) || !d.attribution.Subject.Valid() {
 				return nil, ErrUnsupportedSchema
 			}
@@ -103,9 +110,101 @@ func (e *Engine) profileEventDrafts(ctx context.Context, req api.CommitRequest, 
 		drafts[0].attribution.Session = first.attribution.Session
 		drafts[0].attribution.Step = first.attribution.Step
 		drafts[0].attribution.InitiatingActor = first.attribution.InitiatingActor
+		drafts[0].attribution.Task = first.attribution.Task
 		drafts[0].stream = first.stream
 	}
+	if linked && u.Kind == "message_consume" {
+		if err := linkConsumedObservations(ctx, builder, u, snapshot, drafts); err != nil {
+			return nil, err
+		}
+	}
 	return drafts, nil
+}
+
+func linkImportedObservationFacts(ctx context.Context, reader state.ObjectReader, roots model.RootSet, req api.CommitRequest, command knowledge.ImportCommand, draft *profileEventDraft) error {
+	root, err := slotSpaceRoot(ctx, reader, roots.ExecutionKnowledge, req.Space)
+	if err != nil {
+		return err
+	}
+	index, err := openKnowledgeIndex(ctx, reader, root, req.Space, req.Principal)
+	if err != nil {
+		return err
+	}
+	origins := make(map[model.ObjectID]knowledge.Observation, len(command.Observations))
+	for _, id := range command.Observations {
+		o, found, err := index.observation(ctx, id)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return ErrInvalidStateData
+		}
+		origins[id] = o
+	}
+	imported, err := knowledge.ImportedObservations(command, origins)
+	if err != nil {
+		return err
+	}
+	for _, o := range imported {
+		draft.factAliases = append(draft.factAliases, profileEventCause{"Knowledge.Observation", string(o.ID)})
+	}
+	return nil
+}
+
+func linkConsumedObservations(ctx context.Context, reader state.ObjectReader, unit api.WorkUnit, snapshot agentprofile.Snapshot, drafts []profileEventDraft) error {
+	var messageID string
+	var recipient model.ExecutionID
+	for _, step := range unit.Steps {
+		if step.Method != api.MethodApplyAgent {
+			continue
+		}
+		command, err := agentprofile.DecodeCommand(step.Body)
+		if err != nil {
+			return err
+		}
+		if c := command.Control.ConsumeMessage; c != nil {
+			messageID, recipient = c.Consumption.Message, c.Consumption.Recipient
+			break
+		}
+	}
+	var message *agentprofile.Message
+	for i := range snapshot.Lifecycle.Messages {
+		if snapshot.Lifecycle.Messages[i].ID == messageID {
+			message = &snapshot.Lifecycle.Messages[i]
+			break
+		}
+	}
+	if message == nil {
+		return ErrInvalidStateData
+	}
+	for i, step := range unit.Steps {
+		if step.Method != api.MethodApplyKnowledge {
+			continue
+		}
+		command, err := knowledge.DecodeCommand(step.Body)
+		if err != nil {
+			return err
+		}
+		observation := command.Observation
+		if observation == nil || observation.Key.Execution != recipient || observation.PayloadKind != "" {
+			continue
+		}
+		object, err := readObject(ctx, reader, observation.Payload)
+		if err != nil {
+			return err
+		}
+		value, err := readValue(object)
+		if err != nil {
+			return err
+		}
+		if value.Kind == api.ValueBytes && bytes.Equal(value.Data, message.Payload) {
+			// The adoption's producer is the earlier Send, even when the
+			// host orders Observation before Consume in their shared Work.
+			drafts[i+1].causedBy("Control.SendMessage", messageID)
+			drafts[i+1].causedBy("Lifecycle.PutMessage", messageID)
+		}
+	}
+	return nil
 }
 
 // Query-owned Activities share no Execution/Step. Their DecisionRef is resolved

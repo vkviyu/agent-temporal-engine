@@ -90,7 +90,7 @@ func testWorkModelDecision(t *testing.T, reconcile bool) {
 	recoveryCoreControl(t, s, "decision-create", agentprofile.ControlCommand{CreateActivity: &agentprofile.CreateActivityCommand{Spec: spec, Authority: a}})
 	recoveryCoreControl(t, s, "decision-claim", agentprofile.ControlCommand{ClaimAttempt: &agentprofile.ClaimAttemptCommand{Activity: spec.Activity, Attempt: "primary-attempt", Sequence: 1, Authority: a}})
 	recoveryCoreControl(t, s, "decision-dispatch", agentprofile.ControlCommand{DispatchAttempt: &agentprofile.DispatchAttemptCommand{Attempt: "primary-attempt", Authority: a, Evidence: proof}})
-	result := agentprofile.ActivityResult{ID: "primary-result", Activity: spec.Activity, Attempt: "primary-attempt", RequestDigest: spec.RequestDigest, Incarnation: 1, Outcome: "success", Payload: []byte("read file")}
+	result := agentprofile.ActivityResult{Capture: "full", ID: "primary-result", Activity: spec.Activity, Attempt: "primary-attempt", RequestDigest: spec.RequestDigest, Incarnation: 1, Outcome: "success", Payload: []byte("read file")}
 	recoveryCoreControl(t, s, "decision-capture", agentprofile.ControlCommand{CaptureResult: &agentprofile.CaptureResultCommand{Result: result}})
 	authorityVersion := uint64(1)
 	if reconcile {
@@ -112,7 +112,7 @@ func testWorkModelDecision(t *testing.T, reconcile bool) {
 	if out, err := s.e.ApplyAgent(ctx, api.ApplyAgentRequest{Key: agentKey("decision-direct-accept"), Command: acceptBody}); out.Code != api.CodeRejected || !errors.Is(err, engine.ErrWorkBoundary) || integrationSnapshot(t, s.e) != beforeAccept {
 		t.Fatalf("primary acceptance escaped model_decision: %+v %v", out, err)
 	}
-	checkpoint := workCheckpoint(t, "one", a, spec.InputFence, "dispatch-read", 0, model.ActorID("same-actor"), uint64(1))
+	checkpoint := workCheckpoint(t, "one", a, spec.InputFence, "dispatch-read", 0, 1)
 	checkpointBypass := api.ApplyWorkRequest{Key: agentKey("decision-checkpoint-bypass"), Unit: api.WorkUnit{Kind: "checkpoint", Steps: []api.WorkStep{workControl(t, acceptControl), checkpoint}}}
 	if out, err := s.e.ApplyWork(ctx, checkpointBypass); out.Code != api.CodeRejected || !errors.Is(err, engine.ErrWorkBoundary) || integrationSnapshot(t, s.e) != beforeAccept {
 		t.Fatalf("generic checkpoint accepted primary result: %+v %v", out, err)

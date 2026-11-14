@@ -44,8 +44,8 @@ func TestInvocationContractCodecRejectsLegacyAndPartialContract(t *testing.T) {
 		}
 	}
 	control := ControlCommand{RecordInvocation: &RecordInvocationCommand{Invocation: bound, Authority: AuthorityBinding{Deployment: "host", Holder: "worker", OwnerEpoch: 1, Incarnation: 1}}}
-	if control.SchemaVersion() != 5 {
-		t.Fatal("contract did not use V1 control schema 5")
+	if control.SchemaVersion() != 6 {
+		t.Fatal("contract did not use V1 control schema 6")
 	}
 	if _, err := EncodeCommand(Command{Control: &control}); err != nil {
 		t.Fatalf("complete invocation control rejected: %v", err)
@@ -59,7 +59,7 @@ func TestInvocationContractRequiresAcceptedPrimaryAndKeepsDispatchClass(t *testi
 	recoveryControl(t, l, "create", ControlCommand{CreateActivity: &CreateActivityCommand{Spec: spec, Authority: authority}})
 	recoveryControl(t, l, "claim", ControlCommand{ClaimAttempt: &ClaimAttemptCommand{Activity: spec.Activity, Attempt: "attempt", Sequence: 1, Authority: authority}})
 	recoveryControl(t, l, "dispatch", ControlCommand{DispatchAttempt: &DispatchAttemptCommand{Attempt: "attempt", Authority: authority, Evidence: digest('a')}})
-	result := ActivityResult{ID: "model-result", Activity: spec.Activity, Attempt: "attempt", RequestDigest: spec.RequestDigest, Incarnation: 1, Outcome: "success", Payload: []byte("call read")}
+	result := ActivityResult{Capture: "full", ID: "model-result", Activity: spec.Activity, Attempt: "attempt", RequestDigest: spec.RequestDigest, Incarnation: 1, Outcome: "success", Payload: []byte("call read")}
 	missing := commandInvocation()
 	missing.AcceptedResult = "missing-result"
 	assertRecoveryRejected(t, l, Command{Control: &ControlCommand{RecordInvocation: &RecordInvocationCommand{Invocation: missing, Authority: authority}}}, ErrConflict)
@@ -122,7 +122,7 @@ func acceptPrimaryResult(t *testing.T, l *Ledger, authority AuthorityBinding, ex
 	attempt := "attempt-" + resultID
 	recoveryControl(t, l, "claim-"+resultID, ControlCommand{ClaimAttempt: &ClaimAttemptCommand{Activity: spec.Activity, Attempt: attempt, Sequence: 1, Authority: authority}})
 	recoveryControl(t, l, "dispatch-"+resultID, ControlCommand{DispatchAttempt: &DispatchAttemptCommand{Attempt: attempt, Authority: authority, Evidence: digest('a')}})
-	result := ActivityResult{ID: resultID, Activity: spec.Activity, Attempt: attempt, RequestDigest: spec.RequestDigest, Incarnation: authority.Incarnation, Outcome: "success", Payload: []byte("accepted tool decision")}
+	result := ActivityResult{Capture: "full", ID: resultID, Activity: spec.Activity, Attempt: attempt, RequestDigest: spec.RequestDigest, Incarnation: authority.Incarnation, Outcome: "success", Payload: []byte("accepted tool decision")}
 	recoveryControl(t, l, "capture-"+resultID, ControlCommand{CaptureResult: &CaptureResultCommand{Result: result}})
 	recoveryControl(t, l, "accept-"+resultID, ControlCommand{AcceptActivity: &AcceptActivityCommand{Activity: spec.Activity, Result: result.ID, ExpectedVersion: 1, Authority: authority, Evidence: digest('a')}})
 }

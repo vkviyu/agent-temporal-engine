@@ -102,11 +102,7 @@ func (e *Engine) bindWorkContinuation(ctx context.Context, req api.CommitRequest
 		}
 		key = model.KnowledgeKey{Actor: x.Actor, Execution: x.ID}
 	}
-	snap, _, _, err := e.loadKnowledge(ctx, e.roots, req.Space, req.Principal)
-	if err != nil {
-		return step, err
-	}
-	_, revision, err := knowledge.SelectRevision(snap, req.Space, key, "")
+	_, revision, err := e.currentExecutionKnowledge(ctx, e.roots, req.Space, req.Principal, key)
 	if err != nil {
 		return step, err
 	}
@@ -131,17 +127,13 @@ func (e *Engine) verifyWorkContinuation(ctx context.Context, req api.CommitReque
 	if err != nil {
 		return err
 	}
-	snap, _, _, err := e.loadKnowledge(ctx, e.roots, req.Space, req.Principal)
-	if err != nil {
-		return err
-	}
 	for execution := range seed.finishedSteps {
 		x, err := ledger.GetExecution(execution)
 		if err != nil {
 			return err
 		}
 		key := model.KnowledgeKey{Actor: x.Actor, Execution: execution}
-		_, revision, err := knowledge.SelectRevision(snap, req.Space, key, "")
+		_, revision, err := e.currentExecutionKnowledge(ctx, e.roots, req.Space, req.Principal, key)
 		if err != nil {
 			return err
 		}
@@ -166,7 +158,7 @@ func (e *Engine) verifyWorkContinuation(ctx context.Context, req api.CommitReque
 		}
 	}
 	if key := seed.messageRecipient; key.Execution != "" {
-		_, revision, err := knowledge.SelectRevision(snap, req.Space, key, "")
+		_, revision, err := e.currentExecutionKnowledge(ctx, e.roots, req.Space, req.Principal, key)
 		if err != nil {
 			return err
 		}
@@ -181,12 +173,12 @@ func (e *Engine) verifyWorkContinuation(ctx context.Context, req api.CommitReque
 		if err != nil {
 			return err
 		}
-		if _, err := goalKnowledgeObservation(ctx, e.index, snap, key, "", task); err != nil {
-			return ErrWorkBoundary
-		}
-		selected, revision, err := knowledge.SelectRevision(snap, req.Space, key, "")
+		selected, revision, err := e.currentExecutionKnowledge(ctx, e.roots, req.Space, req.Principal, key)
 		if err != nil {
 			return err
+		}
+		if _, err := goalKnowledgeObservation(ctx, e.index, selected, key, "", task); err != nil {
+			return ErrWorkBoundary
 		}
 		if err := verifyWorkContinuationPosition(ledger, key, seed.tx, revision); err != nil {
 			return err

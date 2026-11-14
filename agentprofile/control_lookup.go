@@ -130,6 +130,20 @@ func (l *Ledger) checkExecution(eid model.ExecutionID, b AuthorityBinding, goal,
 	return x, t, nil
 }
 
+// AuthorizeExecution checks the same current execution, goal, and inherited
+// authority used by protected agent commands. Other core reducers use it when
+// they publish state attributed to an Agent execution.
+func (l *Ledger) AuthorizeExecution(id model.ExecutionID, binding AuthorityBinding) (Execution, Task, uint64, error) {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	execution, task, err := l.checkExecution(id, binding, true, true)
+	if err != nil {
+		return Execution{}, Task{}, 0, err
+	}
+	_, authority, _ := l.authority(id)
+	return execution, task, authority.Version, nil
+}
+
 // Request namespaces remain reserved across all generations. Reusing an old
 // key would let an earlier durable receipt stand in for a different action.
 func (l *Ledger) actionRequestReserved(request model.RequestKey) bool {

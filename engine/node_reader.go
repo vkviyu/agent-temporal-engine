@@ -58,9 +58,9 @@ func (r *nodeQueryReader) ReadObject(ctx context.Context, id model.ObjectID) ([]
 	r.bytes += len(b)
 	return b, nil
 }
-func (e *Engine) nodeReadError(err error) error {
+func (e *Engine) nodeReadError(ctx context.Context, err error) error {
 	if isLimit(err) || errors.Is(err, memory.ErrHistoryAccessDenied) || errors.Is(err, memory.ErrUseDenied) || errors.Is(err, ErrUnsupportedMethod) || errors.Is(err, ErrNodeNotFound) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return err
 	}
-	return e.viewReadFailure(err)
+	return e.readFailureAt(ctx, err)
 }

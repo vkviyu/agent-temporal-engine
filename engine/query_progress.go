@@ -24,11 +24,15 @@ func queryTurnReservationKey(key model.RequestKey) []byte {
 	return append(b, receiptKey(key)...)
 }
 func (e *Engine) readQueryProgress(ctx context.Context, key []byte) (api.QueryProgress, bool, error) {
-	id, found, err := state.Get(ctx, e.index, systemSpace, e.roots.LiveControl, key)
+	return e.readQueryProgressAt(ctx, e.readRoots(ctx), key)
+}
+
+func (e *Engine) readQueryProgressAt(ctx context.Context, roots model.RootSet, key []byte) (api.QueryProgress, bool, error) {
+	id, found, err := state.Get(ctx, e.reader(ctx), systemSpace, roots.LiveControl, key)
 	if err != nil || !found {
 		return api.QueryProgress{}, found, err
 	}
-	o, err := readObject(ctx, e.index, id)
+	o, err := readObject(ctx, e.reader(ctx), id)
 	if err != nil {
 		return api.QueryProgress{}, false, err
 	}
@@ -52,7 +56,11 @@ func decodeQueryProgressValue(o codec.Object) (api.QueryProgress, error) {
 	return p, nil
 }
 func (e *Engine) loadQueryProgress(ctx context.Context, req api.CommitRequest, query string) (api.QueryProgress, bool, error) {
-	p, found, err := e.readQueryProgress(ctx, queryProgressKey(req.Space, req.Principal, query))
+	return e.loadQueryProgressAt(ctx, e.readRoots(ctx), req, query)
+}
+
+func (e *Engine) loadQueryProgressAt(ctx context.Context, roots model.RootSet, req api.CommitRequest, query string) (api.QueryProgress, bool, error) {
+	p, found, err := e.readQueryProgressAt(ctx, roots, queryProgressKey(req.Space, req.Principal, query))
 	if err == nil && found && (p.Query != query || p.Source.Space != req.Space || (p.Next != nil && (p.Next.Space != req.Space || p.Next.Principal != req.Principal))) {
 		return p, false, ErrInvalidStateData
 	}
@@ -81,10 +89,14 @@ func queryDefinition(l *agentprofile.Ledger, id string) (agentprofile.Query, boo
 }
 
 func (e *Engine) queryDefinitionAt(ctx context.Context, l *agentprofile.Ledger, space model.SpaceID, principal model.PrincipalID, id string) (agentprofile.Query, bool, error) {
+	return e.queryDefinitionAtRoots(ctx, e.readRoots(ctx), l, space, principal, id)
+}
+
+func (e *Engine) queryDefinitionAtRoots(ctx context.Context, roots model.RootSet, l *agentprofile.Ledger, space model.SpaceID, principal model.PrincipalID, id string) (agentprofile.Query, bool, error) {
 	if q, found := queryDefinition(l, id); found {
 		return q, true, nil
 	}
-	intake, found, err := e.loadQueryIntake(ctx, space, principal, id)
+	intake, found, err := e.loadQueryIntakeAt(ctx, roots, space, principal, id)
 	if err != nil || !found {
 		return agentprofile.Query{}, found, err
 	}
@@ -137,6 +149,11 @@ func queryInvocation(p api.QueryProgress, activity string) (api.QueryInvocation,
 // GetQueryProgress returns a controller position at one authenticated historical
 // cut. It does not replace the ledger's Query or expose another principal's state.
 func (e *Engine) GetQueryProgress(ctx context.Context, r api.ReadQueryProgressRequest) (api.QueryProgressResult, error) {
+	if ctx.Value(readDeliveryKey{}) == nil {
+		return embeddedReadDelivery(ctx, e, "get_query_progress", r.Principal, r, func(scoped context.Context) (api.QueryProgressResult, error) {
+			return e.GetQueryProgress(scoped, r)
+		})
+	}
 	if err := validAgentScope(r.Space, r.Principal); err != nil {
 		return api.QueryProgressResult{}, err
 	}
@@ -149,14 +166,10 @@ func (e *Engine) GetQueryProgress(ctx context.Context, r api.ReadQueryProgressRe
 	if err := e.publicGate(); err != nil {
 		return api.QueryProgressResult{}, err
 	}
-	if err := e.mu.LockContext(ctx); err != nil {
+	if err := e.readReady(ctx); err != nil {
 		return api.QueryProgressResult{}, err
 	}
-	defer e.mu.Unlock()
-	if err := e.ready(); err != nil {
-		return api.QueryProgressResult{}, err
-	}
-	a := model.SnapshotAnchor{Space: r.Space, Fence: e.publication.Fence()}
+	a := model.SnapshotAnchor{Space: r.Space, Fence: e.readPublication(ctx).Fence()}
 	if r.Anchor != nil {
 		a = r.Anchor.Clone()
 	}
@@ -165,23 +178,21 @@ func (e *Engine) GetQueryProgress(ctx context.Context, r api.ReadQueryProgressRe
 	}
 	roots, _, err := e.rootsAtFence(ctx, a.Fence, false)
 	if err != nil {
-		return api.QueryProgressResult{}, e.readFailure(err)
+		return api.QueryProgressResult{}, e.knowledgeReadFailure(ctx, err)
 	}
-	v := e.workView()
-	v.roots = roots
-	p, found, err := v.loadQueryProgress(ctx, api.CommitRequest{Space: r.Space, Principal: r.Principal}, r.Query)
+	p, found, err := e.loadQueryProgressAt(ctx, roots, api.CommitRequest{Space: r.Space, Principal: r.Principal}, r.Query)
 	if err != nil {
-		return api.QueryProgressResult{}, e.readFailure(err)
+		return api.QueryProgressResult{}, e.readFailureAt(ctx, err)
 	}
 	var ids []model.ObjectID
 	if found {
-		l, _, _, err := loadAgentLedger(ctx, e.index, roots.LiveControl, r.Space, r.Principal)
+		l, _, _, err := loadAgentLedger(ctx, e.reader(ctx), roots.LiveControl, r.Space, r.Principal)
 		if err != nil {
-			return api.QueryProgressResult{}, e.readFailure(err)
+			return api.QueryProgressResult{}, e.readFailureAt(ctx, err)
 		}
-		q, ok, qErr := e.queryDefinitionAt(ctx, l, r.Space, r.Principal, r.Query)
+		q, ok, qErr := e.queryDefinitionAtRoots(ctx, roots, l, r.Space, r.Principal, r.Query)
 		if qErr != nil {
-			return api.QueryProgressResult{}, e.readFailure(qErr)
+			return api.QueryProgressResult{}, e.readFailureAt(ctx, qErr)
 		}
 		if !ok || q.Owner != r.Principal || q.Space != r.Space {
 			return api.QueryProgressResult{}, ErrInvalidStateData
@@ -193,7 +204,7 @@ func (e *Engine) GetQueryProgress(ctx context.Context, r api.ReadQueryProgressRe
 		}
 		provenance, err := e.queryProgressDisclosureIDs(ctx, r.Space, r.Principal, l, r.Query)
 		if err != nil {
-			return api.QueryProgressResult{}, e.readFailure(err)
+			return api.QueryProgressResult{}, e.readFailureAt(ctx, err)
 		}
 		ids = append(ids, provenance...)
 		if err := e.checkDisclosureIDs(ctx, r.Space, ids); err != nil {

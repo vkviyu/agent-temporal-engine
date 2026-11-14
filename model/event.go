@@ -50,4 +50,5 @@ type EventAttribution struct {
 	Invocation       string
 	Operation        string
 	Ordinal          uint64
+	Task             EntityID `json:",omitempty"`
 }

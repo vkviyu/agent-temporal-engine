@@ -12,6 +12,11 @@ import (
 )
 
 func (e *Engine) ListNodes(ctx context.Context, req api.ListNodesRequest) (api.NodePage, error) {
+	if ctx.Value(readDeliveryKey{}) == nil {
+		return embeddedViewReadDelivery(ctx, e, "list_nodes", req.View, req, func(scoped context.Context) (api.NodePage, error) {
+			return e.ListNodes(scoped, req)
+		})
+	}
 	l, err := checkedNodeLimits(req.Limits)
 	if err != nil {
 		return api.NodePage{}, err
@@ -46,11 +51,11 @@ func (e *Engine) ListNodes(ctx context.Context, req api.ListNodesRequest) (api.N
 	}
 	c, err := e.nodeCatalog(ctx, entry, layer)
 	if err != nil {
-		return api.NodePage{}, e.nodeReadError(err)
+		return api.NodePage{}, e.nodeReadError(ctx, err)
 	}
 	hidden, err := e.hiddenNodes(ctx, entry, req.IncludeHidden)
 	if err != nil {
-		return api.NodePage{}, e.nodeReadError(err)
+		return api.NodePage{}, e.nodeReadError(ctx, err)
 	}
 	items := make([]api.NodeSummary, 0, len(c.nodes))
 	for ref, n := range c.nodes {
@@ -107,7 +112,7 @@ func (e *Engine) projectedNode(ctx context.Context, entry *viewEntry, ref model.
 		return nodeProjection{}, nodeCatalog{}, model.ErrInvalidNodeRef
 	}
 	if ref.Kind == model.NodeEntity {
-		if n, handled, err := domainSubjectNode(ctx, &nodeQueryReader{source: e.index}, entry, ref); handled {
+		if n, handled, err := domainSubjectNode(ctx, &nodeQueryReader{source: e.reader(ctx)}, entry, ref); handled {
 			c := nodeCatalog{nodes: map[model.NodeRef]nodeProjection{ref: n}, objects: map[model.ObjectID]codec.Object{}}
 			return n, c, err
 		}
@@ -138,7 +143,7 @@ func (e *Engine) projectedNode(ctx context.Context, entry *viewEntry, ref model.
 		return n, c, nil
 	}
 	if ref.Kind == model.NodeObject {
-		if n, handled, err := domainSubjectNode(ctx, &nodeQueryReader{source: e.index}, entry, ref); handled {
+		if n, handled, err := domainSubjectNode(ctx, &nodeQueryReader{source: e.reader(ctx)}, entry, ref); handled {
 			c.nodes[ref] = n
 			return n, c, err
 		}
@@ -169,6 +174,11 @@ func (e *Engine) projectedNode(ctx context.Context, entry *viewEntry, ref model.
 	return nodeProjection{}, c, ErrNodeNotFound
 }
 func (e *Engine) GetNode(ctx context.Context, req api.GetNodeRequest) (api.NodeDetail, error) {
+	if ctx.Value(readDeliveryKey{}) == nil {
+		return embeddedViewReadDelivery(ctx, e, "get_node", req.View, req, func(scoped context.Context) (api.NodeDetail, error) {
+			return e.GetNode(scoped, req)
+		})
+	}
 	l, err := checkedNodeLimits(req.Limit)
 	if err != nil {
 		return api.NodeDetail{}, err
@@ -183,11 +193,11 @@ func (e *Engine) GetNode(ctx context.Context, req api.GetNodeRequest) (api.NodeD
 		if errors.Is(err, ErrNodeNotFound) || errors.Is(err, ErrUnsupportedMethod) || errors.Is(err, model.ErrInvalidNodeRef) {
 			return api.NodeDetail{}, err
 		}
-		return api.NodeDetail{}, e.nodeReadError(err)
+		return api.NodeDetail{}, e.nodeReadError(ctx, err)
 	}
 	n.detail.Anchors, err = e.nodeDeclaredAnchors(ctx, entry, n)
 	if err != nil {
-		return api.NodeDetail{}, e.nodeReadError(err)
+		return api.NodeDetail{}, e.nodeReadError(ctx, err)
 	}
 	if jsonBytes(n.detail) > l.bytes || len(n.detail.Sources) > l.edges {
 		return api.NodeDetail{}, storage.ErrLimit
@@ -204,6 +214,11 @@ type contextNeighbor struct {
 }
 
 func (e *Engine) GetNodeContext(ctx context.Context, req api.NodeContextRequest) (api.NodeContext, error) {
+	if ctx.Value(readDeliveryKey{}) == nil {
+		return embeddedViewReadDelivery(ctx, e, "get_node_context", req.View, req, func(scoped context.Context) (api.NodeContext, error) {
+			return e.GetNodeContext(scoped, req)
+		})
+	}
 	if typedContextMode(req.Mode) || len(req.Sections) > 0 {
 		return e.getTypedNodeContext(ctx, req)
 	}
@@ -227,7 +242,7 @@ func (e *Engine) GetNodeContext(ctx context.Context, req api.NodeContextRequest)
 		if errors.Is(err, ErrNodeNotFound) || errors.Is(err, ErrUnsupportedMethod) || errors.Is(err, model.ErrInvalidNodeRef) {
 			return api.NodeContext{}, err
 		}
-		return api.NodeContext{}, e.nodeReadError(err)
+		return api.NodeContext{}, e.nodeReadError(ctx, err)
 	}
 	scope := nodePageScope(entry, "context", struct {
 		Ref              model.NodeRef

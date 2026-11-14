@@ -11,7 +11,7 @@ func finishNodeRead[T any](ctx context.Context, e *Engine, entry *viewEntry, met
 		dependencies, err := e.nodeReadDeliveryDependencies(ctx, entry, catalog, ids)
 		if err != nil {
 			var zero T
-			return zero, e.nodeReadError(err)
+			return zero, e.nodeReadError(ctx, err)
 		}
 		ids = dependencies
 	}

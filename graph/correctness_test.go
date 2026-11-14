@@ -139,7 +139,7 @@ func TestGraphBoundsEmptyKeysAndDuplicateEvents(t *testing.T) {
 	if id := RevisionIDFor("s", "", nil, "invalid", nil, nil); id != "" {
 		t.Fatal("invalid input acquired content identity")
 	}
-	raw[0] = byte(RevisionSchema + 1)
+	raw[0] = byte(ProducedRevisionSchema + 1)
 	if _, err = DecodeRevision(raw); !errors.Is(err, ErrUnsupportedSchema) {
 		t.Fatalf("unknown schema misclassified: %v", err)
 	}
@@ -206,7 +206,7 @@ func TestCodecRejectsNoncanonicalContent(t *testing.T) {
 	if _, err = EncodeBranch(Branch{ID: model.BranchID(strings.Repeat("x", model.MaxIdentityBytes+1)), Head: a.ID}); err == nil {
 		t.Fatal("unbounded branch ID")
 	}
-	if _, err = DecodeBranch([]byte{2}); !errors.Is(err, ErrUnsupportedSchema) {
+	if _, err = DecodeBranch([]byte{byte(ScopedBranchSchema + 1)}); !errors.Is(err, ErrUnsupportedSchema) {
 		t.Fatal(err)
 	}
 }

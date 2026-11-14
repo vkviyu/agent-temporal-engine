@@ -32,6 +32,10 @@ func (j *Journal) CompactAuditFull(ctx context.Context) (report CompactionReport
 	if err = ctx.Err(); err != nil {
 		return report, err
 	}
+	if err = j.lockWriter(ctx); err != nil {
+		return report, err
+	}
+	defer j.writerMu.Unlock()
 	j.mu.Lock()
 	if err = j.writable(); err != nil {
 		j.mu.Unlock()
@@ -45,32 +49,27 @@ func (j *Journal) CompactAuditFull(ctx context.Context) (report CompactionReport
 		j.mu.Unlock()
 		return report, ErrLimit
 	}
-	// An earlier interrupted rewrite must be reconciled by Open rather than
-	// silently accumulating staging catalogs in an otherwise live publisher.
-	intents, listErr := j.io.List("compactions")
-	if listErr != nil && !errors.Is(listErr, fs.ErrNotExist) {
-		j.mu.Unlock()
-		return report, listErr
-	}
-	if len(intents) != 0 {
-		j.mu.Unlock()
-		return report, ErrRecoveryRequired
-	}
 	before := j.publication
 	sourceManifest := j.manifest
 	sourceSegments := append([]*journalSegment(nil), j.segments...)
 	j.state = JournalMaintenance
-	j.maintenanceDone = make(chan struct{})
 	j.mu.Unlock()
 	defer func() {
 		j.mu.Lock()
 		if j.state == JournalMaintenance {
 			j.state = JournalReady
 		}
-		close(j.maintenanceDone)
-		j.maintenanceDone = nil
 		j.mu.Unlock()
 	}()
+	// An earlier interrupted rewrite must be reconciled by Open. Directory IO
+	// belongs to the writer, while reader metadata remains available under mu.
+	intents, listErr := j.io.List("compactions")
+	if listErr != nil && !errors.Is(listErr, fs.ErrNotExist) {
+		return report, listErr
+	}
+	if len(intents) != 0 {
+		return report, ErrRecoveryRequired
+	}
 	genesis, err := GenesisPosition(j.identity)
 	if err != nil {
 		return report, err
@@ -121,6 +120,9 @@ func (j *Journal) CompactAuditFull(ctx context.Context) (report CompactionReport
 	if err = ctx.Err(); err != nil {
 		return report, err
 	}
+	if err = j.publicationAllowed(); err != nil {
+		return report, err
+	}
 	// A durable intent precedes creating candidate segments. Recovery may only
 	// delete candidates named by this authenticated intent after verifying the
 	// authoritative ledger and its source anchor.
@@ -143,7 +145,7 @@ func (j *Journal) CompactAuditFull(ctx context.Context) (report CompactionReport
 		return report, err
 	}
 	file, err := j.io.CreateExclusive(segmentName(segmentID))
-	candidate := &journalSegment{file: file}
+	candidate := &journalSegment{file: file, descriptor: SegmentDescriptor{SegmentID: segmentID}}
 	if file != nil {
 		j.mu.Lock()
 		j.pendingSegments = append(j.pendingSegments, candidate)
@@ -160,7 +162,7 @@ func (j *Journal) CompactAuditFull(ctx context.Context) (report CompactionReport
 	if err = writeAll(writer, header); err != nil {
 		return report, err
 	}
-	reader := logicalReader{segments: sourceSegments, end: before.PublishedEnd}
+	reader := logicalReader{segments: snapshotReadSegments(sourceSegments), end: before.PublishedEnd}
 	remaining := before.PublishedEnd - SegmentHeaderSize
 	buffer := make([]byte, 64<<10)
 	for off := uint64(SegmentHeaderSize); remaining > 0; {
@@ -202,102 +204,30 @@ func (j *Journal) CompactAuditFull(ctx context.Context) (report CompactionReport
 		j.mu.Unlock()
 		return report, ErrPrecondition
 	}
-	err = installPublication(j.io, m, j.identityDigest)
-	if err == nil {
-		j.segments = []*journalSegment{candidate}
-		j.segment, j.segmentID, j.headerDigest, j.prefix = file, segmentID, m.SegmentHeaderDigest, prefix
-		j.manifest, j.publication = m, publicationFor(j.identity, m)
-		j.retirementIntent = intentName(intentID)
-		j.pendingSegments = nil
-		for _, old := range sourceSegments {
-			j.retiredSegments = append(j.retiredSegments, &retiredSegment{segment: old})
-		}
-		report = CompactionReport{Before: before, After: j.publication, CopiedBytes: before.PublishedEnd - SegmentHeaderSize, RetiredSegments: len(sourceSegments)}
-	}
 	j.mu.Unlock()
+	err = installPublication(j.io, m, j.identityDigest)
 	if err != nil {
 		return report, err
 	}
+	j.mu.Lock()
+	if j.fenceCause != nil {
+		err = fmt.Errorf("%w: %w", ErrStoreFenced, j.fenceCause)
+		j.mu.Unlock()
+		return report, err
+	}
+	j.segments = []*journalSegment{candidate}
+	j.segment, j.segmentID, j.headerDigest, j.prefix = file, segmentID, m.SegmentHeaderDigest, prefix
+	j.manifest, j.publication = m, publicationFor(j.identity, m)
+	j.retirementIntent = intentName(intentID)
+	j.pendingSegments = nil
+	for _, old := range sourceSegments {
+		j.retiredSegments = append(j.retiredSegments, &retiredSegment{segment: old})
+	}
+	report = CompactionReport{Before: before, After: j.publication, CopiedBytes: before.PublishedEnd - SegmentHeaderSize, RetiredSegments: len(sourceSegments)}
+	j.mu.Unlock()
 	// The new publication is known durable. Cleanup errors leave a retryable
 	// retirement obligation, rather than declaring the old layout authoritative.
 	started = false
-	j.mu.Lock()
-	report.ReclaimedSegments, report.PinnedSegments, err = j.reclaimRetiredLocked()
-	j.mu.Unlock()
+	report.ReclaimedSegments, report.PinnedSegments, err = j.reclaimRetired()
 	return report, err
-}
-
-func (j *Journal) compactionFence(cause error, uncertain bool) error {
-	j.mu.Lock()
-	defer j.mu.Unlock()
-	if j.state != JournalFenced {
-		j.state = JournalFenced
-		j.fenceCause = cause
-	}
-	if uncertain {
-		return fmt.Errorf("%w: physical compaction: %w", ErrCommitUnknown, cause)
-	}
-	return fmt.Errorf("%w: physical compaction: %w", ErrStoreFenced, cause)
-}
-
-// ReclaimRetired retries physical retirement after readers have released their
-// pins. It never removes any file in the current layout. Reopening also retries
-// this obligation from the authenticated manifest, including after a crash.
-func (j *Journal) ReclaimRetired(ctx context.Context) ([]string, int, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, 0, err
-	}
-	j.mu.Lock()
-	defer j.mu.Unlock()
-	if err := j.writable(); err != nil {
-		return nil, 0, err
-	}
-	return j.reclaimRetiredLocked()
-}
-
-func (j *Journal) reclaimRetiredLocked() (removed []string, pinned int, err error) {
-	if j.retirementIntent != "" {
-		if err = j.io.Remove(j.retirementIntent); err != nil && !errors.Is(err, fs.ErrNotExist) {
-			return nil, 0, fmt.Errorf("%w: %w", ErrRetirement, err)
-		}
-		if err = j.io.SyncDir("compactions"); err != nil {
-			return nil, 0, fmt.Errorf("%w: %w", ErrRetirement, err)
-		}
-		j.retirementIntent = ""
-	}
-	for _, r := range j.retiredSegments {
-		if r.removed {
-			continue
-		}
-		s := r.segment
-		if j.segmentPinned(s.descriptor.SegmentID) {
-			pinned++
-			continue
-		}
-		if !s.closed {
-			if err = s.file.Close(); err != nil {
-				return removed, pinned, fmt.Errorf("%w: %w", ErrRetirement, err)
-			}
-			s.closed = true
-		}
-		name := segmentName(s.descriptor.SegmentID)
-		if err = j.io.Remove(name); err != nil && !errors.Is(err, fs.ErrNotExist) {
-			return removed, pinned, fmt.Errorf("%w: %w", ErrRetirement, err)
-		}
-		r.removed = true
-		removed = append(removed, name)
-	}
-	if len(j.retiredSegments) != 0 {
-		if err = j.io.SyncDir("segments"); err != nil {
-			return removed, pinned, fmt.Errorf("%w: %w", ErrRetirement, err)
-		}
-	}
-	remaining := j.retiredSegments[:0]
-	for _, r := range j.retiredSegments {
-		if !r.removed {
-			remaining = append(remaining, r)
-		}
-	}
-	j.retiredSegments = remaining
-	return removed, pinned, nil
 }

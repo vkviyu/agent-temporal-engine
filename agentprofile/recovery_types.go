@@ -22,22 +22,23 @@ type ExecutionAuthority struct {
 	Evidence  model.ObjectID
 }
 type ActivitySpec struct {
-	Activity       string
-	Execution      model.ExecutionID
-	Query          string
-	Role           string
-	Step           uint64
-	Invocation     string
-	GoalEpoch      uint64
-	InputFence     model.CommitFence
-	ContextPacket  model.ObjectID // embedded Knowledge PacketID, not a raw core object
-	RequestDigest  model.ObjectID // ExactRequestDigest of the complete stored request bytes
-	Request        model.ObjectID // published request content at InputFence
-	Recipient      string
-	Effect         string // pure, idempotent, non_idempotent
-	IdempotencyKey string
-	ResourceScope  string
-	Contract       EffectContract
+	Activity         string
+	Execution        model.ExecutionID
+	Query            string
+	Role             string
+	Step             uint64
+	Invocation       string
+	GoalEpoch        uint64
+	InputFence       model.CommitFence
+	ContextPacket    model.ObjectID // embedded Knowledge PacketID, not a raw core object
+	RequestDigest    model.ObjectID // ExactRequestDigest of the complete stored request bytes
+	Request          model.ObjectID // published request content at InputFence
+	Recipient        string
+	Effect           string // pure, idempotent, non_idempotent
+	IdempotencyKey   string
+	ResourceScope    string
+	Contract         EffectContract
+	FinalAnswerInput model.ObjectID `json:"final_answer_input,omitempty"`
 }
 type ActivityControl struct {
 	Activity           string
@@ -86,6 +87,9 @@ type QueryAnswer struct {
 	Version           uint64
 	Body              []byte
 	Final             bool
+	GeneratedFrom     string         `json:"generated_from,omitempty"`
+	Outcomes          []TaskOutcome  `json:"outcomes,omitempty"`
+	InputEvidence     model.ObjectID `json:"input_evidence,omitempty"`
 }
 type WorkStart struct {
 	Query, Slot  string
@@ -182,6 +186,7 @@ type RecoverySnapshot struct {
 	ValidationRequirements []ValidationRequirement `json:"validation_requirements,omitempty"`
 	IdempotencyGuarantees  []IdempotencyGuarantee  `json:"idempotency_guarantees,omitempty"`
 	RetryAuthorizations    []RetryAuthorization    `json:"retry_authorizations,omitempty"`
+	OutputChunks           []OutputChunk           `json:"output_chunks,omitempty"`
 }
 
 type AnswerQueryCommand struct {
@@ -189,6 +194,9 @@ type AnswerQueryCommand struct {
 	ExpectedVersion   uint64
 	Body              []byte
 	Final             bool
+	GeneratedFrom     string
+	Outcomes          []TaskOutcome
+	InputEvidence     model.ObjectID
 }
 type StartWorkCommand struct {
 	Query, Slot          string
@@ -223,6 +231,7 @@ type DispatchAttemptCommand struct {
 	Use       RetryUse
 }
 type CaptureResultCommand struct{ Result ActivityResult }
+type CaptureOutputChunkCommand struct{ Chunk OutputChunk }
 type AcceptActivityCommand struct {
 	Activity, Result string
 	ExpectedVersion  uint64
@@ -387,9 +396,10 @@ type ControlCommand struct {
 	BindValidation          *BindValidationCommand
 	PutIdempotencyGuarantee *PutIdempotencyGuaranteeCommand
 	AuthorizeRetry          *AuthorizeRetryCommand
+	CaptureOutputChunk      *CaptureOutputChunkCommand
 }
 
 // currentControlSchema is the only schema emitted and accepted by V1.
-const currentControlSchema uint64 = 5
+const currentControlSchema uint64 = 6
 
 func (c ControlCommand) SchemaVersion() uint64 { return currentControlSchema }

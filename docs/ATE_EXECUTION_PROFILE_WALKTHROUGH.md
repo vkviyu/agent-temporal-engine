@@ -1,6 +1,6 @@
 # ATE 执行对象与多 Agent 场景推演
 
-> 本文保留完整 V1 目标。当前候选格式为 Control 5、Invocation 2、Continuation opcode 8、Work 1、Emission 3 和 Packet 4。2026-11-03 独立审计保留当时的反例和证据边界。本文末尾保留当时审计状态，当前实现收口和验证以文末 2026-11-05 段落为准。 [独立审计](validation/V1_INDEPENDENT_CURRENT_AUDIT_2026-11-03.md) · [格式清单](formats/ate-v1-manifest-2026-11-02.md)
+> 完整 V1 目标保持不变。当前格式：Control 6、Invocation 2、Continuation opcode 8、Work 1、Emission 3、Packet 5、Summary 2。严格验收仍开放；历史日期的已完成结论不能覆盖后续发现的反例。当前实现、验证和真实剩余项以 [2026-11-06 交叉审计](validation/V1_CROSS_AUDIT_2026-11-06.md) 为准。
 >
 > 2026-11-01 的代码对照见 [文档—代码审计](validation/V1_DOCUMENT_CODE_CROSS_AUDIT_2026-11-01.md)。本场景仍是完整验收目标，包级回归和部分 Node/Key/Cursor 支持不表示该真实多 Agent 流水已经全部执行通过。
 
@@ -45,7 +45,7 @@
 
 T0 始终是同一任务。OT0-1/OT0-2 是内容摘要寻址的不同记录，旧记录不覆盖。Event 说明变化的来源和发生身份。状态树根只是选择“在这个版本中，T0 对应哪份记录”。
 
-不是每个字段都有独立实体 ID。Observation 可以是 typed Event + payload；ContextPacket、结果、产物、摘要通常只需 ObjectID，不再制造第二套业务身份。
+Observation 和 ContextPacket 各有独立的不可变记录，并通过知识索引按 ID 读取。启用 Event Profile 时，发布另有发生事件。记录身份、事件身份、Payload 的内容地址各自用于检索、审计和读取。Summary 同样区分摘要 ID 与原始输出对象的地址。
 
 ### 2.2 原子提交、恢复点和临时能力
 
@@ -442,6 +442,8 @@ list(Task/Execution 摘要)
 
 因此，API 的统一性体现在请求/响应、Anchor、NodeRef、分页和权限语义统一；颗粒度体现在 `layer + projection + contextMode + limits`，而不是让一个万能 API 暴露所有底层结构。
 
+只需浏览某个 Query 或 Task 的关键轨迹时，可以先调用 `GetTaskTrace`，再按关系调用 `GetTaskTraceEvidence`，随后沿返回的历史引用打开具体节点。用法见 [长程任务闭环实例](#长程任务闭环实例)。
+
 ## 14. 一眼看到的三种组织视图
 
 ### 14.1 导航关系
@@ -631,3 +633,23 @@ KnowledgeKey 的 Observation 采用。首个 Packet 已包含目标；后续 Pac
 ## 2026-11-05 当前场景收口
 
 C01–C20 中涉及的受保护事实组使用当前 V1 Work。模型/工具 Attempt 使用 exact Emission grant，FinishStep 使用同执行 checkpoint、ActionIntent 和最终 Knowledge cut，消息消费把 Observation 与接收方 Continuation 绑定到同一生产事务。读取 Packet RecordedInput 的派生对象会重新检查来源撤回。当前源树证据与测试退出码见 [V1 当前交叉验收续记](validation/V1_CURRENT_CROSS_CHECK_2026-11-05.md)。
+
+## 2026-11-06 场景闭合与仍待完成项
+
+流式模型响应先以 Attempt/Response/Sequence 产生持久 OutputChunk，只有网络最终完成且终结 Payload 与全部分块一致才可 Capture full；断开留下可审计前缀，不能把它当完整模型决策。它们在统一导航中属于 agent/OutputChunk，关联原 Attempt 与 Activity。
+
+任务成果与验收先通过 CompleteTask 成为 TaskOutcome。Root 随后在 Query 作用域创建最终 query_decision；其已发布 FinalAnswerInput 见证绑定确切全部 Outcomes、实际请求和 Packet。最终模型失败时 Task 继续 completed，Query 保留恢复位置；重开只重试答复。新的成功结果接受且决策不带工具后，query_complete 才写 QueryAnswer，正文必须等于该结果字节。
+
+Query Packet 不导入子执行的私有知识。见证提供显式成果来源；见证、原始请求和 Packet 的来源邻接与 Activity 控制状态原子发布。撤回成果或验收证据后，typed API、原始 State、固定 View 和重开后的披露保持一致。跨 CURRENT 故障不得只出现 Activity 或只出现来源索引。
+
+这些场景已有直接回归。普通嵌入式读取已接入统一的单次出站许可。读切面、发布短锁和存储 writer 锁的实现及验证见 [当前交叉审计](validation/V1_CROSS_AUDIT_2026-11-06.md) 的 L-01、L-02。
+
+## 长程任务闭环实例
+
+以下流程对应 [嵌入式与 Unix SDK 联合用例](../tests/host/long_task_test.go) 和 [跨会话采用用例](../engine/typed_import_recovery_test.go)。
+
+1. **子执行探索并发布状态。** Root 从固定 Revision 创建目标分支，两个子执行分别通过 `ForkLocal` 和 `WriteBranch` 探索。每项写入绑定分支位置和执行授权，分别推进各自的 Revision。Root 通过 `JoinLocal` 指定源和目标版本并处理冲突。随后 `PublishBranch` 检查当前领域根与变更键，只把差异写入 Space。裁剪被放弃的分支仍留下审计记录。Root 对子结果的 `JoinExecutions`、对观察的显式采用及状态发布分别提交。
+2. **回看 Query 到 Answer 的因果链。** 最终答复发布后，宿主按 Query ID 调用 `GetTaskTrace`，可以附 Session 核对归属，也可按 Task 查执行子树。关键节点包含 TaskOutcome、QueryAnswer 等对象的发生事件和固定 Anchor。宿主可通过 `ApplyTaskTrace` 保存关键节点说明与带证据的 `supports`、`refutes`、`explains` 关系。使用 `GetTaskTraceEvidence` 展开记录的因果区间或解释证据，再凭返回的 Anchor 和 NodeRef 读取节点上下文或有界原始字节。共享分支基线等直接来源可通过 `Boundary` 追查。当前撤回策略同样约束这些历史读取。
+3. **在另一个 Session 采用经验并继续。** 宿主从已授权的历史证据验证、晋升 Memory。ExperiencePath 可关联多条 Memory、原节点、验证证据与被省略的反例。新执行最初只有自己的知识，通过 `ApplyKnowledge` 的 `Import` 固定来源知识修订和观察 ID，显式采用相关材料。Observation 的增量记录推进知识前沿。随后生成的 ContextPacket 固定选中材料与实际请求字节，供重开后精确读取。重新派发前复核 Memory、ExperiencePath、Summary 及来源当前的可用性。
+
+联合用例还覆盖非幂等副作用对账、AuditFull 和重开。模型端使用确定性测试替身，真实模型效果验证见 [实现状态](ATE_IMPLEMENTATION_STATUS.zh-CN.md)。接口契约见 [API 参考](ATE_API_REFERENCE.md)。

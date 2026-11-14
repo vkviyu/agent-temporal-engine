@@ -7,8 +7,15 @@ import (
 )
 
 const KindAgentTransition = "agent.transition_applied"
-const ProfileRegistryVersion uint64 = 1
+const (
+	LegacyProfileRegistryVersion uint64 = 1
+	ProfileRegistryVersion       uint64 = 2
+)
 const MaxProfileEvents = 256
+
+func SupportsProfileRegistry(version uint64) bool {
+	return version == LegacyProfileRegistryVersion || version == ProfileRegistryVersion
+}
 
 // SubjectRef is the registry-owned navigation mapping. Content-addressed
 // Knowledge records use NodeObject; Agent subjects use logical NodeEntity.
@@ -45,13 +52,14 @@ func SubjectRef(a model.EventAttribution) (model.NodeRef, error) {
 	return model.NodeRef{Kind: model.NodeEntity, Entity: a.Subject}, nil
 }
 
-// Registry version 1 is a closed set of transition names. Renaming a command
+// The registry is a closed set of transition names. Renaming a command
 // field does not silently rename its historical event contract.
 func RegisteredAgentOperation(operation string) bool {
 	switch operation {
 	case "Core.annotation.apply/v1", "Core.graph.apply/v1", "Core.memory.apply/v1", "Core.knowledge.apply/v1", "Core.knowledge.summary.apply/v1", "Core.agent.emission.apply/v1", "Core.transfer.import/v1":
 		return true
 	case "Graph.AddRevision", "Graph.Fork", "Graph.Advance", "Graph.Join", "Graph.JoinRevision", "Graph.Prune",
+		"Graph.ForkLocal", "Graph.WriteRevision", "Graph.WriteBranch", "Graph.JoinLocalRevision", "Graph.JoinLocal", "Graph.PublishBranch",
 		"Memory.PutCandidate", "Memory.Validate", "Memory.Promote", "Memory.Transition", "Memory.RetractSource", "Memory.BuildPath", "Memory.RetractPath",
 		"Annotation.Apply", "Annotation.Retract", "Summary.Apply", "Emission.Issue", "Emission.Claim", "Emission.Revoke", "Transfer.Import":
 		return true
@@ -59,7 +67,7 @@ func RegisteredAgentOperation(operation string) bool {
 		"Lifecycle.PutQuery", "Lifecycle.PutActivity", "Lifecycle.PutAttempt", "Lifecycle.PutResult", "Lifecycle.PutMessage", "Lifecycle.ConsumeMessage", "Lifecycle.PutContinuation",
 		"Control.AnswerQuery", "Control.StartWork", "Control.GrantAuthority", "Control.FenceAuthority", "Control.Resume", "Control.CreateActivity", "Control.ClaimAttempt", "Control.DispatchAttempt", "Control.CaptureResult", "Control.AcceptActivity", "Control.SettleActivity", "Control.ReconcileAttempt", "Control.RetryActivity", "Control.SaveContinuation", "Control.ObserveGoal", "Control.CompleteTask", "Control.CancelExecution", "Control.SpawnChild", "Control.PutAction", "Control.ResolveAction", "Control.RebindAction", "Control.BeginStep", "Control.RecordInvocation", "Control.FinishStep", "Control.JoinExecutions", "Control.RebaseInherited", "Control.Checkpoint", "Control.SendMessage", "Control.ConsumeMessage", "Control.ImportActivityResult", "Control.BindValidation",
 		"Work.query_intake", "Work.query_start", "Work.model_decision", "Work.message_consume", "Work.child_spawn", "Work.checkpoint", "Work.emission_dispatch", "Work.query_open", "Work.query_checkpoint", "Work.query_decision", "Work.query_tool", "Work.query_answer",
-		"Query.InvocationRecorded",
+		"Query.InvocationRecorded", "Control.CaptureOutputChunk",
 		"Knowledge.Observation", "Knowledge.Packet", "Knowledge.Import":
 		return true
 	}
@@ -89,7 +97,7 @@ func registeredSubject(k model.EntityKey) bool {
 		return false
 	}
 	switch k.Kind {
-	case "Task", "Execution", "Step", "Invocation", "PendingAction", "Query", "Activity", "Attempt", "ActivityResult", "Message", "MessageConsumption", "Continuation", "QueryAnswer", "WorkStart", "ExecutionAuthority", "ActivityAcceptance", "ActivitySettlement", "AttemptReconciliation", "GoalObservation", "TaskOutcome", "ExecutionJoin", "TaskLink", "ValidationRequirement", "WorkUnit", "QueryInvocation", "Emission":
+	case "Task", "Execution", "Step", "Invocation", "PendingAction", "Query", "Activity", "Attempt", "ActivityResult", "OutputChunk", "Message", "MessageConsumption", "Continuation", "QueryAnswer", "WorkStart", "ExecutionAuthority", "ActivityAcceptance", "ActivitySettlement", "AttemptReconciliation", "GoalObservation", "TaskOutcome", "ExecutionJoin", "TaskLink", "ValidationRequirement", "WorkUnit", "QueryInvocation", "Emission":
 		return true
 	}
 	return false
@@ -102,9 +110,9 @@ func registeredOperationSubject(operation string, subject model.EntityKey) bool 
 		return string(subject.Profile) == profile && string(subject.Kind) == kind
 	}
 	switch operation {
-	case "Graph.AddRevision", "Graph.JoinRevision":
+	case "Graph.AddRevision", "Graph.JoinRevision", "Graph.WriteRevision", "Graph.JoinLocalRevision":
 		return match("graph", "Revision") && model.ValidDigest(string(subject.ID))
-	case "Graph.Fork", "Graph.Advance", "Graph.Join", "Graph.Prune":
+	case "Graph.Fork", "Graph.Advance", "Graph.Join", "Graph.Prune", "Graph.ForkLocal", "Graph.WriteBranch", "Graph.JoinLocal", "Graph.PublishBranch":
 		return match("graph", "Branch")
 	case "Memory.PutCandidate", "Memory.Validate", "Memory.Promote", "Memory.Transition":
 		return match("memory", "Memory") && model.ValidDigest(string(subject.ID))
@@ -135,7 +143,7 @@ func validateRegisteredEvent(e model.Event) error {
 		a := e.Attribution
 		if e.Kind != KindAgentTransition || e.SchemaVersion != 1 || e.ProfileRegistryVersion != 0 || len(e.ProfileEvents) != 0 ||
 			!a.Subject.Valid() || !registeredSubject(a.Subject) || !registeredOperationSubject(a.Operation, a.Subject) || !text(string(a.Subject.Profile)) || !text(string(a.Subject.Kind)) || len(a.Subject.ID) > 4096 || !utf8.ValidString(string(a.Subject.ID)) || !RegisteredAgentOperation(a.Operation) || a.Ordinal == 0 ||
-			(a.InitiatingActor != "" && !text(string(a.InitiatingActor))) || (a.Execution != "" && !text(string(a.Execution))) || (a.Query != "" && !text(a.Query)) || (a.Session != "" && !text(a.Session)) || (a.Invocation != "" && !text(a.Invocation)) {
+			(a.InitiatingActor != "" && !text(string(a.InitiatingActor))) || (a.Execution != "" && !text(string(a.Execution))) || (a.Query != "" && !text(a.Query)) || (a.Session != "" && !text(a.Session)) || (a.Invocation != "" && !text(a.Invocation)) || (a.Task != "" && !text(string(a.Task))) {
 			return ErrInvalid
 		}
 		if a.Operation == "Query.InvocationRecorded" && (a.Query == "" || a.DecisionSequence == 0 || a.Invocation == "" || a.Execution != "") {
@@ -172,7 +180,7 @@ func validateRegisteredEvent(e model.Event) error {
 		}
 		return nil
 	}
-	if e.SchemaVersion != 2 || e.ProfileRegistryVersion != ProfileRegistryVersion || len(e.ProfileEvents) == 0 || len(e.ProfileEvents) > MaxProfileEvents || len(e.CausalParents) != 0 {
+	if e.SchemaVersion != 2 || !SupportsProfileRegistry(e.ProfileRegistryVersion) || len(e.ProfileEvents) == 0 || len(e.ProfileEvents) > MaxProfileEvents || len(e.CausalParents) != 0 {
 		return ErrInvalid
 	}
 	seen := map[model.EventID]bool{}

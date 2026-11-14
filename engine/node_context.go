@@ -111,7 +111,7 @@ func typedNodePartition(n nodeProjection) string {
 		return "inputs"
 	case "Message", "MessageConsumption":
 		return "messages"
-	case "Attempt", "ActivityResult", "ActivityControl", "AttemptControl", "ResultCapture", "ActivityAcceptance", "ActivityResultImport", "ActivitySettlement", "AttemptReconciliation", "ActionResolution", "receipt":
+	case "Attempt", "ActivityResult", "OutputChunk", "ActivityControl", "AttemptControl", "ResultCapture", "ActivityAcceptance", "ActivityResultImport", "ActivitySettlement", "AttemptReconciliation", "ActionResolution", "receipt":
 		return "activityReceipts"
 	case "TaskOutcome", "ResumePlan", "ValidationRequirement", "artifact":
 		return "artifacts"
@@ -151,13 +151,13 @@ func (e *Engine) getTypedNodeContext(ctx context.Context, req api.NodeContextReq
 	}
 	c, err := e.nodeContextCatalog(ctx, entry)
 	if err != nil {
-		return api.NodeContext{}, e.nodeReadError(err)
+		return api.NodeContext{}, e.nodeReadError(ctx, err)
 	}
 	// Domain subjects are inspected lazily from their registered root. Expand
 	// only this request's subject and explicit references, not every event's
 	// payload, and never enlarge an execution-knowledge View.
-	if err = addRequestedDomainContext(ctx, &nodeQueryReader{source: e.index}, entry, &c, req.Ref); err != nil {
-		return api.NodeContext{}, e.nodeReadError(err)
+	if err = addRequestedDomainContext(ctx, &nodeQueryReader{source: e.reader(ctx)}, entry, &c, req.Ref); err != nil {
+		return api.NodeContext{}, e.nodeReadError(ctx, err)
 	}
 	n, exists := c.nodes[req.Ref]
 	if !exists {
@@ -165,7 +165,7 @@ func (e *Engine) getTypedNodeContext(ctx context.Context, req api.NodeContextReq
 	}
 	anchors, err := e.nodeDeclaredAnchors(ctx, entry, n)
 	if err != nil {
-		return api.NodeContext{}, e.nodeReadError(err)
+		return api.NodeContext{}, e.nodeReadError(ctx, err)
 	}
 	out := api.NodeContext{Ref: req.Ref, Anchor: entry.descriptor.Anchor.Clone(), Mode: mode, Coverage: "bounded_explicit_relations", Anchors: anchors, Sections: map[string][]api.NodeSummary{}}
 	if mode == "as_known_at_anchor" {
@@ -292,7 +292,7 @@ func (e *Engine) getTypedNodeContext(ctx context.Context, req api.NodeContextReq
 	if wanted["stateDiff"] {
 		changes, available, err := nodeRevisionChanges(c, n)
 		if err != nil {
-			return api.NodeContext{}, e.nodeReadError(err)
+			return api.NodeContext{}, e.nodeReadError(ctx, err)
 		}
 		if !available {
 			out.Gaps = append(out.Gaps, api.NodeContextGap{Section: "stateDiff", Reason: "no_state_revision"})

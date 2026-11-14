@@ -199,7 +199,7 @@ func (h *evalHost) call(name, question string, facts []evalFact, maxOutput int, 
 	if err != nil {
 		h.t.Fatalf("model transport/completion failed (separate from task score): %v", err)
 	}
-	r := agentprofile.ActivityResult{ID: name + "-result", Activity: a.Activity, Attempt: attempt, RequestDigest: a.RequestDigest, Incarnation: 1, Outcome: "success", Payload: output}
+	r := agentprofile.ActivityResult{Capture: "full", ID: name + "-result", Activity: a.Activity, Attempt: attempt, RequestDigest: a.RequestDigest, Incarnation: 1, Outcome: "success", Payload: output}
 	h.control(agentprofile.ControlCommand{CaptureResult: &agentprofile.CaptureResultCommand{Result: r}})
 	h.control(agentprofile.ControlCommand{AcceptActivity: &agentprofile.AcceptActivityCommand{Activity: a.Activity, Result: r.ID, ExpectedVersion: 1, Authority: h.a, Evidence: input}})
 	outputID, outputAck := h.put(output)

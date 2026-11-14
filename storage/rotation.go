@@ -42,7 +42,7 @@ func clonePrefix(source hash.Hash) (hash.Hash, error) {
 // prepareLayout keeps the initial header in the logical address space but
 // excludes all later headers and seals. Canonical transaction bytes, their
 // fingerprints, record addresses, and receipts are independent of rotation.
-func (j *Journal) prepareLayout(batch []*PreparedTransaction, total uint64, manifestID string) (*publicationLayout, error) {
+func (j *journalWriterState) prepareLayout(batch []*PreparedTransaction, total uint64, manifestID string) (*publicationLayout, error) {
 	p := j.publication
 	segments := append([]*journalSegment(nil), j.segments...)
 	if len(segments) == 0 {
@@ -180,7 +180,7 @@ func (j *Journal) prepareLayout(batch []*PreparedTransaction, total uint64, mani
 
 // writeLayout starts P1. Callers must not inspect ctx after entering: an IO
 // error can leave a seal or successor, and the entire batch then is unknown.
-func (j *Journal) writeLayout(layout *publicationLayout) error {
+func (j *journalWriterState) writeLayout(layout *publicationLayout, guard func() error) error {
 	for _, write := range layout.writes {
 		segment := write.segment
 		if write.header != nil {
@@ -221,6 +221,9 @@ func (j *Journal) writeLayout(layout *publicationLayout) error {
 		if err := j.io.SyncDir("segments"); err != nil {
 			return err
 		}
+	}
+	if err := guard(); err != nil {
+		return err
 	}
 	return installPublication(j.io, layout.manifest, j.identityDigest)
 }

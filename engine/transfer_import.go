@@ -155,15 +155,15 @@ func (e *Engine) prepareTransfer(ctx context.Context, req api.CommitRequest, dig
 }
 
 func (e *Engine) loadTransfer(ctx context.Context, roots model.RootSet, space model.SpaceID, principal model.PrincipalID, id model.ObjectID) (transfer.ImportRecord, bool, error) {
-	root, err := slotSpaceRoot(ctx, e.index, roots.ExecutionKnowledge, space)
+	root, err := slotSpaceRoot(ctx, e.reader(ctx), roots.ExecutionKnowledge, space)
 	if err != nil {
 		return transfer.ImportRecord{}, false, err
 	}
-	record, found, err := state.Get(ctx, e.index, space, root, transferStateKey(principal, id))
+	record, found, err := state.Get(ctx, e.reader(ctx), space, root, transferStateKey(principal, id))
 	if err != nil || !found {
 		return transfer.ImportRecord{}, found, err
 	}
-	o, err := readObject(ctx, e.index, record)
+	o, err := readObject(ctx, e.reader(ctx), record)
 	if err != nil {
 		return transfer.ImportRecord{}, false, err
 	}
@@ -179,6 +179,11 @@ func (e *Engine) loadTransfer(ctx context.Context, roots model.RootSet, space mo
 }
 
 func (e *Engine) GetTransfer(ctx context.Context, req api.ReadTransferRequest) (api.TransferResult, error) {
+	if ctx.Value(readDeliveryKey{}) == nil {
+		return embeddedReadDelivery(ctx, e, "get_transfer", req.Principal, req, func(scoped context.Context) (api.TransferResult, error) {
+			return e.GetTransfer(scoped, req)
+		})
+	}
 	if err := ctx.Err(); err != nil {
 		return api.TransferResult{}, err
 	}
@@ -188,14 +193,10 @@ func (e *Engine) GetTransfer(ctx context.Context, req api.ReadTransferRequest) (
 	if err := e.publicGate(); err != nil {
 		return api.TransferResult{}, err
 	}
-	if err := e.mu.LockContext(ctx); err != nil {
+	if err := e.readReady(ctx); err != nil {
 		return api.TransferResult{}, err
 	}
-	defer e.mu.Unlock()
-	if err := e.ready(); err != nil {
-		return api.TransferResult{}, err
-	}
-	anchor := model.SnapshotAnchor{Space: req.Space, Fence: e.publication.Fence()}
+	anchor := model.SnapshotAnchor{Space: req.Space, Fence: e.readPublication(ctx).Fence()}
 	if req.Anchor != nil {
 		anchor = req.Anchor.Clone()
 	}
@@ -208,7 +209,7 @@ func (e *Engine) GetTransfer(ctx context.Context, req api.ReadTransferRequest) (
 	}
 	r, found, err := e.loadTransfer(ctx, roots, req.Space, req.Principal, req.ID)
 	if err != nil {
-		return api.TransferResult{}, e.knowledgeReadFailure(err)
+		return api.TransferResult{}, e.knowledgeReadFailure(ctx, err)
 	}
 	var disclosed []model.ObjectID
 	if found {
@@ -228,18 +229,18 @@ func (e *Engine) GetTransfer(ctx context.Context, req api.ReadTransferRequest) (
 }
 
 func (e *Engine) transferArchive(ctx context.Context, roots model.RootSet, space model.SpaceID, principal model.PrincipalID, id model.ObjectID) (transfer.ArchiveEntry, bool, error) {
-	root, err := slotSpaceRoot(ctx, e.index, roots.ExecutionKnowledge, space)
+	root, err := slotSpaceRoot(ctx, e.reader(ctx), roots.ExecutionKnowledge, space)
 	if err != nil {
 		return transfer.ArchiveEntry{}, false, err
 	}
-	stored, found, err := state.Get(ctx, e.index, space, root, transferArchiveKey(principal, id))
+	stored, found, err := state.Get(ctx, e.reader(ctx), space, root, transferArchiveKey(principal, id))
 	if err != nil || !found {
 		return transfer.ArchiveEntry{}, found, err
 	}
 	if stored != id {
 		return transfer.ArchiveEntry{}, false, ErrInvalidStateData
 	}
-	o, err := readObject(ctx, e.index, id)
+	o, err := readObject(ctx, e.reader(ctx), id)
 	if err != nil {
 		return transfer.ArchiveEntry{}, false, err
 	}

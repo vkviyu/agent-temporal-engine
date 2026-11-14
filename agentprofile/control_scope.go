@@ -52,6 +52,12 @@ func (l *Ledger) controlScope(key model.RequestKey, c ControlCommand) error {
 		}
 		eid = s.Execution
 		queryID = s.Query
+	case c.CaptureOutputChunk != nil:
+		s, err := l.activitySpec(c.CaptureOutputChunk.Chunk.Activity)
+		if err != nil {
+			return err
+		}
+		eid, queryID = s.Execution, s.Query
 	case c.CaptureResult != nil:
 		s, err := l.activitySpec(c.CaptureResult.Result.Activity)
 		if err != nil {

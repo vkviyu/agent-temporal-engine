@@ -26,15 +26,15 @@ func summaryStateKey(space model.SpaceID, principal model.PrincipalID, id model.
 }
 
 func (e *Engine) loadSummary(ctx context.Context, roots model.RootSet, space model.SpaceID, principal model.PrincipalID, id model.ObjectID) (knowledge.Summary, model.ObjectID, bool, error) {
-	root, err := slotSpaceRoot(ctx, e.index, roots.ExecutionKnowledge, space)
+	root, err := slotSpaceRoot(ctx, e.reader(ctx), roots.ExecutionKnowledge, space)
 	if err != nil {
 		return knowledge.Summary{}, "", false, err
 	}
-	record, found, err := state.Get(ctx, e.index, space, root, summaryStateKey(space, principal, id))
+	record, found, err := state.Get(ctx, e.reader(ctx), space, root, summaryStateKey(space, principal, id))
 	if err != nil || !found {
 		return knowledge.Summary{}, "", found, err
 	}
-	object, err := readObject(ctx, e.index, record)
+	object, err := readObject(ctx, e.reader(ctx), record)
 	if err != nil {
 		return knowledge.Summary{}, "", false, err
 	}
@@ -145,33 +145,24 @@ func (e *Engine) checkSummaryGeneration(ctx context.Context, req api.CommitReque
 	if !accepted {
 		return knowledge.ErrInvalidSummary
 	}
-	packetRoots, _, err := e.rootsAtFence(ctx, spec.InputFence, true)
+	record, err := e.activityPacketAt(ctx, req.Space, req.Principal, spec.InputFence, spec.ContextPacket)
 	if err != nil {
 		return err
 	}
-	known, _, _, err := e.loadKnowledge(ctx, packetRoots, req.Space, req.Principal)
-	if err != nil {
-		return err
+	packet := record.packet
+	if !reflect.DeepEqual(packet.Source, summary.Source) || packet.Input == nil || packet.Input.Object != summary.Generation.Input.Object || !reflect.DeepEqual(packet.Input.Anchor, summary.Generation.Input.Anchor) || packet.Input.Encoding != summary.Generation.Input.Encoding {
+		return knowledge.ErrInvalidSummary
 	}
-	for _, packet := range known.Packets {
-		if packet.ID != spec.ContextPacket {
-			continue
-		}
-		if !reflect.DeepEqual(packet.Source, summary.Source) || packet.Input == nil || packet.Input.Object != summary.Generation.Input.Object || !reflect.DeepEqual(packet.Input.Anchor, summary.Generation.Input.Anchor) || packet.Input.Encoding != summary.Generation.Input.Encoding {
+	included := make(map[model.ObjectID]model.ObjectID, len(packet.Items))
+	for _, item := range packet.Items {
+		included[item.Observation] = item.Content
+	}
+	for _, source := range summary.Sources {
+		if included[source.Observation] != source.Content {
 			return knowledge.ErrInvalidSummary
 		}
-		included := make(map[model.ObjectID]model.ObjectID, len(packet.Items))
-		for _, item := range packet.Items {
-			included[item.Observation] = item.Content
-		}
-		for _, source := range summary.Sources {
-			if included[source.Observation] != source.Content {
-				return knowledge.ErrInvalidSummary
-			}
-		}
-		return nil
 	}
-	return knowledge.ErrUnknownObservation
+	return nil
 }
 
 func (e *Engine) prepareSummary(ctx context.Context, req api.CommitRequest, digest model.ObjectID, txID model.TxID, lsn uint64, recorded *operationsRecord) (*commitPlan, error) {
@@ -205,7 +196,7 @@ func (e *Engine) prepareSummary(ctx context.Context, req api.CommitRequest, dige
 	if source.ViewDigest != "" && source.ViewDigest != viewDigest(source.Anchor, rootID, req.Principal, "execution_knowledge") {
 		return nil, model.ErrAnchorMismatch
 	}
-	known, _, _, _, err := e.selectedKnowledge(ctx, roots, source.Anchor, req.Principal)
+	known, _, _, _, err := e.selectedKnowledgeObservations(ctx, roots, source.Anchor, req.Principal)
 	if err != nil {
 		return nil, err
 	}
@@ -242,24 +233,29 @@ func (e *Engine) prepareSummary(ctx context.Context, req api.CommitRequest, dige
 			return nil, knowledge.ErrInvalidSummary
 		}
 	}
-	current, _, _, err := e.loadMemory(ctx, e.roots, req.Space)
-	if err != nil {
-		return nil, err
-	}
 	dependencies, err := e.summaryDependencyIDs(ctx, roots, req.Space, req.Principal, summaryParents(summary))
 	if err != nil {
 		return nil, err
 	}
-	if err := current.AccessPolicy().Check(append(summaryPolicyIDs(summary), dependencies...), memory.AccessReuse); err != nil {
+	if err := e.checkPolicyIDs(ctx, req.Space, append(summaryPolicyIDs(summary), dependencies...), memory.AccessReuse); err != nil {
 		return nil, err
 	}
 	if err := verifyContentClosure(ctx, e.index, knowledge.SummaryContentReferences(summary)); err != nil {
 		return nil, err
 	}
-	return e.prepareTypedValue(ctx, req, digest, txID, lsn, recorded, summaryStateKey(req.Space, req.Principal, summary.ID), req.Body)
+	links := map[model.ObjectID][]model.ObjectID{
+		summary.ID:                       summaryPolicyIDs(summary),
+		summary.Generation.Output.Object: {summary.ID},
+	}
+	return e.prepareDerivedValue(ctx, req, digest, txID, lsn, recorded, summaryStateKey(req.Space, req.Principal, summary.ID), req.Body, links)
 }
 
 func (e *Engine) GetSummary(ctx context.Context, req api.ReadSummaryRequest) (api.SummaryResult, error) {
+	if ctx.Value(readDeliveryKey{}) == nil {
+		return embeddedReadDelivery(ctx, e, "get_summary", req.Principal, req, func(scoped context.Context) (api.SummaryResult, error) {
+			return e.GetSummary(scoped, req)
+		})
+	}
 	if err := ctx.Err(); err != nil {
 		return api.SummaryResult{}, err
 	}
@@ -272,14 +268,10 @@ func (e *Engine) GetSummary(ctx context.Context, req api.ReadSummaryRequest) (ap
 	if err := e.publicGate(); err != nil {
 		return api.SummaryResult{}, err
 	}
-	if err := e.mu.LockContext(ctx); err != nil {
+	if err := e.readReady(ctx); err != nil {
 		return api.SummaryResult{}, err
 	}
-	defer e.mu.Unlock()
-	if err := e.ready(); err != nil {
-		return api.SummaryResult{}, err
-	}
-	anchor := model.SnapshotAnchor{Space: req.Space, Fence: e.publication.Fence()}
+	anchor := model.SnapshotAnchor{Space: req.Space, Fence: e.readPublication(ctx).Fence()}
 	if req.Anchor != nil {
 		anchor = req.Anchor.Clone()
 	}
@@ -288,20 +280,20 @@ func (e *Engine) GetSummary(ctx context.Context, req api.ReadSummaryRequest) (ap
 	}
 	roots, rootID, err := e.rootsAtFence(ctx, anchor.Fence, false)
 	if err != nil {
-		return api.SummaryResult{}, e.knowledgeReadFailure(err)
+		return api.SummaryResult{}, e.knowledgeReadFailure(ctx, err)
 	}
 	summary, record, found, err := e.loadSummary(ctx, roots, req.Space, req.Principal, req.ID)
 	if err != nil {
-		return api.SummaryResult{}, e.knowledgeReadFailure(err)
+		return api.SummaryResult{}, e.knowledgeReadFailure(ctx, err)
 	}
 	var dependencies []model.ObjectID
 	if found {
-		if err := e.authorizeKnowledge(ctx, e.roots, req.Space, req.Principal, *summary.Source.Anchor.Knowledge); err != nil {
-			return api.SummaryResult{}, e.knowledgeReadFailure(err)
+		if err := e.authorizeKnowledge(ctx, e.readRoots(ctx), req.Space, req.Principal, *summary.Source.Anchor.Knowledge); err != nil {
+			return api.SummaryResult{}, e.knowledgeReadFailure(ctx, err)
 		}
 		dependencies, err = e.summaryDependencyIDs(ctx, roots, req.Space, req.Principal, []model.ObjectID{summary.ID})
 		if err != nil {
-			return api.SummaryResult{}, e.knowledgeReadFailure(err)
+			return api.SummaryResult{}, e.knowledgeReadFailure(ctx, err)
 		}
 		if err := e.checkDisclosureIDs(ctx, req.Space, dependencies); err != nil {
 			return api.SummaryResult{}, err

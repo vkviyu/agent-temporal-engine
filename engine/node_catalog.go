@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 
@@ -23,6 +24,32 @@ type nodeCatalog struct {
 	objects map[model.ObjectID]codec.Object
 }
 
+func (c *nodeCatalog) addEntityJSON(anchor model.SnapshotAnchor, payload model.ObjectID, kind model.EntityKind, id, label string, value any, parents, sources []model.NodeRef, allowIdentical bool) error {
+	ref := agentEntity(kind, id)
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	if old, exists := c.nodes[ref]; exists {
+		if allowIdentical && bytes.Equal(old.detail.Data, raw) {
+			return nil
+		}
+		return ErrInvalidStateData
+	}
+	if len(c.nodes) >= maxNodeQueryRecords {
+		return storage.ErrLimit
+	}
+	c.nodes[ref] = nodeProjection{
+		detail: api.NodeDetail{
+			Ref: ref, Summary: api.NodeSummary{Ref: ref, Label: label, Kind: kind},
+			Payload: payload, Data: raw, Encoding: "agent/" + string(kind) + "/v1+json",
+			Sources: sources, Anchor: anchor.Clone(),
+		},
+		parents: parents,
+	}
+	return nil
+}
+
 // knowledgePayloadNodeRef keeps typed memory identities in the logical node
 // namespace. They are not codec objects and therefore must not be exposed as
 // NodeObject refs to ReadContent.
@@ -39,7 +66,7 @@ func knowledgePayloadNodeRef(o knowledge.Observation) model.NodeRef {
 func (e *Engine) nodeCatalog(ctx context.Context, entry *viewEntry, layer string) (nodeCatalog, error) {
 	c := nodeCatalog{nodes: map[model.NodeRef]nodeProjection{}, objects: map[model.ObjectID]codec.Object{}}
 	if layer == "events" {
-		err := e.addEventNodes(ctx, &nodeQueryReader{source: e.index}, entry, &c)
+		err := e.addEventNodes(ctx, &nodeQueryReader{source: e.reader(ctx)}, entry, &c)
 		return c, err
 	}
 	if entry.descriptor.Anchor.Knowledge != nil {
@@ -55,7 +82,7 @@ func (e *Engine) nodeCatalog(ctx context.Context, entry *viewEntry, layer string
 		if len(snapshot.Observations)+len(snapshot.Packets) > maxNodeQueryRecords {
 			return c, storage.ErrLimit
 		}
-		r := &nodeQueryReader{source: e.index}
+		r := &nodeQueryReader{source: e.reader(ctx)}
 		for _, o := range snapshot.Observations {
 			ref := knowledgePayloadNodeRef(o)
 			if o.PayloadKind != "" {
@@ -191,7 +218,7 @@ func (e *Engine) nodeCatalog(ctx context.Context, entry *viewEntry, layer string
 		}
 		return c, nil
 	}
-	r := &nodeQueryReader{source: e.index}
+	r := &nodeQueryReader{source: e.reader(ctx)}
 	if layer == "entities" {
 		if !e.options.AgentProfile {
 			return c, ErrUnsupportedMethod

@@ -13,13 +13,14 @@ operation selector, not a format schema number (notably Continuation opcodes
 7/8). Domain strings use the visible `\0` notation for a NUL domain suffix.
 
 The optional family `layout` names the field contract within the version and
-domain. Current Control 5 includes effect capabilities and finite retry records.
+domain. Current Control 6 includes effect capabilities, finite retry records, explicit output completeness, durable response chunks and typed final-answer evidence.
 Continuation opcode 8 and Work 1 carry producer-bound knowledge seed semantics.
-Packet 4 adds the Requirements manifest. Control 1–4, Packet 1–3 and Continuation
+Packet 5 includes Requirements and atomic persisted source adjacency. Summary 2 versions the same publication invariant. Control 1–5, Packet 1–4, Summary 1 and Continuation
 opcode 7 are retired pre-release shapes.
 
-The outer Agent command remains schema 1 and retains standalone operations for
-unmanaged state. Agent snapshots 1 and 2, Observation 1–4 and core Event 1 and 2
+The outer Agent command remains schema 1 and retains standalone data operations for
+unmanaged state. Engine admission rejects standalone CompleteStep, including unmanaged
+executions, because completed steps require the protected Work checkpoint boundary. Agent snapshots 1 and 2, Observation 1–4 and core Event 1 and 2
 remain registered formats. Their current canonical layout and per-operation
 validation still govern admission and replay.
 
@@ -61,8 +62,8 @@ adding an exception to a canonical decoder would conceal a compatibility error.
 
 `formats/testdata/compatibility.json` contains independently framed fixed bytes
 for the object envelope, Branch v1, core Event v2, attributed Agent Event v1,
-local hello request v1, Continuation opcode 8 with KnowledgeSource, Control 5
-SaveContinuation and finite retry records, and Packet 4 with Requirements.
+local hello request v1, Continuation opcode 8 with KnowledgeSource, Control 6
+SaveContinuation and finite retry records, and Packet 5 with Requirements. Summary 2 has an independent Python framing and identity vector under `knowledge/testdata`.
 Event vectors include complete object envelopes and explicit references, not
 only an unchecked event payload. Tests invoke the actual public decoders and
 encoders, assert byte-for-byte preservation and reject every truncated prefix
@@ -77,10 +78,11 @@ The complete dispatch method inventory is compared to the production service's
 static wire routes, including Query-only `get_query_progress`; mutation remains
 the existing `commit` transport with the canonical Work envelope.
 
-Core Event v1 remains a live format for non-profile commands. Agent/Work
-transactions use core Event v2 with Profile registry 1 and typed Agent Event v1.
-Historical core Event v1 is not automatically expanded into inferred Agent
-events. These distinct selection rules are part of the compatibility boundary.
+Core Event v1 remains a live format for commands without typed occurrences.
+Agent and Work transactions use core Event v2 with Profile registry 2 and
+typed Agent Event v1. Registry 2 adds task attribution and causal references
+for answers, joins, model inputs and adopted evidence. Historical transactions
+replay with their recorded registry, preserving event identities and edges.
 
 ## Release status
 

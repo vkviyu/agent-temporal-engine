@@ -13,10 +13,10 @@ func (s *Store) Get(id model.ObjectID) (Memory, error) {
 	return s.get(id)
 }
 
-// ReusableMemory returns the current promoted, non-superseded version only
-// when its source cut and source bans are still valid at the requested anchor.
-// Get intentionally remains an immutable audit read and may return retracted
-// historical versions.
+// ReusableMemory checks the assertion and its direct source eligibility at
+// the supplied anchor. ReusableMemoryFor additionally traverses typed
+// dependencies and accepts an explicit task scope and evaluation time.
+// Get remains an immutable audit read.
 func (s *Store) ReusableMemory(id model.ObjectID, at model.SnapshotAnchor) (Memory, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -27,7 +27,22 @@ func (s *Store) ReusableMemory(id model.ObjectID, at model.SnapshotAnchor) (Memo
 	if m.Status != StatusPromoted || s.successors[id] != "" || !validAnchor(at) || at.Space != m.Space || !s.eligible(m, Query{Space: m.Space, At: at}) {
 		return Memory{}, ErrNotEligible
 	}
-	return cloneMemory(m), nil
+	return m, nil
+}
+
+// ReusableMemoryFor also applies the caller's explicit applicability and time
+// selectors. Its Text field is relevant to Search only.
+func (s *Store) ReusableMemoryFor(id model.ObjectID, q Query) (Memory, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	m, err := s.get(id)
+	if err != nil {
+		return Memory{}, err
+	}
+	if !matchesApplicability(m.Applicability, q) || !s.reusableDependencies(id, q) {
+		return Memory{}, ErrNotEligible
+	}
+	return m, nil
 }
 func (s *Store) Transition(id model.ObjectID, to Status, why string) (Memory, error) {
 	s.mu.Lock()
@@ -73,8 +88,9 @@ func (s *Store) RetractPath(id model.ObjectID, r Retraction) (ExperiencePath, er
 	return s.retractPath(id, r)
 }
 
-// ReusablePath checks current source bans and derived-version status. GetPath
-// remains an immutable audit read and does not silently rewrite historical IDs.
+// ReusablePath checks the path and its direct members at the supplied anchor.
+// ReusablePathFor additionally traverses typed derivations and accepts an
+// explicit task scope and evaluation time. GetPath remains an audit read.
 func (s *Store) ReusablePath(id model.ObjectID, at model.SnapshotAnchor) (ExperiencePath, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -82,7 +98,7 @@ func (s *Store) ReusablePath(id model.ObjectID, at model.SnapshotAnchor) (Experi
 	if err != nil {
 		return ExperiencePath{}, err
 	}
-	if p.Status != StatusPromoted || s.pathSuccessors[id] != "" || !validAnchor(at) || at.Space != p.Space || at.Fence.Store != p.SourceAnchor.Fence.Store || at.Fence.LSN < p.SourceAnchor.Fence.LSN {
+	if !validAnchor(at) || !s.pathReusableAt(p, Query{Space: at.Space, At: at}) {
 		return ExperiencePath{}, ErrNotEligible
 	}
 	for _, step := range p.Steps {
@@ -91,13 +107,25 @@ func (s *Store) ReusablePath(id model.ObjectID, at model.SnapshotAnchor) (Experi
 			return ExperiencePath{}, ErrNotEligible
 		}
 	}
-	for _, src := range append(append([]Source(nil), p.Validation.Evidence...), p.Validation.Counterexamples...) {
-		if src.Anchor.Fence.Store != at.Fence.Store || src.Anchor.Space != p.Space || src.Anchor.Fence.LSN > at.Fence.LSN {
+	for _, source := range append(append([]Source(nil), p.Validation.Evidence...), p.Validation.Counterexamples...) {
+		if _, banned := s.sourceBan[source.SourceID]; banned {
 			return ExperiencePath{}, ErrNotEligible
 		}
-		if _, banned := s.sourceBan[src.SourceID]; banned {
-			return ExperiencePath{}, ErrNotEligible
-		}
+	}
+	return p, nil
+}
+
+// ReusablePathFor applies the caller's explicit scope to the path as a whole
+// and the evaluation time to its members and other reusable dependencies.
+func (s *Store) ReusablePathFor(id model.ObjectID, q Query) (ExperiencePath, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	p, err := s.getPath(id)
+	if err != nil {
+		return ExperiencePath{}, err
+	}
+	if !matchesApplicability(p.Applicability, q) || !s.reusableDependencies(id, q) {
+		return ExperiencePath{}, ErrNotEligible
 	}
 	return p, nil
 }

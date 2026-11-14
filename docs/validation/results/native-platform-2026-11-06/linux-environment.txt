@@ -1,0 +1,25 @@
+colima version 0.10.3
+git commit: 00f6c297e92a82c04a4ab507db0a61435650d7e8
+
+runtime: docker
+arch: aarch64
+client: v29.8.0
+server: v29.5.2
+Linux colima 6.8.0-117-generic #117-Ubuntu SMP PREEMPT_DYNAMIC Thu May  7 17:26:37 UTC 2026 aarch64 aarch64 aarch64 GNU/Linux
+PRETTY_NAME="Ubuntu 24.04.4 LTS"
+NAME="Ubuntu"
+VERSION_ID="24.04"
+VERSION="24.04.4 LTS (Noble Numbat)"
+VERSION_CODENAME=noble
+ID=ubuntu
+ID_LIKE=debian
+HOME_URL="https://www.ubuntu.com/"
+SUPPORT_URL="https://help.ubuntu.com/"
+BUG_REPORT_URL="https://bugs.launchpad.net/ubuntu/"
+PRIVACY_POLICY_URL="https://www.ubuntu.com/legal/terms-and-policies/privacy-policy"
+UBUNTU_CODENAME=noble
+LOGO=ubuntu-logo
+49bef12f-2125-4a69-a638-bbf5edf11cb2
+TARGET          SOURCE             FSTYPE OPTIONS
+/var/lib/docker /dev/vdb1[/docker] ext4   rw,relatime
+sha256:d7098379b7da665ab25b99795465ec320b1ca9d4addb9f77409c4827dc904211 golang:1.25.1 [{"Type":"volume","Name":"ate-v1-native-check-data","Source":"/var/lib/docker/volumes/ate-v1-native-check-data/_data","Destination":"/ate-data","Driver":"local","Mode":"z","RW":true,"Propagation":""}]

@@ -112,7 +112,11 @@ func addProfileNodes(c *nodeCatalog, s agentprofile.Snapshot, snapshot model.Obj
 		}
 	}
 	for _, x := range s.Lifecycle.Results {
-		if err := add("ActivityResult", x.ID, x.Outcome, x, agentEntity("Activity", x.Activity), agentEntity("Attempt", x.Attempt)); err != nil {
+		parents := []model.NodeRef{agentEntity("Activity", x.Activity), agentEntity("Attempt", x.Attempt)}
+		for _, id := range x.OutputChunks {
+			parents = append(parents, agentEntity("OutputChunk", string(id)))
+		}
+		if err := add("ActivityResult", x.ID, x.Outcome, x, parents...); err != nil {
 			return err
 		}
 	}

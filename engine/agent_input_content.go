@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 
 	"github.com/vkviyu/agent-temporal-engine/agentprofile"
 	"github.com/vkviyu/agent-temporal-engine/api"
@@ -40,7 +41,7 @@ func (e *Engine) agentInputContent(ctx context.Context, req api.CommitRequest, a
 	// Authenticate domain membership once per input set, with one cumulative
 	// read budget. Re-scanning the whole radix for each InputObject would turn
 	// a bounded command into quadratic IO and allocation.
-	reader := &cursorReader{source: e.index}
+	reader := &cursorReader{source: e.reader(ctx)}
 	entries, err := state.Entries(ctx, reader, anchor.Space, root, state.ScanLimits{})
 	if err != nil {
 		return err
@@ -91,7 +92,7 @@ func (e *Engine) agentInputRequest(ctx context.Context, req api.CommitRequest, a
 	if err := e.agentInputContent(ctx, req, anchor, id); err != nil {
 		return err
 	}
-	object, err := readObject(ctx, e.index, id)
+	object, err := readObject(ctx, e.reader(ctx), id)
 	if err != nil {
 		return err
 	}
@@ -108,46 +109,87 @@ func (e *Engine) agentInputRequest(ctx context.Context, req api.CommitRequest, a
 	return nil
 }
 
+func isModelActivityRole(role string) bool {
+	return role == "routing" || role == "query_decision" || role == "primary_decision" || role == "aux_summary"
+}
+
 // validateCurrentTypedPacket prevents a model dispatch from reusing a packet
 // whose promoted memory or experience-path provenance has since been
 // superseded or retracted. Historical packet reads remain available; current
 // execution must make the revocation visible before invoking the model.
-func (e *Engine) validateCurrentTypedPacket(ctx context.Context, packet knowledge.ContextPacket, snapshot knowledge.Snapshot, space model.SpaceID, principal model.PrincipalID) error {
-	if packet.Key == nil {
-		return nil
+func (e *Engine) validateCurrentTypedPacket(ctx context.Context, packet knowledge.ContextPacket, snapshot knowledge.Snapshot, space model.SpaceID, principal model.PrincipalID, historicalPolicy bool) error {
+	if len(snapshot.Observations) != len(packet.Items) {
+		return ErrInvalidStateData
 	}
-	observations := make(map[model.ObjectID]knowledge.Observation, len(snapshot.Observations))
-	for _, observation := range snapshot.Observations {
-		observations[observation.ID] = observation
+	return e.validateCurrentTypedObservations(ctx, snapshot.Observations, space, principal, historicalPolicy)
+}
+
+func (e *Engine) validateCurrentTypedObservations(ctx context.Context, selected []knowledge.Observation, space model.SpaceID, principal model.PrincipalID, historicalPolicy bool) error {
+	var pending []knowledge.SummarySource
+	for _, observation := range selected {
+		if observation.PayloadKind != "" {
+			pending = append(pending, knowledge.SummarySource{Content: observation.Payload, PayloadKind: observation.PayloadKind})
+		}
 	}
-	for _, item := range packet.Items {
-		observation, ok := observations[item.Observation]
-		if !ok || observation.PayloadKind == "" {
+	seen := make(map[knowledge.SummarySource]bool, len(pending))
+	var store *memory.Store
+	at := model.SnapshotAnchor{Space: space, Fence: e.publication.Fence()}
+	query := memory.Query{Space: space, At: at}
+	edges := len(pending)
+	for len(pending) > 0 {
+		source := pending[len(pending)-1]
+		pending = pending[:len(pending)-1]
+		if seen[source] {
 			continue
 		}
-		store, _, _, err := e.loadMemory(ctx, e.roots, space)
-		if err != nil {
-			return err
+		if len(seen) >= maxDerivationNodes || edges > maxDerivationEdges {
+			return state.ErrLimit
 		}
-		at := model.SnapshotAnchor{Space: space, Fence: e.publication.Fence()}
-		if observation.PayloadKind == "memory" {
-			_, err = store.ReusableMemory(observation.Payload, at)
-		} else if observation.PayloadKind == "experience_path" {
-			_, err = store.ReusablePath(observation.Payload, at)
-		} else if observation.PayloadKind == "summary" {
-			summary, _, found, loadErr := e.loadSummary(ctx, e.roots, space, principal, observation.Payload)
-			if loadErr != nil {
-				return loadErr
+		seen[source] = true
+		switch source.PayloadKind {
+		case "memory", "experience_path":
+			if store == nil {
+				var err error
+				store, _, _, err = e.loadMemory(ctx, e.roots, space)
+				if err != nil {
+					return err
+				}
+			}
+			var err error
+			switch {
+			case source.PayloadKind == "memory" && historicalPolicy:
+				_, err = store.ReusableMemory(source.Content, at)
+			case historicalPolicy:
+				_, err = store.ReusablePath(source.Content, at)
+			case source.PayloadKind == "memory":
+				_, err = store.ReusableMemoryFor(source.Content, query)
+			default:
+				_, err = store.ReusablePathFor(source.Content, query)
+			}
+			if err != nil {
+				return errors.Join(agentprofile.ErrConflict, err)
+			}
+		case "summary":
+			summary, _, found, err := e.loadSummary(ctx, e.roots, space, principal, source.Content)
+			if err != nil {
+				return err
 			}
 			if !found || summary.Validation.Status != "validated" {
 				return agentprofile.ErrConflict
 			}
-			err = store.AccessPolicy().Check(summaryPolicyIDs(summary), memory.AccessReuse)
-		} else {
-			err = agentprofile.ErrConflict
-		}
-		if err != nil {
-			return agentprofile.ErrConflict
+			if err := e.checkPolicyIDs(ctx, space, summaryPolicyIDs(summary), memory.AccessReuse); err != nil {
+				return errors.Join(agentprofile.ErrConflict, err)
+			}
+			if !historicalPolicy {
+				for _, dependency := range summary.Sources {
+					if dependency.PayloadKind != "" {
+						pending = append(pending, knowledge.SummarySource{Content: dependency.Content, PayloadKind: dependency.PayloadKind})
+						edges++
+					}
+				}
+			}
+		default:
+			return ErrInvalidStateData
 		}
 	}
 	return nil

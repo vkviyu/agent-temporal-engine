@@ -8,9 +8,10 @@ import (
 	"github.com/vkviyu/agent-temporal-engine/storage"
 )
 
-// stagingView is private to one batch while the engine mutex is held. The
-// published catalog and proofs remain shared read-only; only new batch data is
-// retained here. It never owns or advances the journal.
+// stagingView is captured under mu and private to one batch while writerMu is
+// held. The published catalog and proof maps stay read-only until that writer
+// installs the finished batch under mu. Public readers may use the same base.
+// Only new batch data is retained here; it never owns or advances the journal.
 func (e *Engine) stagingView() *Engine {
 	return &Engine{
 		journal: e.journal, options: e.options, roots: e.roots, rootSet: e.rootSet,

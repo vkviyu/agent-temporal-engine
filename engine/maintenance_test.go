@@ -61,7 +61,7 @@ func TestCoreCompactionRetainsFiveRootsHistoryEventsAndExactReceipts(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if report.RetiredSegments < 2 || len(report.ReclaimedSegments) != report.RetiredSegments || report.After.Fence() != before.Fence {
+	if report.RetiredSegments < 2 || report.PinnedSegments == 0 || len(report.ReclaimedSegments)+report.PinnedSegments != report.RetiredSegments || report.After.Fence() != before.Fence {
 		t.Fatalf("incomplete physical replacement: %+v", report)
 	}
 	if after := integrationSnapshot(t, s.e); after != before {
@@ -77,6 +77,10 @@ func TestCoreCompactionRetainsFiveRootsHistoryEventsAndExactReceipts(t *testing.
 		if err = s.e.CloseView(ctx, api.CloseViewRequest{Ref: v}); err != nil {
 			t.Fatal(err)
 		}
+	}
+	removed, pinned, err := s.e.ReclaimRetired(ctx)
+	if err != nil || pinned != 0 || len(removed) != report.PinnedSegments {
+		t.Fatalf("closed Views retained layout pins: removed=%v pinned=%d err=%v", removed, pinned, err)
 	}
 	for i := 0; i < 2; i++ {
 		if i == 1 {

@@ -3,6 +3,7 @@ package engine
 import (
 	"bytes"
 	"context"
+	"slices"
 
 	"github.com/vkviyu/agent-temporal-engine/api"
 	"github.com/vkviyu/agent-temporal-engine/model"
@@ -14,30 +15,31 @@ import (
 // It never decodes caller-supplied StateOps; key/raw must be produced by the
 // reducer while holding the coordinator's private candidate.
 func (e *Engine) prepareTypedValue(ctx context.Context, req api.CommitRequest, digest model.ObjectID, txID model.TxID, lsn uint64, recorded *operationsRecord, key, raw []byte) (*commitPlan, error) {
-	if len(raw) > api.MaxStateValueBytes {
+	return e.prepareTypedValues(ctx, req, digest, txID, lsn, recorded, []typedValueWrite{{key: key, raw: raw}})
+}
+
+type typedValueWrite struct {
+	key       []byte
+	raw       []byte
+	radixRoot model.ObjectID
+}
+
+// A reducer may atomically publish its primary record and the bounded derived
+// indexes that are part of its invariant. Keys and values are engine-owned.
+func (e *Engine) prepareTypedValues(ctx context.Context, req api.CommitRequest, digest model.ObjectID, txID model.TxID, lsn uint64, recorded *operationsRecord, writes []typedValueWrite) (*commitPlan, error) {
+	return e.prepareTypedValuesWithBuilder(ctx, req, digest, txID, lsn, recorded, newBuilder(ctx, e.index, e.options.MaxObjects), writes)
+}
+
+func (e *Engine) prepareTypedValuesWithBuilder(ctx context.Context, req api.CommitRequest, digest model.ObjectID, txID model.TxID, lsn uint64, recorded *operationsRecord, b *objectBuilder, writes []typedValueWrite) (*commitPlan, error) {
+	if len(writes) == 0 || len(writes) > api.MaxStateMutations {
 		return nil, storage.ErrLimit
 	}
+	writes = slices.Clone(writes)
+	slices.SortFunc(writes, func(a, b typedValueWrite) int { return bytes.Compare(a.key, b.key) })
 	beforeRoot, err := slotSpaceRoot(ctx, e.index, methodRoot(e.roots, req.Method), req.Space)
 	if err != nil {
 		return nil, err
 	}
-	before, found, err := state.Get(ctx, e.index, req.Space, beforeRoot, key)
-	if err != nil {
-		return nil, err
-	}
-	if found {
-		previous, err := readObject(ctx, e.index, before)
-		if err != nil {
-			return nil, err
-		}
-		if previous.Space != req.Space {
-			return nil, ErrInvalidStateData
-		}
-		if _, err = readValue(previous); err != nil {
-			return nil, err
-		}
-	}
-	b := newBuilder(ctx, e.index, e.options.MaxObjects)
 	command, err := makeCommand(req)
 	if err != nil {
 		return nil, err
@@ -46,15 +48,58 @@ func (e *Engine) prepareTypedValue(ctx context.Context, req api.CommitRequest, d
 	if err != nil {
 		return nil, err
 	}
-	obj, err := makeValue(req.Space, api.Value{Kind: api.ValueBytes, Data: raw})
-	if err != nil {
-		return nil, err
+	mutations := make([]state.Mutation, len(writes))
+	changes := make([]stateChange, len(writes))
+	for i, write := range writes {
+		if len(write.raw) > api.MaxStateValueBytes {
+			return nil, storage.ErrLimit
+		}
+		if i > 0 && bytes.Equal(writes[i-1].key, write.key) {
+			return nil, ErrInvalidStateData
+		}
+		before, found, err := state.Get(ctx, e.index, req.Space, beforeRoot, write.key)
+		if err != nil {
+			return nil, err
+		}
+		if found {
+			previous, err := readObject(ctx, e.index, before)
+			if err != nil {
+				return nil, err
+			}
+			if previous.Space != req.Space {
+				return nil, ErrInvalidStateData
+			}
+			if write.radixRoot != "" {
+				if previous.Type != state.NodeType || previous.Version != state.NodeVersion {
+					return nil, ErrInvalidStateData
+				}
+			} else if _, err = readValue(previous); err != nil {
+				return nil, err
+			}
+		}
+		after := write.radixRoot
+		if after != "" {
+			object, err := readObject(ctx, b, after)
+			if err != nil {
+				return nil, err
+			}
+			if object.Space != req.Space || object.Type != state.NodeType || object.Version != state.NodeVersion || len(write.raw) != 0 {
+				return nil, ErrInvalidStateData
+			}
+		} else {
+			object, err := makeValue(req.Space, api.Value{Kind: api.ValueBytes, Data: write.raw})
+			if err != nil {
+				return nil, err
+			}
+			after, err = b.add(object, storage.KindObject)
+			if err != nil {
+				return nil, err
+			}
+		}
+		mutations[i] = state.Mutation{Key: write.key, Value: after}
+		changes[i] = stateChange{Key: bytes.Clone(write.key), Before: before, After: after}
 	}
-	after, err := b.add(obj, storage.KindObject)
-	if err != nil {
-		return nil, err
-	}
-	delta, err := state.Apply(ctx, b, req.Space, beforeRoot, []state.Mutation{{Key: key, Value: after}})
+	delta, err := state.Apply(ctx, b, req.Space, beforeRoot, mutations)
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +108,7 @@ func (e *Engine) prepareTypedValue(ctx context.Context, req api.CommitRequest, d
 			return nil, err
 		}
 	}
-	ops, err := makeOperations(operationsRecord{Space: req.Space, BeforeRoot: beforeRoot, AfterRoot: delta.Root, Changes: []stateChange{{Key: bytes.Clone(key), Before: before, After: after}}})
+	ops, err := makeOperations(operationsRecord{Space: req.Space, BeforeRoot: beforeRoot, AfterRoot: delta.Root, Changes: changes})
 	if err != nil {
 		return nil, err
 	}

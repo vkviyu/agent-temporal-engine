@@ -55,6 +55,9 @@ func (s Snapshot) recoveryState() *RecoverySnapshot { return s.Lifecycle.Recover
 // validateRecoveryState checks authoritative cross-record relations after a
 // pure transition and again when an immutable snapshot is restored.
 func validateRecoveryState(snapshot Snapshot) error {
+	if err := validateOutputState(snapshot); err != nil {
+		return err
+	}
 	if err := validateEffectRecovery(snapshot); err != nil {
 		return err
 	}
@@ -143,6 +146,9 @@ func validateRecoveryState(snapshot Snapshot) error {
 		if modelRole(a.Role) && !validDigest(a.ContextPacket) {
 			return ErrInvalid
 		}
+		if a.FinalAnswerInput != "" && (!validDigest(a.FinalAnswerInput) || a.Query == "" || a.Role != "query_decision") {
+			return ErrInvalid
+		}
 		if a.Execution != "" {
 			e, ok := executions[a.Execution]
 			if !ok || a.Query != "" || a.GoalEpoch == 0 || a.GoalEpoch > tasks[e.Task].GoalEpoch {
@@ -225,7 +231,7 @@ func validateRecoveryState(snapshot Snapshot) error {
 	for _, a := range s.Acceptances {
 		ctl, ok := controls[a.Activity]
 		r, rok := results[a.Result]
-		if !ok || !rok || r.Activity != a.Activity || ctl.AcceptedResult != a.Result || a.Version > ctl.Version || !validDigest(a.Evidence) || !uniqueRecord(seen, "acceptance/"+a.Activity) {
+		if !ok || !rok || r.Activity != a.Activity || r.Outcome == "unknown" || !acceptableResultCapture(specs[a.Activity], r) || ctl.AcceptedResult != a.Result || a.Version > ctl.Version || !validDigest(a.Evidence) || !uniqueRecord(seen, "acceptance/"+a.Activity) {
 			return ErrInvalid
 		}
 		attempt, ok := attemptControls[r.Attempt]
@@ -283,6 +289,11 @@ func validateRecoveryState(snapshot Snapshot) error {
 		}
 		if a.Final && (q.Status != "answered" || !bytes.Equal(a.Body, q.Answer)) {
 			return ErrConflict
+		}
+		if a.Final {
+			if err := validateFinalAnswer(snapshot, a.Query, a.GeneratedFrom, a.Body, a.Outcomes, a.InputEvidence); err != nil {
+				return err
+			}
 		}
 	}
 	for _, a := range s.Starts {

@@ -86,7 +86,7 @@ func bindTestInvocation(t *testing.T, s *integrationStore, inv *agentprofile.Inv
 	attempt := prefix + "-attempt"
 	recoveryCoreControl(t, s, prefix+"-claim", agentprofile.ControlCommand{ClaimAttempt: &agentprofile.ClaimAttemptCommand{Activity: spec.Activity, Attempt: attempt, Sequence: 1, Authority: authority}})
 	recoveryCoreControl(t, s, prefix+"-dispatch", agentprofile.ControlCommand{DispatchAttempt: &agentprofile.DispatchAttemptCommand{Attempt: attempt, Evidence: input, Authority: authority}})
-	result := agentprofile.ActivityResult{ID: prefix + "-result", Activity: spec.Activity, Attempt: attempt, RequestDigest: spec.RequestDigest, Incarnation: authority.Incarnation, Outcome: "success", Payload: []byte("recorded delegation decision")}
+	result := agentprofile.ActivityResult{Capture: "full", ID: prefix + "-result", Activity: spec.Activity, Attempt: attempt, RequestDigest: spec.RequestDigest, Incarnation: authority.Incarnation, Outcome: "success", Payload: []byte("recorded delegation decision")}
 	recoveryCoreControl(t, s, prefix+"-capture", agentprofile.ControlCommand{CaptureResult: &agentprofile.CaptureResultCommand{Result: result}})
 	inv.AcceptedResult, inv.ToolDefinition = result.ID, definition
 	inv.ToolVersion, inv.DispatchClass = inv.Tool+"/v1", "pure"

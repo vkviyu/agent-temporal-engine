@@ -257,6 +257,9 @@ func (s *Store) RecordInvocation(ctx context.Context, r agentprofile.InvocationR
 	}
 	return *result.Invocation, nil
 }
+
+// CompleteStep preserves the retired command's typed rejection. Current Engine
+// completion uses Core().ApplyWork with FinishStep and its checkpoint together.
 func (s *Store) CompleteStep(ctx context.Context, key model.RequestKey, id model.ExecutionID, sequence, epoch uint64) (agentprofile.Step, error) {
 	result, _, err := s.execute(ctx, key, agentprofile.Command{CompleteStep: &agentprofile.CompleteStepCommand{Execution: id, Sequence: sequence, Epoch: epoch}})
 	if err != nil {

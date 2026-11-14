@@ -58,11 +58,7 @@ func (e *Engine) checkTaskValidation(ctx context.Context, req api.CommitRequest,
 	if err := e.agentInputContent(ctx, req, latest, ids...); err != nil {
 		return err
 	}
-	current, _, _, err := e.loadMemory(ctx, e.roots, req.Space)
-	if err != nil {
-		return err
-	}
-	return current.AccessPolicy().Check(ids, memory.AccessReuse)
+	return e.checkPolicyIDs(ctx, req.Space, ids, memory.AccessReuse)
 }
 
 func validationRejection(reason string) error {

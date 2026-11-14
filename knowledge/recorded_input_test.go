@@ -12,12 +12,12 @@ import (
 func TestRecordedPacketInputCanonicalVersionAndOwnership(t *testing.T) {
 	p := ContextPacket{Space: "space", Source: SourceAnchor{Anchor: model.SnapshotAnchor{Space: "space", Fence: model.CommitFence{Store: "s", LSN: 2, CommitDigest: model.CommitDigest(dig('f'))}}}, Renderer: "render/v1", Tokenizer: "tokens/v1"}
 	p.ID = PacketID(p)
-	legacy, err := p.Canonical()
+	withoutInput, err := p.Canonical()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if legacy[0] != 4 {
-		t.Fatal("legacy packet bytes changed")
+	if withoutInput[0] != byte(PacketSchema) {
+		t.Fatal("current packet schema missing")
 	}
 	p.Input = &RecordedInput{Object: dig('a'), Anchor: model.SnapshotAnchor{Space: "space", Fence: model.CommitFence{Store: "s", LSN: 3, CommitDigest: model.CommitDigest(dig('e'))}, Cursor: &model.Cursor{Store: "s", Space: "space", Revision: model.RevisionID(dig('b'))}}, Encoding: "application/vnd.model-request+json;v=1"}
 	p.ID = PacketID(p)
@@ -25,7 +25,7 @@ func TestRecordedPacketInputCanonicalVersionAndOwnership(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if recorded[0] != 4 || bytes.Equal(legacy, recorded) {
+	if recorded[0] != byte(PacketSchema) || bytes.Equal(withoutInput, recorded) {
 		t.Fatal("recorded request is not covered by versioned identity")
 	}
 	got, err := DecodePacket(recorded)
@@ -49,8 +49,8 @@ func TestRecordedPacketInputCanonicalVersionAndOwnership(t *testing.T) {
 			t.Fatal("truncated recording accepted", i)
 		}
 	}
-	legacyAgain, err := DecodePacket(legacy)
-	if err != nil || legacyAgain.Input != nil {
-		t.Fatal("legacy recording invented", err)
+	withoutInputAgain, err := DecodePacket(withoutInput)
+	if err != nil || withoutInputAgain.Input != nil {
+		t.Fatal("optional recording invented", err)
 	}
 }

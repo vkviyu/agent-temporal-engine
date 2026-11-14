@@ -1,0 +1,29 @@
+ok  	github.com/vkviyu/agent-temporal-engine	1.868s
+ok  	github.com/vkviyu/agent-temporal-engine/agentprofile	13.230s
+ok  	github.com/vkviyu/agent-temporal-engine/agentstore	3.189s
+ok  	github.com/vkviyu/agent-temporal-engine/annotation	2.931s
+ok  	github.com/vkviyu/agent-temporal-engine/api	3.377s
+ok  	github.com/vkviyu/agent-temporal-engine/client	4.147s
+ok  	github.com/vkviyu/agent-temporal-engine/cmd/ate	5.325s
+ok  	github.com/vkviyu/agent-temporal-engine/codec	3.423s
+ok  	github.com/vkviyu/agent-temporal-engine/engine	132.274s
+ok  	github.com/vkviyu/agent-temporal-engine/eventlog	3.036s
+ok  	github.com/vkviyu/agent-temporal-engine/formats	3.670s
+ok  	github.com/vkviyu/agent-temporal-engine/graph	4.358s
+ok  	github.com/vkviyu/agent-temporal-engine/graphstore	8.294s
+ok  	github.com/vkviyu/agent-temporal-engine/journalstore	6.729s
+ok  	github.com/vkviyu/agent-temporal-engine/knowledge	6.239s
+ok  	github.com/vkviyu/agent-temporal-engine/memory	3.543s
+ok  	github.com/vkviyu/agent-temporal-engine/model	3.049s
+ok  	github.com/vkviyu/agent-temporal-engine/protocol	2.597s
+ok  	github.com/vkviyu/agent-temporal-engine/reference	1.457s
+ok  	github.com/vkviyu/agent-temporal-engine/service	7.975s
+ok  	github.com/vkviyu/agent-temporal-engine/state	2.732s
+ok  	github.com/vkviyu/agent-temporal-engine/storage	4.736s
+ok  	github.com/vkviyu/agent-temporal-engine/tests/acceptance	2.446s
+ok  	github.com/vkviyu/agent-temporal-engine/tests/architecture	2.815s
+ok  	github.com/vkviyu/agent-temporal-engine/tests/benchmarks	2.973s [no tests to run]
+ok  	github.com/vkviyu/agent-temporal-engine/tests/evaluation	11.420s
+ok  	github.com/vkviyu/agent-temporal-engine/tests/host	133.375s
+ok  	github.com/vkviyu/agent-temporal-engine/tests/reference	19.279s
+?   	github.com/vkviyu/agent-temporal-engine/transfer	[no test files]

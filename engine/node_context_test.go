@@ -44,7 +44,7 @@ func TestTypedNodeContextFollowsPublishedOriginalInputAndRecoveryReceipts(t *tes
 	recoveryCoreControl(t, s, "context-create", agentprofile.ControlCommand{CreateActivity: &agentprofile.CreateActivityCommand{Spec: spec, Authority: authority}})
 	recoveryCoreControl(t, s, "context-claim", agentprofile.ControlCommand{ClaimAttempt: &agentprofile.ClaimAttemptCommand{Attempt: "context-attempt", Activity: spec.Activity, Sequence: 1, Authority: authority}})
 	recoveryCoreControl(t, s, "context-dispatch", agentprofile.ControlCommand{DispatchAttempt: &agentprofile.DispatchAttemptCommand{Attempt: "context-attempt", Authority: authority, Evidence: proof}})
-	result := agentprofile.ActivityResult{ID: "context-result", Activity: spec.Activity, Attempt: "context-attempt", RequestDigest: spec.RequestDigest, Incarnation: 1, Outcome: "success", Payload: []byte("actual result bytes")}
+	result := agentprofile.ActivityResult{Capture: "full", ID: "context-result", Activity: spec.Activity, Attempt: "context-attempt", RequestDigest: spec.RequestDigest, Incarnation: 1, Outcome: "success", Payload: []byte("actual result bytes")}
 	recoveryCoreControl(t, s, "context-capture", agentprofile.ControlCommand{CaptureResult: &agentprofile.CaptureResultCommand{Result: result}})
 	recoveryCoreControl(t, s, "context-accept", agentprofile.ControlCommand{AcceptActivity: &agentprofile.AcceptActivityCommand{Activity: spec.Activity, Result: result.ID, ExpectedVersion: 1, Authority: authority, Evidence: proof}})
 	message := agentprofile.Message{ID: "context-message", Sender: "one", Recipient: "two", GoalEpoch: 1, Payload: []byte("exact inter-agent message")}

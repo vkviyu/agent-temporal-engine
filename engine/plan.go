@@ -17,14 +17,15 @@ import (
 var errCAS = errors.New("state compare-and-swap condition failed")
 
 type commitPlan struct {
-	builder       *objectBuilder
-	roots         model.RootSet
-	rootSet       model.ObjectID
-	receipt       model.ObjectID
-	stateRoot     model.ObjectID
-	transaction   storage.Transaction
-	event         *model.Event
-	profileEvents []model.Event
+	builder             *objectBuilder
+	roots               model.RootSet
+	rootSet             model.ObjectID
+	receipt             model.ObjectID
+	stateRoot           model.ObjectID
+	transaction         storage.Transaction
+	event               *model.Event
+	profileEvents       []model.Event
+	profileEventAliases map[string]eventHead
 }
 
 func receiptKey(key model.RequestKey) []byte {
@@ -92,6 +93,12 @@ func (e *Engine) prepare(ctx context.Context, req api.CommitRequest, digest mode
 	if req.Method == api.MethodApplyAnnotation {
 		return e.prepareAnnotation(ctx, req, digest, txID, lsn, recorded)
 	}
+	if req.Method == api.MethodUpdateInvestigation {
+		return e.prepareInvestigation(ctx, req, digest, txID, lsn, recorded)
+	}
+	if req.Method == api.MethodApplyTaskTrace {
+		return e.prepareTaskTrace(ctx, req, digest, txID, lsn, recorded)
+	}
 	if req.Method == api.MethodApplySummary {
 		return e.prepareSummary(ctx, req, digest, txID, lsn, recorded)
 	}
@@ -127,9 +134,6 @@ func (e *Engine) prepare(ctx context.Context, req api.CommitRequest, digest mode
 	if err != nil {
 		return nil, err
 	}
-	if batch.ExpectedRoot != nil && *batch.ExpectedRoot != beforeRoot {
-		return nil, errCAS
-	}
 	if recorded != nil && (recorded.Space != req.Space || recorded.BeforeRoot != beforeRoot || len(recorded.Changes) != len(batch.Operations)) {
 		return nil, ErrInvalidStateData
 	}
@@ -142,72 +146,16 @@ func (e *Engine) prepare(ctx context.Context, req api.CommitRequest, digest mode
 	if err != nil {
 		return nil, err
 	}
-	changes := make([]stateChange, len(batch.Operations))
-	mutations := make([]state.Mutation, len(changes))
-	for i, op := range batch.Operations {
-		before, found, err := state.Get(ctx, e.index, req.Space, beforeRoot, op.Key)
-		if err != nil {
-			return nil, err
-		}
-		if found {
-			previous, err := readObject(ctx, e.index, before)
-			if err != nil {
-				return nil, err
-			}
-			if previous.Space != req.Space {
-				return nil, ErrInvalidStateData
-			}
-			if _, err := readValue(previous); err != nil {
-				return nil, err
-			}
-		}
-		switch op.Condition.Kind {
-		case api.ConditionAbsent:
-			if found {
-				return nil, errCAS
-			}
-		case api.ConditionValue:
-			value, err := makeValue(req.Space, op.Condition.Value)
-			if err != nil {
-				return nil, err
-			}
-			expected, err := codec.ObjectID(value)
-			if err != nil {
-				return nil, err
-			}
-			if !found || before != expected {
-				return nil, errCAS
-			}
-		}
-		after := state.EmptyRoot
-		if op.Kind == api.MutationPut {
-			value, err := makeValue(req.Space, op.Value)
-			if err != nil {
-				return nil, err
-			}
-			after, err = builder.add(value, storage.KindObject)
-			if err != nil {
-				return nil, err
-			}
-		}
-		changes[i] = stateChange{Key: bytes.Clone(op.Key), Before: before, After: after}
-		if recorded != nil {
-			change := recorded.Changes[i]
-			if !bytes.Equal(change.Key, op.Key) || change.Before != before || change.After != after {
-				return nil, ErrInvalidStateData
-			}
-			changes[i] = change
-		}
-		mutations[i] = state.Mutation{Key: changes[i].Key, Value: changes[i].After, Delete: changes[i].After == state.EmptyRoot}
-	}
-	// Only this space's domain tree is mutable through the host batch command.
-	delta, err := state.Apply(ctx, builder, req.Space, beforeRoot, mutations)
+	delta, changes, err := applyStateBatch(ctx, builder, req.Space, beforeRoot, batch)
 	if err != nil {
 		return nil, err
 	}
-	for _, obj := range delta.Objects {
-		if _, err = builder.add(obj, storage.KindObject); err != nil {
-			return nil, err
+	if recorded != nil {
+		for i, change := range changes {
+			expected := recorded.Changes[i]
+			if !bytes.Equal(change.Key, expected.Key) || change.Before != expected.Before || change.After != expected.After {
+				return nil, ErrInvalidStateData
+			}
 		}
 	}
 	if recorded != nil && recorded.AfterRoot != delta.Root {

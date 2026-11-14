@@ -10,9 +10,23 @@ import (
 // initial header has an address; successor headers and all footers are layout
 // metadata. A frame's address therefore survives rotations unchanged.
 type logicalReader struct {
-	segments []*journalSegment
-	active   io.ReaderAt
+	segments []readSegment
 	end      uint64
+}
+
+// readSegment owns the descriptor value selected at one published cut. The
+// file capability stays alive through a persistent pin or an active read lease.
+type readSegment struct {
+	descriptor SegmentDescriptor
+	file       io.ReaderAt
+}
+
+func snapshotReadSegments(segments []*journalSegment) []readSegment {
+	snapshot := make([]readSegment, len(segments))
+	for i, segment := range segments {
+		snapshot[i] = readSegment{descriptor: segment.descriptor, file: segment.file}
+	}
+	return snapshot
 }
 
 func (r logicalReader) ReadAt(p []byte, off int64) (int, error) {
@@ -55,11 +69,7 @@ func (r logicalReader) ReadAt(p []byte, off int64) (int, error) {
 		if uint64(nbytes) > available {
 			nbytes = int(available)
 		}
-		var source io.ReaderAt = r.segments[index].file
-		if index == len(r.segments)-1 && r.active != nil {
-			source = r.active
-		}
-		n, err := source.ReadAt(p[:nbytes], int64(physical))
+		n, err := r.segments[index].file.ReadAt(p[:nbytes], int64(physical))
 		if n < 0 || n > nbytes {
 			return total, fmt.Errorf("%w: invalid ReadAt count", ErrMalformed)
 		}
@@ -82,9 +92,15 @@ func (r logicalReader) ReadAt(p []byte, off int64) (int, error) {
 	return total, nil
 }
 
-func (j *Journal) logicalReader() io.ReaderAt {
+// The caller holds j.mu or owns an unopened recovery candidate.
+func (j *Journal) logicalReader() logicalReader {
 	if len(j.segments) == 0 {
-		return boundedReaderAt{reader: j.segment, end: int64(j.publication.PublishedEnd)}
+		return logicalReader{segments: []readSegment{{file: j.segment, descriptor: SegmentDescriptor{
+			SegmentID: j.segmentID, HeaderSize: SegmentHeaderSize,
+			LogicalStart: SegmentHeaderSize, LogicalEnd: j.publication.PublishedEnd,
+		}}}, end: j.publication.PublishedEnd}
 	}
-	return logicalReader{segments: j.segments, active: j.segment, end: j.publication.PublishedEnd}
+	segments := snapshotReadSegments(j.segments)
+	segments[len(segments)-1].file = j.segment
+	return logicalReader{segments: segments, end: j.publication.PublishedEnd}
 }

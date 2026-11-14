@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/vkviyu/agent-temporal-engine/api"
+	"github.com/vkviyu/agent-temporal-engine/codec"
 	"github.com/vkviyu/agent-temporal-engine/eventlog"
 	"github.com/vkviyu/agent-temporal-engine/graph"
 	"github.com/vkviyu/agent-temporal-engine/model"
@@ -58,16 +59,9 @@ func (e *Engine) addEventNodes(ctx context.Context, r *nodeQueryReader, entry *v
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		obj, err := readObject(ctx, r, model.ObjectID(id))
+		event, obj, err := loadViewEvent(ctx, r, entry, id)
 		if err != nil {
 			return err
-		}
-		event, err := eventlog.Decode(obj)
-		if err != nil {
-			return ErrStoredObject
-		}
-		if event.Space != entry.descriptor.Anchor.Space || event.RecordedBy != entry.principal || event.ID != id {
-			return ErrInvalidStateData
 		}
 		if err = addEventProjection(ctx, r, entry, c, event); err != nil {
 			return err
@@ -78,6 +72,48 @@ func (e *Engine) addEventNodes(ctx context.Context, r *nodeQueryReader, entry *v
 		}
 	}
 	return nil
+}
+
+// projectUnfilteredEvent authenticates an exact occurrence without enumerating
+// the event history. Revision and knowledge views have additional membership
+// rules and continue to use the filtered catalog.
+func (e *Engine) projectUnfilteredEvent(ctx context.Context, entry *viewEntry, ref model.NodeRef) (nodeProjection, error) {
+	if !e.options.EventProfile {
+		return nodeProjection{}, ErrUnsupportedMethod
+	}
+	meta, found, err := e.readEventEntry(ctx, ref.Event)
+	if err != nil {
+		return nodeProjection{}, err
+	}
+	anchor := entry.descriptor.Anchor
+	if !found || meta.Space != anchor.Space || meta.Principal != entry.principal || meta.LSN > anchor.Fence.LSN {
+		return nodeProjection{}, ErrNodeNotFound
+	}
+	reader := &nodeQueryReader{source: e.reader(ctx)}
+	event, _, err := loadViewEvent(ctx, reader, entry, ref.Event)
+	if err != nil {
+		return nodeProjection{}, err
+	}
+	catalog := nodeCatalog{nodes: map[model.NodeRef]nodeProjection{}, objects: map[model.ObjectID]codec.Object{}}
+	if err := addEventProjection(ctx, reader, entry, &catalog, event); err != nil {
+		return nodeProjection{}, err
+	}
+	return catalog.nodes[ref], nil
+}
+
+func loadViewEvent(ctx context.Context, reader *nodeQueryReader, entry *viewEntry, id model.EventID) (model.Event, codec.Object, error) {
+	object, err := readObject(ctx, reader, model.ObjectID(id))
+	if err != nil {
+		return model.Event{}, codec.Object{}, err
+	}
+	event, err := eventlog.Decode(object)
+	if err != nil {
+		return model.Event{}, codec.Object{}, ErrStoredObject
+	}
+	if event.Space != entry.descriptor.Anchor.Space || event.RecordedBy != entry.principal || event.ID != id {
+		return model.Event{}, codec.Object{}, ErrInvalidStateData
+	}
+	return event, object, nil
 }
 
 func addEventProjection(ctx context.Context, r *nodeQueryReader, entry *viewEntry, c *nodeCatalog, event model.Event) error {

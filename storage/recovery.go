@@ -65,90 +65,20 @@ func openJournal(d DurableIO, options JournalOptions, replay ReplayFunc) (_ *Jou
 			err = cleanupOnError(err, append(resources, owner)...)
 		}
 	}()
-	currentBytes, err := readMetadata(d, "CURRENT")
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return nil, report, fmt.Errorf("%w: CURRENT missing: %w", ErrIncompleteStore, err)
-		}
-		return nil, report, recoveryInputError("CURRENT", err)
-	}
-	current, err := DecodeCurrent(currentBytes)
-	if err != nil {
-		return nil, report, recoveryInputError("CURRENT", err)
-	}
-	idBytes, err := readMetadata(d, "IDENTITY")
-	if err != nil {
-		return nil, report, recoveryInputError("IDENTITY", err)
-	}
-	if Digest(sha256.Sum256(idBytes)) != current.IdentityDigest {
-		return nil, report, fmt.Errorf("%w: identity digest", ErrCorruption)
-	}
-	id, err := DecodeIdentity(idBytes)
-	if err != nil {
-		return nil, report, recoveryInputError("IDENTITY", err)
-	}
-	if id.Store != current.Store {
-		return nil, report, fmt.Errorf("%w: identity/store mismatch", ErrCorruption)
-	}
-	if id.Profile != d.Profile() {
-		return nil, report, fmt.Errorf("%w: durability profile differs from identity", ErrUnsupported)
-	}
-	manifestBytes, err := readMetadata(d, manifestName(current.ManifestID))
-	if err != nil {
-		return nil, report, recoveryInputError("manifest", err)
-	}
-	if Digest(sha256.Sum256(manifestBytes)) != current.ManifestDigest {
-		return nil, report, fmt.Errorf("%w: manifest digest", ErrCorruption)
-	}
-	m, err := DecodeManifest(manifestBytes)
-	if err != nil {
-		return nil, report, recoveryInputError("manifest", err)
-	}
-	if m.Store != id.Store || m.Generation != current.Generation || m.ManifestID != current.ManifestID {
-		return nil, report, fmt.Errorf("%w: CURRENT/manifest binding", ErrCorruption)
-	}
-	if err = validateRetirementSource(d, m); err != nil {
-		return nil, report, err
-	}
-	compactions, err = readCompactionIntents(d, id.Store)
+	metadata, err := readRecoveryMetadata(d, o)
 	if err != nil {
 		return nil, report, err
 	}
-	if m.PublishedEnd > o.MaxPublishedBytes {
-		return nil, report, ErrLimit
-	}
-	if m.Position.LSN > o.MaxPublishedTransactions {
-		return nil, report, ErrLimit
-	}
-	genesis, err := GenesisPosition(id)
-	if err != nil {
-		return nil, report, err
-	}
-	descriptors := manifestDescriptors(m, genesis)
+	current := metadata.current
+	id := metadata.identity
+	m := metadata.manifest
+	compactions = metadata.compactions
+	genesis := metadata.genesis
+	descriptors := metadata.descriptors
 	var activeSize int64
-	for _, desc := range descriptors {
-		f, openErr := d.OpenAppend(segmentName(desc.SegmentID))
-		if f != nil {
-			segments = append(segments, &journalSegment{descriptor: desc, file: f})
-		}
-		if openErr != nil {
-			return nil, report, recoveryInputError("segment", openErr)
-		}
-		if f == nil {
-			return nil, report, fmt.Errorf("%w: segment open returned nil handle", ErrMalformed)
-		}
-		size, sizeErr := f.Size()
-		if sizeErr != nil {
-			return nil, report, sizeErr
-		}
-		end := desc.DataEnd
-		if desc.Sealed {
-			end += SegmentFooterSize
-		}
-		if size < 0 || uint64(size) < end || (desc.Sealed && uint64(size) != end) {
-			return nil, report, fmt.Errorf("%w: referenced segment size", ErrCorruption)
-		}
-		activeSize = size
+	segments, activeSize, err = openReferencedSegments(d, descriptors)
+	if err != nil {
+		return nil, report, err
 	}
 	var txIDs map[model.TxID]struct{}
 	var count uint64
@@ -162,7 +92,7 @@ func openJournal(d DurableIO, options JournalOptions, replay ReplayFunc) (_ *Jou
 	if err != nil {
 		return nil, report, err
 	}
-	if err = verifyCompactionSources(d, m, logicalReader{segments: segments, end: m.PublishedEnd}, genesis, o, compactions); err != nil {
+	if err = verifyCompactionSources(d, m, logicalReader{segments: snapshotReadSegments(segments), end: m.PublishedEnd}, genesis, o, compactions); err != nil {
 		return nil, report, err
 	}
 	active := segments[len(segments)-1]
@@ -216,7 +146,7 @@ func openJournal(d DurableIO, options JournalOptions, replay ReplayFunc) (_ *Jou
 		return nil, report, fmt.Errorf("%w: publication witness sync: %w", ErrRecoveryIncomplete, err)
 	}
 	report.PublicationSynced = true
-	return &Journal{io: d, owner: owner, segment: active.file, identity: id, identityDigest: current.IdentityDigest, headerDigest: active.descriptor.HeaderDigest, segmentID: active.descriptor.SegmentID, options: o, publication: report.Publication, prefix: active.prefix, txIDs: txIDs, state: JournalReady, segments: segments, manifest: m}, report, nil
+	return &Journal{state: JournalReady, journalWriterState: journalWriterState{io: d, owner: owner, segment: active.file, identity: id, identityDigest: current.IdentityDigest, headerDigest: active.descriptor.HeaderDigest, segmentID: active.descriptor.SegmentID, options: o, publication: report.Publication, prefix: active.prefix, txIDs: txIDs, segments: segments, manifest: m}}, report, nil
 }
 
 // Resource ceilings, unsupported formats and transient IO failures are not

@@ -218,7 +218,7 @@ func TestWorkSummaryEmissionEmbeddedSDKConformance(t *testing.T) {
 			domainAck(t, summaryDispatchAck, err)
 			assertAckEqual(t, summaryDispatchAck, func() (api.CommitResult, error) { return core.ApplyWork(ctx, summaryDispatch) })
 			outputBytes := []byte("retain the verified evidence")
-			result := agentprofile.ActivityResult{ID: "result", Activity: spec.Activity, Attempt: "attempt", RequestDigest: spec.RequestDigest, Incarnation: 1, Outcome: "success", Payload: outputBytes}
+			result := agentprofile.ActivityResult{Capture: "full", ID: "result", Activity: spec.Activity, Attempt: "attempt", RequestDigest: spec.RequestDigest, Incarnation: 1, Outcome: "success", Payload: outputBytes}
 			control("summary-capture", agentprofile.ControlCommand{CaptureResult: &agentprofile.CaptureResultCommand{Result: result}})
 			control("summary-accept", agentprofile.ControlCommand{AcceptActivity: &agentprofile.AcceptActivityCommand{Activity: spec.Activity, Result: result.ID, ExpectedVersion: 1, Authority: binding, Evidence: proof}})
 			output, outputAck := put("summary-output", "summary-output", outputBytes)

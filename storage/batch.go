@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"math"
 
 	"github.com/vkviyu/agent-temporal-engine/model"
 )
@@ -84,77 +83,27 @@ type PublishedBatch struct {
 // Cancellation is checked until the first append attempt; once P1 starts it
 // runs to completion or fences the journal with ErrCommitUnknown.
 func (j *Journal) PublishPreparedBatch(ctx context.Context, batch []*PreparedTransaction) (PublishedBatch, error) {
-	if err := ctx.Err(); err != nil {
-		return PublishedBatch{}, err
-	}
-	j.mu.Lock()
-	defer j.mu.Unlock()
-	if err := j.ready(); err != nil {
-		return PublishedBatch{}, err
-	}
-	return j.publishPreparedBatchLocked(ctx, batch)
+	return j.publishBatch(ctx, batch, nil)
 }
 
-func (j *Journal) unknownBatch(stage string, batch []*PreparedTransaction, cause error) error {
+func unknownBatch(previous Publication, stage string, batch []*PreparedTransaction, cause error) error {
 	ids := make([]model.TxID, len(batch))
 	for i, p := range batch {
 		ids[i] = p.txID
 	}
-	err := &PublicationError{Stage: stage, TxID: ids[0], TxIDs: ids, Previous: j.publication, Cause: cause}
-	j.state = JournalFenced
-	j.fenceCause = err
+	err := &PublicationError{Stage: stage, TxID: ids[0], TxIDs: ids, Previous: previous, Cause: cause}
 	return err
 }
 
-// publishPreparedBatchLocked is the sole P1 implementation for both APIs.
-func (j *Journal) publishPreparedBatchLocked(ctx context.Context, batch []*PreparedTransaction) (PublishedBatch, error) {
-	if err := j.writable(); err != nil {
-		return PublishedBatch{}, err
-	}
+// publishPreparedBatch executes P1 on a private mutex-free writer candidate.
+func (j *journalWriterState) publishPreparedBatch(ctx context.Context, batch []*PreparedTransaction, guard func() error) (PublishedBatch, error) {
 	if err := ctx.Err(); err != nil {
 		return PublishedBatch{}, err
 	}
-	if len(batch) == 0 {
-		return PublishedBatch{}, fmt.Errorf("%w: empty batch", ErrMalformed)
-	}
-	if len(batch) > MaxPreparedBatchTransactions {
-		return PublishedBatch{}, ErrLimit
-	}
 	p := j.publication
-	count := uint64(len(batch))
-	if p.Generation == math.MaxUint64 || count > math.MaxUint64-p.Position.LSN ||
-		p.Position.LSN > j.options.MaxPublishedTransactions || count > j.options.MaxPublishedTransactions-p.Position.LSN ||
-		p.PublishedEnd > j.options.MaxPublishedBytes {
-		return PublishedBatch{}, ErrLimit
-	}
-	position := p.Position
-	var total uint64
-	seen := make(map[model.TxID]struct{}, len(batch))
-	for _, prepared := range batch {
-		if prepared == nil || len(prepared.encoded) == 0 || prepared.position.LSN == 0 {
-			return PublishedBatch{}, fmt.Errorf("%w: unprepared transaction", ErrMalformed)
-		}
-		size := prepared.Size()
-		if size > MaxPreparedBatchBytes || size > j.options.Limits.MaxTransactionBytes ||
-			prepared.maxPayload > j.options.Limits.MaxPayload || prepared.frameCount > j.options.Limits.MaxRecords ||
-			size > MaxPreparedBatchBytes-total {
-			return PublishedBatch{}, ErrLimit
-		}
-		total += size
-		if prepared.position.LSN != position.LSN+1 || prepared.previous != position.Digest {
-			return PublishedBatch{}, ErrPrecondition
-		}
-		if _, exists := j.txIDs[prepared.txID]; exists {
-			return PublishedBatch{}, ErrDuplicateTransaction
-		}
-		if _, exists := seen[prepared.txID]; exists {
-			return PublishedBatch{}, ErrDuplicateTransaction
-		}
-		seen[prepared.txID] = struct{}{}
-		position = prepared.position
-	}
-	if total > j.options.MaxPublishedBytes-p.PublishedEnd {
-		return PublishedBatch{}, ErrLimit
+	total, err := j.validatePreparedBatch(batch)
+	if err != nil {
+		return PublishedBatch{}, err
 	}
 	manifestID, err := randomID()
 	if err != nil {
@@ -178,17 +127,18 @@ func (j *Journal) publishPreparedBatchLocked(ctx context.Context, batch []*Prepa
 		if err == nil {
 			err = fmt.Errorf("%w: segment length changed outside the publisher", ErrCorruption)
 		}
-		j.state = JournalFenced
-		j.fenceCause = err
 		return PublishedBatch{}, fmt.Errorf("%w before append: %w", ErrStoreFenced, err)
 	}
 	if err = ctx.Err(); err != nil {
 		return PublishedBatch{}, err
 	}
+	if err = guard(); err != nil {
+		return PublishedBatch{}, err
+	}
 	// There are no cancellation checks after the first attempted layout IO.
 	// A seal/new successor is not a separate logical publication.
-	if err = j.writeLayout(layout); err != nil {
-		return PublishedBatch{}, j.unknownBatch("segmented publication", batch, err)
+	if err = j.writeLayout(layout, guard); err != nil {
+		return PublishedBatch{}, unknownBatch(p, "segmented publication", batch, err)
 	}
 	m := layout.manifest
 	result := PublishedBatch{Publication: publicationFor(j.identity, m), Transactions: make([]PublishedTransaction, len(batch))}

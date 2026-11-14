@@ -1,0 +1,4 @@
+=== RUN   TestNativeExt4RebootPreservesAcknowledgedPrefix
+    native_reboot_linux_test.go:126: verification requires a different Linux boot ID
+--- FAIL: TestNativeExt4RebootPreservesAcknowledgedPrefix (0.00s)
+FAIL

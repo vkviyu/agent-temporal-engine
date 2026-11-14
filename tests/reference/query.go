@@ -45,6 +45,10 @@ func (q *QueryController) Advance(kind string, expected, sequence uint64, adapte
 		if p.Version != 0 {
 			return ErrRejected
 		}
+	case "checkpoint":
+		if sequence != p.Sequence || activity == "" || !q.toolsDone() {
+			return ErrRejected
+		}
 	case "decision":
 		if sequence != p.Sequence+1 || activity == "" || result == "" {
 			return ErrRejected

@@ -9,6 +9,10 @@ import (
 	"github.com/vkviyu/agent-temporal-engine/model"
 )
 
+// PacketSchema includes the atomic persisted provenance-index contract.
+// Earlier pre-release schemas are deliberately not decoded or replayed.
+const PacketSchema uint64 = 5
+
 type ContextPacket struct {
 	ID              model.ObjectID
 	Space           model.SpaceID
@@ -100,8 +104,7 @@ func encodePacket(p ContextPacket, withID bool) ([]byte, error) {
 	if err := p.Validate(); err != nil {
 		return nil, err
 	}
-	const version = 4
-	b := codec.AppendUint(nil, version)
+	b := codec.AppendUint(nil, PacketSchema)
 	b, _ = codec.AppendString(b, string(p.Space))
 	if p.Key == nil {
 		b = codec.AppendUint(b, 0)
@@ -126,13 +129,11 @@ func encodePacket(p ContextPacket, withID bool) ([]byte, error) {
 	b, _ = codec.AppendString(b, p.Renderer)
 	b, _ = codec.AppendString(b, p.Tokenizer)
 	b = codec.AppendUint(b, p.EstimatedTokens)
-	if version == 4 {
-		present := uint64(0)
-		if p.Input != nil {
-			present = 1
-		}
-		b = codec.AppendUint(b, present)
+	present := uint64(0)
+	if p.Input != nil {
+		present = 1
 	}
+	b = codec.AppendUint(b, present)
 	if p.Input != nil {
 		b, _ = codec.AppendString(b, string(p.Input.Object))
 		b, err = encodeSource(b, SourceAnchor{Anchor: p.Input.Anchor})
@@ -141,30 +142,28 @@ func encodePacket(p ContextPacket, withID bool) ([]byte, error) {
 		}
 		b, _ = codec.AppendString(b, p.Input.Encoding)
 	}
-	if version == 4 {
-		present := uint64(0)
-		if p.Selection != nil {
-			present = 1
+	present = 0
+	if p.Selection != nil {
+		present = 1
+	}
+	b = codec.AppendUint(b, present)
+	if p.Selection != nil {
+		record, err := encodeContextSelection(*p.Selection)
+		if err != nil {
+			return nil, err
 		}
-		b = codec.AppendUint(b, present)
-		if p.Selection != nil {
-			record, err := encodeContextSelection(*p.Selection)
-			if err != nil {
-				return nil, err
-			}
-			b, err = codec.AppendBytes(b, record)
-			if err != nil {
-				return nil, err
-			}
+		b, err = codec.AppendBytes(b, record)
+		if err != nil {
+			return nil, err
 		}
-		present = 0
-		if p.Requirements != nil {
-			present = 1
-		}
-		b = codec.AppendUint(b, present)
-		if p.Requirements != nil {
-			b, _ = codec.AppendBytes(b, encodeContextRequirements(*p.Requirements))
-		}
+	}
+	present = 0
+	if p.Requirements != nil {
+		present = 1
+	}
+	b = codec.AppendUint(b, present)
+	if p.Requirements != nil {
+		b, _ = codec.AppendBytes(b, encodeContextRequirements(*p.Requirements))
 	}
 	if withID {
 		if p.ID == "" || PacketID(p) != p.ID {
@@ -183,8 +182,11 @@ func DecodePacket(raw []byte) (ContextPacket, error) {
 	}
 	d := codec.NewDecoder(raw)
 	v, e := d.Uint()
-	if e != nil || v != 4 {
+	if e != nil {
 		return ContextPacket{}, ErrInvalid
+	}
+	if v != PacketSchema {
+		return ContextPacket{}, fmt.Errorf("%w: packet %d", ErrUnsupportedSchema, v)
 	}
 	space, e := d.String(model.MaxIdentityBytes)
 	if e != nil {
@@ -253,15 +255,11 @@ func DecodePacket(raw []byte) (ContextPacket, error) {
 		return ContextPacket{}, e
 	}
 	var input *RecordedInput
-	hasInput := false
-	if v == 4 {
-		present, err := d.Uint()
-		if err != nil || present > 1 {
-			return ContextPacket{}, ErrInvalid
-		}
-		hasInput = present == 1
+	present, err := d.Uint()
+	if err != nil || present > 1 {
+		return ContextPacket{}, ErrInvalid
 	}
-	if hasInput {
+	if present == 1 {
 		object, err := d.String(64)
 		if err != nil {
 			return ContextPacket{}, err

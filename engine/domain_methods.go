@@ -20,7 +20,7 @@ func domainMethodRootSlot(method string) domainRootSlot {
 	switch method {
 	case api.MethodApplyGraph:
 		return rootSlotBranch
-	case api.MethodApplyMemory, api.MethodApplyKnowledge, api.MethodApplySummary, api.MethodApplyAnnotation, api.MethodImportTransfer:
+	case api.MethodApplyMemory, api.MethodApplyKnowledge, api.MethodApplySummary, api.MethodApplyAnnotation, api.MethodUpdateInvestigation, api.MethodApplyTaskTrace, api.MethodImportTransfer:
 		return rootSlotKnowledge
 	default:
 		return rootSlotDomain
@@ -51,7 +51,7 @@ func setDomainRootForMethod(roots *model.RootSet, method string, root model.Obje
 
 func isRegisteredDomainMethod(method string) bool {
 	switch method {
-	case api.MethodMutateState, api.MethodApplyGraph, api.MethodApplyMemory, api.MethodApplyKnowledge, api.MethodApplySummary, api.MethodApplyAnnotation:
+	case api.MethodMutateState, api.MethodApplyGraph, api.MethodApplyMemory, api.MethodApplyKnowledge, api.MethodApplySummary, api.MethodApplyAnnotation, api.MethodUpdateInvestigation, api.MethodApplyTaskTrace:
 		return true
 	default:
 		return false

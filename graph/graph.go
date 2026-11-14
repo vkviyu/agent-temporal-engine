@@ -39,6 +39,8 @@ var (
 	ErrInvalidJoinPlan    = errors.New("join plan differs from its inputs and explicit resolutions")
 	ErrBranchCAS          = errors.New("branch compare-and-swap failed")
 	ErrSpaceMismatch      = errors.New("graph operation crosses spaces")
+	ErrBranchScope        = errors.New("graph operation violates branch scope")
+	ErrPublishConflict    = errors.New("branch publication conflicts with current domain state")
 	ErrLimit              = errors.New("graph resource limit exceeded")
 	ErrUnsupportedSchema  = errors.New("unsupported graph schema")
 )
@@ -60,11 +62,38 @@ type Revision struct {
 	StateRoot   model.ObjectID
 	Events      []model.EventID
 	Entries     []Entry
+	Producer    *RevisionProducer `json:",omitempty"`
 }
 type Branch struct {
 	ID      model.BranchID
 	Head    model.RevisionID
 	Version uint64
+	Scope   *BranchScope `json:",omitempty"`
+	// PublishedHead is the last branch revision whose changes were explicitly
+	// incorporated into the Space domain. Empty selects the immutable fork base.
+	PublishedHead model.RevisionID `json:",omitempty"`
+}
+
+// BranchScope binds an exploration branch to its fork base and write owner.
+// An empty Execution means this is a host-managed branch.
+type BranchScope struct {
+	Principal model.PrincipalID
+	Execution model.ExecutionID
+	Base      model.RevisionID
+}
+
+// RevisionProducer records the authority and branch position verified by the
+// engine when it produced a branch-local revision.
+type RevisionProducer struct {
+	Branch           model.BranchID
+	BranchVersion    uint64
+	Principal        model.PrincipalID
+	Execution        model.ExecutionID
+	Task             model.EntityID
+	Actor            model.ActorID
+	GoalEpoch        uint64
+	Incarnation      uint64
+	AuthorityVersion uint64
 }
 type ChangeKind string
 
@@ -131,6 +160,10 @@ func cloneRevision(r Revision) Revision {
 	r.Entries = cloneEntries(r.Entries)
 	r.JoinParents = append([]model.RevisionID(nil), r.JoinParents...)
 	r.Events = append([]model.EventID(nil), r.Events...)
+	if r.Producer != nil {
+		producer := *r.Producer
+		r.Producer = &producer
+	}
 	return r
 }
 func normalizeEntries(in []Entry) ([]Entry, error) {
@@ -165,7 +198,17 @@ func normalizeEntries(in []Entry) ([]Entry, error) {
 // domain, schema, Space, ordered events and canonical metadata/state entries.
 // It does not claim that referenced parents, events or StateRoot are published.
 func BuildRevision(space string, parent model.RevisionID, joins []model.RevisionID, root model.ObjectID, events []model.EventID, entries []Entry) (Revision, error) {
-	r, err := normalizeRevision(Revision{Space: model.SpaceID(space), StateParent: parent, JoinParents: joins, StateRoot: root, Events: events, Entries: entries})
+	return buildRevision(Revision{Space: model.SpaceID(space), StateParent: parent, JoinParents: joins, StateRoot: root, Events: events, Entries: entries})
+}
+
+// BuildProducedRevision canonicalizes a local revision. Only the engine's
+// authenticated graph reducer can publish the resulting producer assertion.
+func BuildProducedRevision(space model.SpaceID, parent model.RevisionID, joins []model.RevisionID, root model.ObjectID, events []model.EventID, entries []Entry, producer RevisionProducer) (Revision, error) {
+	return buildRevision(Revision{Space: space, StateParent: parent, JoinParents: joins, StateRoot: root, Events: events, Entries: entries, Producer: &producer})
+}
+
+func buildRevision(input Revision) (Revision, error) {
+	r, err := normalizeRevision(input)
 	if err != nil {
 		return Revision{}, err
 	}
@@ -179,6 +222,13 @@ func normalizeRevision(r Revision) (Revision, error) {
 	}
 	if len(r.JoinParents) > MaxRevisionParents || len(r.Events) > MaxRevisionEvents {
 		return Revision{}, ErrLimit
+	}
+	if r.Producer != nil {
+		producer := *r.Producer
+		if r.StateParent == "" || !producer.valid() {
+			return Revision{}, ErrInvalidRevision
+		}
+		r.Producer = &producer
 	}
 	r.JoinParents = append([]model.RevisionID(nil), r.JoinParents...)
 	sort.Slice(r.JoinParents, func(i, j int) bool { return r.JoinParents[i] < r.JoinParents[j] })
@@ -225,7 +275,7 @@ func RevisionIDFor(space string, parent model.RevisionID, joins []model.Revision
 	return r.ID
 }
 func (s *Store) putLocked(r Revision) error {
-	canonical, err := BuildRevision(string(r.Space), r.StateParent, r.JoinParents, r.StateRoot, r.Events, r.Entries)
+	canonical, err := buildRevision(r)
 	if err != nil {
 		return err
 	}

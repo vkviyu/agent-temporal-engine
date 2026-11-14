@@ -138,6 +138,8 @@ func (e *Engine) validateQueryTurn(ctx context.Context, req api.CommitRequest, u
 			return ErrWorkBoundary
 		case x.CaptureResult != nil:
 			activity = x.CaptureResult.Result.Activity
+		case x.CaptureOutputChunk != nil:
+			activity = x.CaptureOutputChunk.Chunk.Activity
 		case x.AcceptActivity != nil:
 			activity = x.AcceptActivity.Activity
 			accepts++
@@ -161,6 +163,10 @@ func (e *Engine) validateQueryTurn(ctx context.Context, req api.CommitRequest, u
 		case x.AnswerQuery != nil:
 			answers++
 			if u.Kind != "query_answer" || x.AnswerQuery.Query != u.Query || !x.AnswerQuery.Final || !queryToolsDone(p) || len(p.Decisions) == 0 {
+				return ErrWorkBoundary
+			}
+			last := p.Decisions[len(p.Decisions)-1]
+			if x.AnswerQuery.GeneratedFrom != last.AcceptedResult || len(last.Invocations) != 0 {
 				return ErrWorkBoundary
 			}
 			if r := l.Snapshot().Lifecycle.Recovery; r != nil {

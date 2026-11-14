@@ -96,7 +96,7 @@ func TestCoordinatorSpeculativeDecisionsWaitForPublication(t *testing.T) {
 				coordinatorWait(t, appendGate.entered)
 				speculativePending(t, firstFlight)
 				speculativePending(t, secondFlight)
-				if got := coordinatorLookup(t, e, secondReq); got.Code != api.CodeInFlight || got.Result != (api.CommitResult{}) {
+				if got := coordinatorInFlight(t, e, secondReq); got.Code != api.CodeInFlight || got.Result != (api.CommitResult{}) {
 					t.Fatalf("dependent lost its flight before publication: %+v", got)
 				}
 				appendGate.unblock()

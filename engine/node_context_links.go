@@ -65,15 +65,16 @@ func (e *Engine) addDeclaredNodeInputs(ctx context.Context, entry *viewEntry, c 
 			specs = append(specs, a)
 		}
 	}
-	snapshot, _, _, err := e.loadKnowledge(ctx, entry.roots, entry.descriptor.Anchor.Space, entry.principal)
+	r := &nodeQueryReader{source: e.reader(ctx)}
+	space := entry.descriptor.Anchor.Space
+	root, err := slotSpaceRoot(ctx, r, entry.roots.ExecutionKnowledge, space)
 	if err != nil {
 		return err
 	}
-	packets := make(map[model.ObjectID]knowledge.ContextPacket, len(snapshot.Packets))
-	for _, p := range snapshot.Packets {
-		packets[p.ID] = p
+	index, err := openKnowledgeIndex(ctx, r, root, space, entry.principal)
+	if err != nil {
+		return err
 	}
-	r := &nodeQueryReader{source: e.index}
 	addObject := func(id model.ObjectID, label string, kind model.EntityKind, requireBytes bool) error {
 		if id == "" {
 			return nil
@@ -106,7 +107,13 @@ func (e *Engine) addDeclaredNodeInputs(ctx context.Context, entry *viewEntry, c 
 		if err := addObject(a.Request, "request envelope", "recorded_input", true); err != nil {
 			return err
 		}
-		p, ok := packets[a.ContextPacket]
+		if a.ContextPacket == "" {
+			continue
+		}
+		p, ok, err := index.packet(ctx, a.ContextPacket)
+		if err != nil {
+			return err
+		}
 		if !ok {
 			continue
 		}
@@ -192,7 +199,7 @@ func (e *Engine) nodeContextCatalog(ctx context.Context, entry *viewEntry) (node
 
 // Additional historical envelopes are authorized by the explicit publication
 // chain, but must still respect current audit restrictions at output time.
-func (e *Engine) nodeContextOutputGateLocked(ctx context.Context, entry *viewEntry, ids []model.ObjectID, details ...nodeProjection) error {
+func (e *Engine) nodeContextOutputGate(ctx context.Context, entry *viewEntry, ids []model.ObjectID, details ...nodeProjection) error {
 	// Annotation text can describe a source no longer present in the selected
 	// navigation View. Recheck its own historical provenance at output time.
 	for _, detail := range details {
@@ -201,15 +208,15 @@ func (e *Engine) nodeContextOutputGateLocked(ctx context.Context, entry *viewEnt
 		}
 		var record annotation.Record
 		if json.Unmarshal(detail.detail.Data, &record) != nil {
-			return e.readFailure(ErrStoredObject)
+			return e.readFailureAt(ctx, ErrStoredObject)
 		}
 		if _, _, err := e.checkAnnotationProvenance(ctx, entry.descriptor.Anchor.Space, entry.principal, record); err != nil {
-			return e.annotationReadFailure(err)
+			return e.annotationReadFailure(ctx, err)
 		}
 	}
 	if key := entry.descriptor.Anchor.Knowledge; key != nil {
-		if err := e.authorizeKnowledge(ctx, e.roots, entry.descriptor.Anchor.Space, entry.principal, *key); err != nil {
-			return e.knowledgeReadFailure(err)
+		if err := e.authorizeKnowledge(ctx, e.readRoots(ctx), entry.descriptor.Anchor.Space, entry.principal, *key); err != nil {
+			return e.knowledgeReadFailure(ctx, err)
 		}
 	}
 	if err := e.checkDisclosureIDs(ctx, entry.descriptor.Anchor.Space, ids); err != nil {

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"unicode/utf8"
 
 	"github.com/vkviyu/agent-temporal-engine/agentprofile"
@@ -218,7 +219,12 @@ func (e *Engine) prepareAgent(ctx context.Context, req api.CommitRequest, digest
 		return nil, err
 	}
 	key := agentPartitionKey(req.Space, req.Principal)
-	delta, err := state.Apply(ctx, builder, systemSpace, e.roots.LiveControl, []state.Mutation{{Key: key, Value: after}})
+	mutations, derivations, err := e.agentDerivationMutations(ctx, req, c, builder)
+	if err != nil {
+		return nil, err
+	}
+	mutations = append(mutations, state.Mutation{Key: key, Value: after})
+	delta, err := state.Apply(ctx, builder, systemSpace, e.roots.LiveControl, mutations)
 	if err != nil {
 		return nil, err
 	}
@@ -227,7 +233,9 @@ func (e *Engine) prepareAgent(ctx context.Context, req api.CommitRequest, digest
 			return nil, err
 		}
 	}
-	changes := operationsRecord{Space: req.Space, BeforeRoot: e.roots.LiveControl, AfterRoot: delta.Root, Changes: []stateChange{{Key: key, Before: before, After: after}}}
+	stateChanges := append(derivations, stateChange{Key: key, Before: before, After: after})
+	slices.SortFunc(stateChanges, func(a, b stateChange) int { return bytes.Compare(a.Key, b.Key) })
+	changes := operationsRecord{Space: req.Space, BeforeRoot: e.roots.LiveControl, AfterRoot: delta.Root, Changes: stateChanges}
 	ops, err := makeOperations(changes)
 	if err != nil {
 		return nil, err
@@ -248,6 +256,11 @@ func (e *Engine) prepareAgent(ctx context.Context, req api.CommitRequest, digest
 }
 
 func (e *Engine) GetAgentState(ctx context.Context, req api.ReadAgentStateRequest) (api.AgentStateResult, error) {
+	if ctx.Value(readDeliveryKey{}) == nil {
+		return embeddedReadDelivery(ctx, e, "get_agent_state", req.Principal, req, func(scoped context.Context) (api.AgentStateResult, error) {
+			return e.GetAgentState(scoped, req)
+		})
+	}
 	if err := validAgentScope(req.Space, req.Principal); err != nil {
 		return api.AgentStateResult{}, err
 	}
@@ -257,39 +270,25 @@ func (e *Engine) GetAgentState(ctx context.Context, req api.ReadAgentStateReques
 	if err := e.publicGate(); err != nil {
 		return api.AgentStateResult{}, err
 	}
-	if err := e.mu.LockContext(ctx); err != nil {
+	if err := e.readReady(ctx); err != nil {
 		return api.AgentStateResult{}, err
 	}
-	defer e.mu.Unlock()
-	if err := e.ready(); err != nil {
-		return api.AgentStateResult{}, err
-	}
-	anchor := model.SnapshotAnchor{Space: req.Space, Fence: e.publication.Fence()}
-	roots, rootID := e.roots, e.rootSet
+	anchor := model.SnapshotAnchor{Space: req.Space, Fence: e.readPublication(ctx).Fence()}
+	roots, rootID := e.readRoots(ctx), e.readRootSet(ctx)
 	if req.Anchor != nil {
 		anchor = req.Anchor.Clone()
 		if anchor.Validate() != nil || anchor.Space != req.Space || anchor.Cursor != nil || anchor.Knowledge != nil {
 			return api.AgentStateResult{}, model.ErrAnchorMismatch
 		}
-		proof, ok := e.history[anchor.Fence.LSN]
-		if !ok || proof.fence != anchor.Fence {
-			return api.AgentStateResult{}, model.ErrAnchorMismatch
-		}
-		rootID, roots = proof.rootSet, model.RootSet{}
-		if rootID != "" {
-			obj, err := readObject(ctx, e.index, rootID)
-			if err != nil {
-				return api.AgentStateResult{}, e.readFailure(err)
-			}
-			roots, err = readRootSet(obj)
-			if err != nil {
-				return api.AgentStateResult{}, e.readFailure(err)
-			}
+		var err error
+		roots, rootID, err = e.rootsAtFence(ctx, anchor.Fence, false)
+		if err != nil {
+			return api.AgentStateResult{}, e.knowledgeReadFailure(ctx, err)
 		}
 	}
-	ledger, _, found, err := loadAgentLedger(ctx, e.index, roots.LiveControl, req.Space, req.Principal)
+	ledger, _, found, err := loadAgentLedger(ctx, e.reader(ctx), roots.LiveControl, req.Space, req.Principal)
 	if err != nil {
-		return api.AgentStateResult{}, e.readFailure(err)
+		return api.AgentStateResult{}, e.readFailureAt(ctx, err)
 	}
 	snapshot := ledger.Snapshot()
 	ids, err := e.checkAgentSnapshotDisclosure(ctx, roots, req.Space, req.Principal, snapshot, ctx.Value(readDeliveryKey{}) != nil)
@@ -297,7 +296,7 @@ func (e *Engine) GetAgentState(ctx context.Context, req api.ReadAgentStateReques
 		if errors.Is(err, memory.ErrHistoryAccessDenied) {
 			return api.AgentStateResult{}, err
 		}
-		return api.AgentStateResult{}, e.knowledgeReadFailure(err)
+		return api.AgentStateResult{}, e.knowledgeReadFailure(ctx, err)
 	}
 	if err = ctx.Err(); err != nil {
 		return api.AgentStateResult{}, err

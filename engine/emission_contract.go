@@ -4,11 +4,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 
 	"github.com/vkviyu/agent-temporal-engine/agentprofile"
 	"github.com/vkviyu/agent-temporal-engine/api"
-	"github.com/vkviyu/agent-temporal-engine/knowledge"
 	"github.com/vkviyu/agent-temporal-engine/memory"
 	"github.com/vkviyu/agent-temporal-engine/model"
 )
@@ -85,47 +85,39 @@ func (e *Engine) resolveTypedEmission(ctx context.Context, req api.CommitRequest
 	var ids []model.ObjectID
 	switch s.ContentKind {
 	case "packet":
-		var snap knowledge.Snapshot
-		if s.Anchor.Knowledge != nil {
-			snap, _, _, _, err = e.selectedKnowledge(ctx, roots, s.Anchor, req.Principal)
-		} else if s.Anchor.Cursor != nil {
+		record, err := e.packetAt(ctx, roots, req.Space, req.Principal, s.Content)
+		if errors.Is(err, agentprofile.ErrUnknown) {
 			return nil, nil, ErrEmissionRejected
-		} else {
-			snap, _, _, err = e.loadKnowledge(ctx, roots, req.Space, req.Principal)
 		}
 		if err != nil {
 			return nil, nil, err
 		}
-		found := false
-		for _, packet := range snap.Packets {
-			if packet.ID != s.Content {
-				continue
-			}
-			if packet.Input == nil || (s.Execution == "" && packet.Key != nil) || (s.Execution != "" && (packet.Key == nil || packet.Key.Execution != s.Execution)) {
-				return nil, nil, ErrEmissionRejected
-			}
-			object, anchor = packet.Input.Object, packet.Input.Anchor
-			ids = append(ids, packetPolicyIDs(packet, snap)...)
-			selected := map[model.ObjectID]bool{}
-			for _, item := range packet.Items {
-				selected[item.Observation] = true
-			}
-			var observations []knowledge.Observation
-			for _, o := range snap.Observations {
-				if selected[o.ID] {
-					observations = append(observations, o)
-				}
-			}
-			dependencies, err := e.summaryDependencyIDs(ctx, roots, req.Space, req.Principal, observationSummaryIDs(observations))
+		packet := record.packet
+		if s.Anchor.Knowledge != nil {
+			snap, _, _, _, err := e.selectedKnowledge(ctx, roots, s.Anchor, req.Principal)
 			if err != nil {
 				return nil, nil, err
 			}
-			ids = append(ids, dependencies...)
-			found = true
-			break
-		}
-		if !found {
+			found := false
+			for _, visible := range snap.Packets {
+				if visible.ID == s.Content {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return nil, nil, ErrEmissionRejected
+			}
+		} else if s.Anchor.Cursor != nil {
 			return nil, nil, ErrEmissionRejected
+		}
+		if packet.Input == nil || (s.Execution == "" && packet.Key != nil) || (s.Execution != "" && (packet.Key == nil || packet.Key.Execution != s.Execution)) {
+			return nil, nil, ErrEmissionRejected
+		}
+		object, anchor = packet.Input.Object, packet.Input.Anchor
+		ids, err = e.packetDependencyIDs(ctx, roots, req.Space, req.Principal, packet, record.selected)
+		if err != nil {
+			return nil, nil, err
 		}
 	case "summary":
 		summary, _, found, err := e.loadSummary(ctx, roots, req.Space, req.Principal, s.Content)
@@ -136,7 +128,7 @@ func (e *Engine) resolveTypedEmission(ctx context.Context, req api.CommitRequest
 			return nil, nil, ErrEmissionRejected
 		}
 		if s.Anchor.Knowledge != nil {
-			snap, _, _, _, err := e.selectedKnowledge(ctx, roots, s.Anchor, req.Principal)
+			snap, _, _, _, err := e.selectedKnowledgeObservations(ctx, roots, s.Anchor, req.Principal)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -253,7 +245,7 @@ func (e *Engine) prepareEmissionProof(ctx context.Context, req api.CommitRequest
 	if err != nil {
 		return nil, err
 	}
-	dependencies, err := current.AccessPolicy().DependencyClosure(ids)
+	dependencies, err := e.policyDependencyIDs(ctx, req.Space, current.AccessPolicy(), ids)
 	if err != nil {
 		return nil, err
 	}

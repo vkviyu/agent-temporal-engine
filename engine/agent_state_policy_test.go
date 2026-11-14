@@ -34,7 +34,7 @@ func TestAgentStateHistoricalDisclosureChecksKnownModelProvenance(t *testing.T) 
 			recoveryCoreControl(t, s, "state-policy-claim", agentprofile.ControlCommand{ClaimAttempt: &agentprofile.ClaimAttemptCommand{Activity: spec.Activity, Attempt: "state-attempt", Sequence: 1, Authority: binding}})
 			recoveryCoreControl(t, s, "state-policy-dispatch", agentprofile.ControlCommand{DispatchAttempt: &agentprofile.DispatchAttemptCommand{Attempt: "state-attempt", Authority: binding, Evidence: proof}})
 			secret := []byte("sensitive model result derived from the source")
-			result := agentprofile.ActivityResult{ID: "state-result", Activity: spec.Activity, Attempt: "state-attempt", RequestDigest: spec.RequestDigest, Incarnation: 1, Outcome: "success", Payload: secret}
+			result := agentprofile.ActivityResult{Capture: "full", ID: "state-result", Activity: spec.Activity, Attempt: "state-attempt", RequestDigest: spec.RequestDigest, Incarnation: 1, Outcome: "success", Payload: secret}
 			recoveryCoreControl(t, s, "state-policy-capture", agentprofile.ControlCommand{CaptureResult: &agentprofile.CaptureResultCommand{Result: result}})
 			recoveryCoreControl(t, s, "state-policy-accept", agentprofile.ControlCommand{AcceptActivity: &agentprofile.AcceptActivityCommand{Activity: spec.Activity, Result: result.ID, ExpectedVersion: 1, Authority: binding, Evidence: proof}})
 			read := api.ReadAgentStateRequest{Space: "host-space", Principal: "host-principal"}

@@ -10,6 +10,7 @@ import (
 
 	"github.com/vkviyu/agent-temporal-engine/api"
 	"github.com/vkviyu/agent-temporal-engine/graph"
+	"github.com/vkviyu/agent-temporal-engine/memory"
 	"github.com/vkviyu/agent-temporal-engine/model"
 	"github.com/vkviyu/agent-temporal-engine/state"
 )
@@ -184,12 +185,12 @@ func (e *Engine) prepareGraph(ctx context.Context, req api.CommitRequest, digest
 			return nil, err
 		}
 		if r.StateParent != "" {
-			if _, err = e.graphRevision(ctx, space, r.StateParent); err != nil {
+			if err = e.requireLegacyRevision(ctx, space, r.StateParent); err != nil {
 				return nil, err
 			}
 		}
 		for _, parent := range r.JoinParents {
-			if _, err = e.graphRevision(ctx, space, parent); err != nil {
+			if err = e.requireLegacyRevision(ctx, space, parent); err != nil {
 				return nil, err
 			}
 		}
@@ -213,7 +214,7 @@ func (e *Engine) prepareGraph(ctx context.Context, req api.CommitRequest, digest
 		}
 	case c.Fork != nil:
 		x := c.Fork
-		if _, err = e.graphRevision(ctx, space, x.Source); err != nil {
+		if err = e.requireLegacyRevision(ctx, space, x.Source); err != nil {
 			return nil, err
 		}
 		_, found, err := e.graphRecord(ctx, space, graphBranchKey(x.Branch))
@@ -251,6 +252,9 @@ func (e *Engine) prepareGraph(ctx context.Context, req api.CommitRequest, digest
 		if b.ID != x.Branch {
 			return nil, ErrInvalidStateData
 		}
+		if b.Scope != nil {
+			return nil, graph.ErrBranchScope
+		}
 		if b.Version != x.Expected {
 			return nil, errCAS
 		}
@@ -263,7 +267,7 @@ func (e *Engine) prepareGraph(ctx context.Context, req api.CommitRequest, digest
 			}
 			return nil, err
 		}
-		if _, err = e.graphRevision(ctx, space, x.Head); err != nil {
+		if err = e.requireLegacyRevision(ctx, space, x.Head); err != nil {
 			return nil, err
 		}
 		b.Head = x.Head
@@ -277,15 +281,46 @@ func (e *Engine) prepareGraph(ctx context.Context, req api.CommitRequest, digest
 		return e.prepareGraphJoin(ctx, req, digest, txID, lsn, recorded, *c.Join)
 	case c.Prune != nil:
 		return e.prepareGraphPrune(ctx, req, digest, txID, lsn, recorded, *c.Prune)
+	case c.ForkLocal != nil:
+		return e.prepareForkLocal(ctx, req, digest, txID, lsn, recorded, *c.ForkLocal)
+	case c.WriteBranch != nil:
+		return e.prepareWriteBranch(ctx, req, digest, txID, lsn, recorded, *c.WriteBranch)
+	case c.JoinLocal != nil:
+		return e.prepareJoinLocal(ctx, req, digest, txID, lsn, recorded, *c.JoinLocal)
+	case c.PublishBranch != nil:
+		return e.preparePublishBranch(ctx, req, digest, txID, lsn, recorded, *c.PublishBranch)
 	default:
 		return nil, graph.ErrCommandShape
 	}
 	return e.prepareTypedValue(ctx, req, digest, txID, lsn, recorded, key, raw)
 }
 
+func (e *Engine) requireLegacyRevision(ctx context.Context, space model.SpaceID, id model.RevisionID) error {
+	r, err := e.graphRevision(ctx, space, id)
+	if err != nil {
+		return err
+	}
+	if r.Producer != nil {
+		return graph.ErrBranchScope
+	}
+	return nil
+}
+
 func graphCommandRejection(err error) bool {
 	if errors.Is(err, ErrStoredObject) || errors.Is(err, ErrInvalidStateData) || errors.Is(err, ErrObjectIO) {
 		return false
 	}
-	return errors.Is(err, graph.ErrCommandShape) || errors.Is(err, graph.ErrUnknownBranch) || errors.Is(err, graph.ErrUnknownRevision) || errors.Is(err, graph.ErrInvalidRevision) || errors.Is(err, graph.ErrSpaceMismatch) || errors.Is(err, graph.ErrRevisionCycle) || errors.Is(err, graph.ErrStateMismatch) || errors.Is(err, graph.ErrStateUnverified) || errors.Is(err, graph.ErrUnsupportedSchema) || errors.Is(err, graph.ErrBranchPruned) || errors.Is(err, graph.ErrJoinConflict) || errors.Is(err, graph.ErrInvalidJoinPlan) || errors.Is(err, graph.ErrNoMergeBase) || errors.Is(err, graph.ErrAmbiguousMergeBase)
+	for _, rejection := range []error{
+		graph.ErrCommandShape, graph.ErrUnknownBranch, graph.ErrUnknownRevision,
+		graph.ErrInvalidRevision, graph.ErrSpaceMismatch, graph.ErrRevisionCycle,
+		graph.ErrStateMismatch, graph.ErrStateUnverified, graph.ErrUnsupportedSchema,
+		graph.ErrBranchPruned, graph.ErrJoinConflict, graph.ErrInvalidJoinPlan,
+		graph.ErrNoMergeBase, graph.ErrAmbiguousMergeBase, graph.ErrBranchScope,
+		graph.ErrPublishConflict, memory.ErrUseDenied, memory.ErrHistoryAccessDenied,
+	} {
+		if errors.Is(err, rejection) {
+			return true
+		}
+	}
+	return false
 }

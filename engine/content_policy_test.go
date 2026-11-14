@@ -127,6 +127,63 @@ func TestModelPacketSourceWithdrawalRecheckedAfterClaim(t *testing.T) {
 	}
 }
 
+func TestModelPacketSupersessionRecheckedAfterClaim(t *testing.T) {
+	ctx := t.Context()
+	s, payload, source := knowledgeFixture(t)
+	raw := knowledgeObservation(payload, source, "one", 1)
+	applyObservation(t, s.e, "supersede-adopt-raw", raw)
+	anchored := memory.Source{SourceID: payload, Anchor: sourceAnchor(source)}
+	applyMemory(t, s.e, "supersede-candidate", memory.Command{PutCandidate: &memory.Memory{
+		Space: "host-space", Kind: memory.KindFact, Claim: []byte("verified detail"), Sources: []memory.Source{anchored},
+	}})
+	candidate := memoryWithStatus(t, s.e, memory.StatusCandidate)
+	applyMemory(t, s.e, "supersede-validate", memory.Command{Validate: &memory.ValidateCommand{
+		ID: candidate.ID, Validation: memory.Validation{Passed: true, StrategyVersion: 1, Evidence: []memory.Source{anchored}},
+	}})
+	validated := memoryWithStatus(t, s.e, memory.StatusValidated)
+	applyMemory(t, s.e, "supersede-promote", memory.Command{Promote: &validated.ID})
+	promoted := memoryWithStatus(t, s.e, memory.StatusPromoted)
+	adopted := knowledgeObservation(promoted.ID, integrationSnapshot(t, s.e).Fence, "one", 2)
+	adopted.PayloadKind = "memory"
+	adopted.ID = knowledge.ObservationID(adopted)
+	applyObservation(t, s.e, "supersede-adopt-memory", adopted)
+
+	requestBytes := []byte("model input that cites the promoted memory")
+	requestAck := integrationMutate(t, s.e, integrationRequest("supersede-request", integrationPut([]byte("supersede-request"), api.Value{Kind: api.ValueBytes, Data: requestBytes})))
+	input, _ := recoveryValueAt(t, s, requestAck.Fence, "supersede-request")
+	packet, packetAck := goalCorePacket(t, s, "supersede-packet", raw.Key, raw, []knowledge.Observation{raw, adopted}, input, requestAck.Fence)
+	binding := agentprofile.AuthorityBinding{Deployment: "host", OwnerEpoch: 1, Incarnation: 1, Holder: "worker"}
+	recoveryCoreControl(t, s, "supersede-authority", agentprofile.ControlCommand{GrantAuthority: &agentprofile.GrantAuthorityCommand{Authority: agentprofile.ExecutionAuthority{Execution: "one", Binding: binding, Status: "active", Evidence: model.ObjectID(integrationID('a'))}}})
+	spec := agentprofile.ActivitySpec{Activity: "supersede-activity", Execution: "one", Role: "aux_summary", GoalEpoch: 1, InputFence: packetAck.Fence, ContextPacket: packet.ID, Request: input, RequestDigest: agentprofile.ExactRequestDigest(requestBytes), Recipient: "provider", Effect: "pure", ResourceScope: "session"}
+	recoveryCoreControl(t, s, "supersede-create", agentprofile.ControlCommand{CreateActivity: &agentprofile.CreateActivityCommand{Spec: spec, Authority: binding}})
+	recoveryCoreControl(t, s, "supersede-claim", agentprofile.ControlCommand{ClaimAttempt: &agentprofile.ClaimAttemptCommand{Activity: spec.Activity, Attempt: "supersede-attempt", Sequence: 1, Authority: binding}})
+	grant := api.EmissionSpec{
+		ID: "supersede-grant", Execution: spec.Execution, Task: "kt", GoalEpoch: spec.GoalEpoch,
+		Authority: binding, AuthorityVersion: 1,
+		Content: packet.ID, ContentKind: "packet", Anchor: model.SnapshotAnchor{Space: "host-space", Fence: spec.InputFence},
+		Length: uint64(len(requestBytes)), Destination: spec.Recipient, Activity: spec.Activity, Attempt: "supersede-attempt", RequestDigest: spec.RequestDigest,
+	}
+	issueExactGrant(t, s, grant)
+	applyMemory(t, s.e, "supersede-memory", memory.Command{Transition: &memory.TransitionCommand{ID: promoted.ID, To: memory.StatusSuperseded, Why: "new evidence replaces the prior conclusion"}})
+	before := integrationSnapshot(t, s.e)
+	control := agentprofile.ControlCommand{DispatchAttempt: &agentprofile.DispatchAttemptCommand{Attempt: grant.Attempt, Authority: binding, Evidence: model.ObjectID(integrationID('b'))}}
+	dispatch := exactDispatchWork(t, grant, control, "supersede-rejected-dispatch")
+	check := func() {
+		t.Helper()
+		out, err := s.e.ApplyWork(ctx, dispatch)
+		if out.Code != api.CodeRejected || !errors.Is(err, agentprofile.ErrConflict) || integrationSnapshot(t, s.e) != before {
+			t.Fatalf("superseded memory dispatch = %+v, %v", out, err)
+		}
+		history, err := s.e.GetKnowledgeState(ctx, api.ReadKnowledgeStateRequest{Space: "host-space", Principal: "host-principal", Anchor: &model.SnapshotAnchor{Space: "host-space", Fence: packetAck.Fence, Knowledge: &raw.Key}})
+		if err != nil || len(history.Snapshot.Packets) != 1 || history.Snapshot.Packets[0].ID != packet.ID {
+			t.Fatalf("supersession rewrote historical packet = %+v, %v", history, err)
+		}
+	}
+	check()
+	s.reopen()
+	check()
+}
+
 func TestHistoricalKnowledgeViewHonorsPacketSourceWithdrawal(t *testing.T) {
 	ctx := context.Background()
 	s, payload, source := knowledgeFixture(t)

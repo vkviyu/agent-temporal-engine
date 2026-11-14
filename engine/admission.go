@@ -228,7 +228,10 @@ func (e *Engine) commitQueued(ctx context.Context, req api.CommitRequest) (api.C
 			if err := e.mu.LockContext(ctx); err != nil {
 				return admissionFailure(req.RequestID, err)
 			}
-			if err := e.ready(); err != nil {
+			// Receipt-first admission remains valid while another writer is in
+			// P1. The durable receipt belongs to the already-published prefix,
+			// and does not disclose a new state or issue a read grant.
+			if err := e.workerReady(); err != nil {
 				e.mu.Unlock()
 				return admissionFailure(req.RequestID, err)
 			}

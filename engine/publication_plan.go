@@ -22,17 +22,22 @@ func (e *Engine) finishPlan(ctx context.Context, req api.CommitRequest, digest m
 	}
 	var appliedEvent *model.Event
 	var profileEvents []model.Event
+	aliases := make(map[string]eventHead)
 	if e.options.EventProfile {
-		if !e.replayingEvents || e.replayEventRegistry != 0 {
-			if e.replayingEvents && e.replayEventRegistry != eventlog.ProfileRegistryVersion {
+		registry := eventlog.ProfileRegistryVersion
+		if e.replayingEvents {
+			registry = e.replayEventRegistry
+		}
+		if registry != 0 {
+			if !eventlog.SupportsProfileRegistry(registry) {
 				return nil, ErrUnsupportedSchema
 			}
-			drafts, err := e.profileEventDrafts(ctx, req, builder, roots)
+			drafts, err := e.profileEventDrafts(ctx, req, builder, roots, registry)
 			if err != nil {
 				return nil, err
 			}
 			var objects []codec.Object
-			profileEvents, objects, err = e.prepareProfileEvents(req, txID, commandID, opsID, drafts)
+			profileEvents, objects, err = e.prepareProfileEvents(req, txID, commandID, opsID, drafts, aliases)
 			if err != nil {
 				return nil, err
 			}
@@ -42,7 +47,7 @@ func (e *Engine) finishPlan(ctx context.Context, req api.CommitRequest, digest m
 				}
 			}
 		}
-		event, obj, err := e.prepareAppliedEvent(req, txID, commandID, opsID, profileEvents)
+		event, obj, err := e.prepareAppliedEvent(req, txID, commandID, opsID, profileEvents, registry)
 		if err != nil {
 			return nil, err
 		}
@@ -82,13 +87,13 @@ func (e *Engine) finishPlan(ctx context.Context, req api.CommitRequest, digest m
 		records[i] = storage.Record{Kind: obj.kind, Payload: obj.encoded}
 	}
 	controlUpdates := rootUpdates(e.roots.LiveControl, roots.LiveControl)
-	if req.Method == api.MethodApplyMemory || req.Method == api.MethodApplyKnowledge || req.Method == api.MethodApplySummary || req.Method == api.MethodApplyAnnotation || req.Method == api.MethodImportTransfer {
+	if domainMethodRootSlot(req.Method) == rootSlotKnowledge {
 		controlUpdates = rootUpdates(e.roots.ExecutionKnowledge, roots.ExecutionKnowledge)
 	}
 	if req.Method == api.MethodApplyWork {
 		controlUpdates = rootUpdates(e.rootSet, selectedRoot)
 	}
-	return &commitPlan{builder: builder, roots: roots, rootSet: rootID, receipt: receiptID, stateRoot: selectedRoot, event: appliedEvent, profileEvents: profileEvents, transaction: storage.Transaction{
+	return &commitPlan{builder: builder, roots: roots, rootSet: rootID, receipt: receiptID, stateRoot: selectedRoot, event: appliedEvent, profileEvents: profileEvents, profileEventAliases: aliases, transaction: storage.Transaction{
 		TxID: txID, Request: req.Key(), RequestDigest: asDigest(digest), LSN: lsn, PreviousDigest: e.publication.Position.Digest,
 		Records: records, RefUpdates: rootUpdates(e.roots.BranchRefs, roots.BranchRefs), ControlUpdates: controlUpdates,
 		Receipt: asDigest(receiptID), PostRootSet: asDigest(rootID),

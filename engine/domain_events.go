@@ -26,12 +26,12 @@ func domainDraft(operation, profile, kind, id string) profileEventDraft {
 // the private post-state binds generated IDs (immutable memory versions and
 // merge revisions) without inventing a request-shaped entity or publishing an
 // intermediate result.
-func (e *Engine) domainEventDrafts(ctx context.Context, req api.CommitRequest, reader state.ObjectReader, roots model.RootSet) ([]profileEventDraft, error) {
+func (e *Engine) domainEventDrafts(ctx context.Context, req api.CommitRequest, reader state.ObjectReader, roots model.RootSet, linked bool) ([]profileEventDraft, error) {
 	switch req.Method {
-	case api.MethodMutateState:
+	case api.MethodMutateState, api.MethodUpdateInvestigation, api.MethodApplyTaskTrace:
 		return nil, nil // the generic StateOps occurrence is already complete
 	case api.MethodApplyGraph:
-		return graphEventDrafts(ctx, req, reader, roots)
+		return graphEventDrafts(ctx, req, reader, roots, linked)
 	case api.MethodApplyMemory:
 		return memoryEventDrafts(ctx, req, reader, roots)
 	case api.MethodApplyKnowledge:
@@ -43,7 +43,13 @@ func (e *Engine) domainEventDrafts(ctx context.Context, req api.CommitRequest, r
 		if err != nil {
 			return nil, err
 		}
-		return []profileEventDraft{knowledgeWorkEventDraft(c, snapshot)}, nil
+		d := knowledgeWorkEventDraft(c, snapshot, linked)
+		if linked && c.Import != nil {
+			if err := linkImportedObservationFacts(ctx, reader, roots, req, *c.Import, &d); err != nil {
+				return nil, err
+			}
+		}
+		return []profileEventDraft{d}, nil
 	case api.MethodApplyAnnotation:
 		r, err := annotation.DecodeRecord(req.Body)
 		if err != nil {
@@ -105,7 +111,7 @@ func eventAgentSnapshot(ctx context.Context, reader state.ObjectReader, roots mo
 	return l.Snapshot(), nil
 }
 
-func graphEventDrafts(ctx context.Context, req api.CommitRequest, reader state.ObjectReader, roots model.RootSet) ([]profileEventDraft, error) {
+func graphEventDrafts(ctx context.Context, req api.CommitRequest, reader state.ObjectReader, roots model.RootSet, linked bool) ([]profileEventDraft, error) {
 	space, c, err := graph.DecodeCommand(req.Body)
 	if err != nil || space != req.Space {
 		return nil, ErrInvalidStateData
@@ -138,8 +144,19 @@ func graphEventDrafts(ctx context.Context, req api.CommitRequest, reader state.O
 		d.causes = []profileEventCause{{"Graph.JoinRevision", string(branch.Head)}}
 		return []profileEventDraft{r, d}, nil
 	case c.Prune != nil:
+		if linked {
+			branch, _, err := graphBranchAt(ctx, reader, roots, space, c.Prune.Branch)
+			if err != nil {
+				return nil, err
+			}
+			if branch.Scope != nil {
+				return localPruneEventDraft(ctx, req, reader, roots, branch, *c.Prune)
+			}
+		}
 		d = domainDraft("Graph.Prune", "graph", "Branch", string(c.Prune.Branch))
 		revisions = append(revisions, c.Prune.Head)
+	case c.ForkLocal != nil, c.WriteBranch != nil, c.JoinLocal != nil, c.PublishBranch != nil:
+		return localGraphEventDrafts(ctx, req, reader, roots, c, linked)
 	default:
 		return nil, ErrUnsupportedSchema
 	}

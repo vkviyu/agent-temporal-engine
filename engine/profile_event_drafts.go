@@ -14,6 +14,8 @@ type profileEventDraft struct {
 	attribution     model.EventAttribution
 	stream          model.EventStreamKey
 	causes          []profileEventCause
+	eventParents    []model.EventID
+	factAliases     []profileEventCause
 	actorAuthorized bool
 	activity        string
 }
@@ -43,7 +45,7 @@ func selectedProfileOperation(command any) string {
 	return ""
 }
 
-func agentEventDraft(command agentprofile.Command, snapshot agentprofile.Snapshot) (profileEventDraft, error) {
+func agentEventDraft(command agentprofile.Command, snapshot agentprofile.Snapshot, linked bool) (profileEventDraft, error) {
 	d := profileEventDraft{attribution: model.EventAttribution{Operation: selectedProfileOperation(command)}}
 	// Owning an execution does not prove that its actor initiated a host
 	// controller/collector operation (grant, cancel, raw result capture, etc.).
@@ -207,6 +209,11 @@ func agentEventDraft(command agentprofile.Command, snapshot agentprofile.Snapsho
 			set("Attempt", v.Attempt, "")
 			attempt(v.Attempt)
 			cause("Control.ClaimAttempt", v.Attempt)
+		case c.CaptureOutputChunk != nil:
+			v := c.CaptureOutputChunk.Chunk
+			set("OutputChunk", string(v.ID), "")
+			activity(v.Activity)
+			cause("Control.DispatchAttempt", v.Attempt)
 		case c.CaptureResult != nil:
 			v := c.CaptureResult.Result
 			set("ActivityResult", v.ID, "")
@@ -307,6 +314,12 @@ func agentEventDraft(command agentprofile.Command, snapshot agentprofile.Snapsho
 		return d, ErrUnsupportedSchema
 	}
 	bindProfileOwner(&d, snapshot)
+	if linked {
+		bindEventTask(&d, snapshot)
+		if command.Control != nil {
+			linkControlEvent(&d, *command.Control, snapshot)
+		}
+	}
 	return d, nil
 }
 
@@ -360,7 +373,7 @@ func bindProfileOwner(d *profileEventDraft, snapshot agentprofile.Snapshot) {
 // profileEventDrafts describes accepted transitions, not every state field that
 // a reducer happens to update. Work preserves one ordered fact per registered
 // subtransition, plus its outer protected boundary, under one publication.
-func knowledgeWorkEventDraft(c knowledge.Command, snapshot agentprofile.Snapshot) profileEventDraft {
+func knowledgeWorkEventDraft(c knowledge.Command, snapshot agentprofile.Snapshot, linked bool) profileEventDraft {
 	d := profileEventDraft{attribution: model.EventAttribution{Operation: "Knowledge." + selectedProfileOperation(c)}}
 	a := &d.attribution
 	switch {
@@ -377,5 +390,9 @@ func knowledgeWorkEventDraft(c knowledge.Command, snapshot agentprofile.Snapshot
 		a.Execution = c.Import.Target.Execution
 	}
 	bindProfileOwner(&d, snapshot)
+	if linked {
+		bindEventTask(&d, snapshot)
+		linkKnowledgeEvent(&d, c)
+	}
 	return d
 }

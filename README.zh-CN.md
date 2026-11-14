@@ -79,6 +79,15 @@ Pending Action → Authority → Continuation → Resume
 
 这些轨迹通过显式引用和事件连接起来。子 Agent 完成，不代表父 Agent 已经消费了它的结果；Graph 合并，不代表 Git 工作区已经合并；一个 Execution 中保存的记忆，也不会自动对另一个 Execution 可见。
 
+### Query-only 与 Task-backed Query
+
+一个 Query 可以沿着两种明确的语义路径完成：
+
+- Query-only 使用 `QueryProgress` 和 `(Query, DecisionSequence)` 保存控制器状态。它可以记录属于 Query 的模型或工具 Activity，但不会为了凑齐执行链而创建假的 `Task`、`Execution` 或 `Step`。如果整个流程没有启动 Task，最终答复不要求 `TaskOutcome`。
+- Task-backed Query 会显式启动一个或多个 Task。每个已启动的 Task 都必须产生对应的 Execution 和已接受的 `TaskOutcome`，Query 才能发布最终答复。最终答复仍然属于 Query，但不能省略或伪造已经启动的 Task 的结果。
+
+这不是存储实现上的简化，而是对象语义边界。短对话、路由决定或只读工具交互即使需要持久化，也不因此获得一段虚假的执行历史；一旦进入 Task，就必须遵循 Task 和 Execution 的完整生命周期。
+
 ## 核心概念
 
 | 概念                   | 含义                                                          |
@@ -157,6 +166,8 @@ ATE
 五个权威 Root 分别隔离领域状态、执行知识、Branch 引用、在线控制状态和命令 Receipt。单个 Coordinator 会校验 candidate 状态转换，并通过统一的持久化提交路径发布。
 
 ## 推荐阅读顺序
+
+Go SDK 和 Unix Socket 的方法、参数、返回值及调用示例见 [ATE API 参考](docs/ATE_API_REFERENCE.md)。
 
 如果你刚开始理解这个项目，建议按下面的顺序阅读：
 

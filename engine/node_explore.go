@@ -54,6 +54,11 @@ func normalizeNodeSearch(req api.SearchNodesRequest, l nodeQueryLimits) (api.Sea
 }
 
 func (e *Engine) SearchNodes(ctx context.Context, req api.SearchNodesRequest) (api.NodeSearchResult, error) {
+	if ctx.Value(readDeliveryKey{}) == nil {
+		return embeddedViewReadDelivery(ctx, e, "search_nodes", req.View, req, func(scoped context.Context) (api.NodeSearchResult, error) {
+			return e.SearchNodes(scoped, req)
+		})
+	}
 	l, err := checkedNodeLimits(req.Limits)
 	if err != nil {
 		return api.NodeSearchResult{}, err
@@ -79,11 +84,11 @@ func (e *Engine) SearchNodes(ctx context.Context, req api.SearchNodesRequest) (a
 	}
 	c, err := e.nodeCatalog(ctx, entry, req.Layer)
 	if err != nil {
-		return api.NodeSearchResult{}, e.nodeReadError(err)
+		return api.NodeSearchResult{}, e.nodeReadError(ctx, err)
 	}
 	hidden, err := e.hiddenNodes(ctx, entry, req.IncludeHidden)
 	if err != nil {
-		return api.NodeSearchResult{}, e.nodeReadError(err)
+		return api.NodeSearchResult{}, e.nodeReadError(ctx, err)
 	}
 	items := make([]api.NodeSearchMatch, 0, len(c.nodes))
 	for ref, p := range c.nodes {
@@ -304,6 +309,11 @@ func traceNeighborhood(ctx context.Context, c nodeCatalog, req api.TraceRequest,
 }
 
 func (e *Engine) Trace(ctx context.Context, req api.TraceRequest) (api.NodeTrace, error) {
+	if ctx.Value(readDeliveryKey{}) == nil {
+		return embeddedViewReadDelivery(ctx, e, "trace_nodes", req.View, req, func(scoped context.Context) (api.NodeTrace, error) {
+			return e.Trace(scoped, req)
+		})
+	}
 	l, err := checkedNodeLimits(req.Limits)
 	if err != nil {
 		return api.NodeTrace{}, err
@@ -322,7 +332,7 @@ func (e *Engine) Trace(ctx context.Context, req api.TraceRequest) (api.NodeTrace
 		if err == model.ErrInvalidNodeRef {
 			return api.NodeTrace{}, err
 		}
-		return api.NodeTrace{}, e.nodeReadError(err)
+		return api.NodeTrace{}, e.nodeReadError(ctx, err)
 	}
 	scope := nodePageScope(entry, "trace", struct {
 		Start     model.NodeRef
@@ -336,7 +346,7 @@ func (e *Engine) Trace(ctx context.Context, req api.TraceRequest) (api.NodeTrace
 	}
 	edges, depthLimited, err := traceNeighborhood(ctx, c, req, l.depth)
 	if err != nil {
-		return api.NodeTrace{}, e.nodeReadError(err)
+		return api.NodeTrace{}, e.nodeReadError(ctx, err)
 	}
 	out := api.NodeTrace{Anchor: entry.descriptor.Anchor.Clone(), Start: req.Start, Nodes: []api.NodeSummary{start.detail.Summary}, Edges: []api.NodeTraceEdge{}, DepthLimited: depthLimited}
 	nodes := map[model.NodeRef]bool{req.Start: true}

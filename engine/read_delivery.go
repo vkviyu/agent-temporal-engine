@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/vkviyu/agent-temporal-engine/api"
+	"github.com/vkviyu/agent-temporal-engine/memory"
 	"github.com/vkviyu/agent-temporal-engine/model"
 )
 
@@ -61,19 +62,22 @@ func readDeliveryPrincipal(ctx context.Context) model.PrincipalID {
 // authorizes its result and dependencies against the current cut. The transport
 // later serializes the result and compares this cut before issuing the grant.
 func finishReadDelivery[T any](ctx context.Context, e *Engine, method string, principal model.PrincipalID, value T, anchor model.SnapshotAnchor, view model.ViewRef, viewDigest model.ObjectID, deps []model.ObjectID) (T, error) {
+	var zero T
 	capture, _ := ctx.Value(readDeliveryKey{}).(*readDeliveryCapture)
 	if capture == nil {
-		return value, nil
+		return zero, api.ErrReadEmissionDenied
 	}
-	var zero T
 	var dependencies []model.ObjectID
 	if len(deps) != 0 {
-		current, _, _, err := e.loadMemory(ctx, e.roots, anchor.Space)
+		policy, err := e.readPolicy(ctx, anchor.Space)
 		if err != nil {
 			return zero, err
 		}
-		dependencies, err = current.AccessPolicy().DependencyClosure(deps)
+		dependencies, err = e.policyDependencyIDs(ctx, anchor.Space, policy, deps)
 		if err != nil {
+			return zero, err
+		}
+		if err := policy.Check(dependencies, memory.AccessAudit); err != nil {
 			return zero, err
 		}
 	}
@@ -82,7 +86,7 @@ func finishReadDelivery[T any](ctx context.Context, e *Engine, method string, pr
 	}
 	if err := capture.record(e, method, principal, &readDeliveryResult{
 		value: value, anchor: anchor.Clone(), view: view, viewDigest: viewDigest,
-		policyFence: e.publication.Fence(), policyRoot: e.roots.ExecutionKnowledge, controlRoot: e.roots.LiveControl,
+		policyFence: e.readPublication(ctx).Fence(), policyRoot: e.readRoots(ctx).ExecutionKnowledge, controlRoot: e.readRoots(ctx).LiveControl,
 		dependencies: dependencies,
 	}); err != nil {
 		return zero, err
@@ -95,11 +99,7 @@ func finishReadDelivery[T any](ctx context.Context, e *Engine, method string, pr
 
 func finishViewReadDelivery[T any](ctx context.Context, e *Engine, entry *viewEntry, method string, value T, deps []model.ObjectID, details ...nodeProjection) (T, error) {
 	var zero T
-	if err := e.mu.LockContext(ctx); err != nil {
-		return zero, err
-	}
-	defer e.mu.Unlock()
-	if err := e.nodeContextOutputGateLocked(ctx, entry, deps, details...); err != nil {
+	if err := e.nodeContextOutputGate(ctx, entry, deps, details...); err != nil {
 		return zero, err
 	}
 	return finishReadDelivery(ctx, e, method, entry.principal, value, entry.descriptor.Anchor, entry.descriptor.Ref, entry.descriptor.ViewDigest, deps)
@@ -142,8 +142,13 @@ func (e *Engine) PrepareReadDelivery(ctx context.Context, binding api.ReadDelive
 	if !validReadDestination(binding.Destination) || binding.Method == "" || !model.ValidDigest(string(binding.RequestDigest)) || read == nil || ctx.Value(readDeliveryKey{}) != nil {
 		return nil, api.ErrReadEmissionDenied
 	}
+	ctx, release, err := e.beginReadCut(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	capture := &readDeliveryCapture{engine: e, binding: binding}
-	err := read(context.WithValue(ctx, readDeliveryKey{}, capture))
+	err = read(context.WithValue(ctx, readDeliveryKey{}, capture))
 	result := capture.finish()
 	if err != nil {
 		return nil, err
@@ -170,7 +175,7 @@ func (e *Engine) PrepareReadDelivery(ctx context.Context, binding api.ReadDelive
 		return nil, err
 	}
 	defer e.mu.Unlock()
-	if err := e.viewOutputGate(); err != nil {
+	if err := e.checkReadCutLocked(ctx); err != nil {
 		return nil, err
 	}
 	// The authorization and the outgoing bytes are now complete. Comparing

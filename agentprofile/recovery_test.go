@@ -119,7 +119,7 @@ func TestRecoveryUnknownEffectsQuarantineAndNoEffectRetry(t *testing.T) {
 	recoveryControl(t, l, "claim", ControlCommand{ClaimAttempt: &ClaimAttemptCommand{Attempt: "attempt-1", Activity: a.Activity, Sequence: 1, Authority: old}})
 	recoveryControl(t, l, "dispatch", ControlCommand{DispatchAttempt: &DispatchAttemptCommand{Attempt: "attempt-1", Authority: old, Evidence: digest('d')}})
 	next := recoveryTakeover(t, l, old)
-	late := ActivityResult{ID: "late", Activity: a.Activity, Attempt: "attempt-1", RequestDigest: a.RequestDigest, Incarnation: 1, Outcome: "success", Payload: []byte("old worker")}
+	late := ActivityResult{Capture: "full", ID: "late", Activity: a.Activity, Attempt: "attempt-1", RequestDigest: a.RequestDigest, Incarnation: 1, Outcome: "success", Payload: []byte("old worker")}
 	recoveryControl(t, l, "late-capture", ControlCommand{CaptureResult: &CaptureResultCommand{Result: late}})
 	s := l.Snapshot().Lifecycle.Recovery
 	if len(s.Captures) != 1 || !s.Captures[0].Quarantined {
@@ -133,7 +133,7 @@ func TestRecoveryUnknownEffectsQuarantineAndNoEffectRetry(t *testing.T) {
 	recoveryControl(t, l, "retry", ControlCommand{RetryActivity: &RetryActivityCommand{Activity: a.Activity, ExpectedVersion: 1, Authority: next}})
 	recoveryControl(t, l, "claim-2", ControlCommand{ClaimAttempt: &ClaimAttemptCommand{Attempt: "attempt-2", Activity: a.Activity, Sequence: 2, Authority: next}})
 	recoveryControl(t, l, "dispatch-2", ControlCommand{DispatchAttempt: &DispatchAttemptCommand{Attempt: "attempt-2", Authority: next, Evidence: digest('d')}})
-	result := ActivityResult{ID: "current", Activity: a.Activity, Attempt: "attempt-2", RequestDigest: a.RequestDigest, Incarnation: 2, Outcome: "success", Payload: []byte("replacement")}
+	result := ActivityResult{Capture: "full", ID: "current", Activity: a.Activity, Attempt: "attempt-2", RequestDigest: a.RequestDigest, Incarnation: 2, Outcome: "success", Payload: []byte("replacement")}
 	recoveryControl(t, l, "capture-2", ControlCommand{CaptureResult: &CaptureResultCommand{Result: result}})
 	duplicate := result
 	duplicate.ID = "second-result"
@@ -210,7 +210,7 @@ func TestRecoveryManagedCompatibilityCommandsCannotBypassAuthority(t *testing.T)
 		{StartStep: &Step{Execution: "exec", Sequence: 1, GoalEpoch: 1, Status: StepOpen}},
 		{Lifecycle: &LifecycleCommand{PutActivity: &Activity{ID: "legacy", Execution: "exec", Kind: "tool", Version: 1, Status: "running"}}},
 		{Lifecycle: &LifecycleCommand{PutAttempt: &Attempt{ID: "legacy", Activity: a.Activity, Sequence: 1, Incarnation: 1, Status: "running"}}},
-		{Lifecycle: &LifecycleCommand{PutResult: &ActivityResult{ID: "legacy", Activity: a.Activity, Attempt: "missing", Incarnation: 1, Outcome: "success"}}},
+		{Lifecycle: &LifecycleCommand{PutResult: &ActivityResult{Capture: "full", ID: "legacy", Activity: a.Activity, Attempt: "missing", Incarnation: 1, Outcome: "success"}}},
 		{Lifecycle: &LifecycleCommand{PutMessage: &Message{ID: "legacy", Sender: "exec", Recipient: "exec", GoalEpoch: 1}}},
 	} {
 		assertRecoveryRejected(t, l, c, ErrConflict)
@@ -346,7 +346,7 @@ func TestRecoveryRawOrSettledResultCannotCompleteTaskOrStep(t *testing.T) {
 			recoveryControl(t, l, "activity", ControlCommand{CreateActivity: &CreateActivityCommand{Spec: a, Authority: b}})
 			recoveryControl(t, l, "claim", ControlCommand{ClaimAttempt: &ClaimAttemptCommand{Attempt: "attempt", Activity: a.Activity, Sequence: 1, Authority: b}})
 			recoveryControl(t, l, "dispatch", ControlCommand{DispatchAttempt: &DispatchAttemptCommand{Attempt: "attempt", Authority: b, Evidence: digest('a')}})
-			result := ActivityResult{ID: "failed-result", Activity: a.Activity, Attempt: "attempt", RequestDigest: a.RequestDigest, Incarnation: 1, Outcome: "failure", Payload: []byte("known counterexample")}
+			result := ActivityResult{Capture: "full", ID: "failed-result", Activity: a.Activity, Attempt: "attempt", RequestDigest: a.RequestDigest, Incarnation: 1, Outcome: "failure", Payload: []byte("known counterexample")}
 			recoveryControl(t, l, "capture", ControlCommand{CaptureResult: &CaptureResultCommand{Result: result}})
 			completion := CompleteTaskCommand{Task: "task", Execution: "exec", Epoch: 1, Result: digest('a'), Validation: digest('b'), Authority: b}
 			assertRecoveryRejected(t, l, Command{Control: &ControlCommand{CompleteTask: &completion}}, ErrConflict)
@@ -396,7 +396,7 @@ func TestRecoveryJoinCannotObserveRawSettledChildAsCompleted(t *testing.T) {
 	recoveryControl(t, l, "child-activity", ControlCommand{CreateActivity: &CreateActivityCommand{Spec: a, Authority: b}})
 	recoveryControl(t, l, "child-claim", ControlCommand{ClaimAttempt: &ClaimAttemptCommand{Attempt: "child-attempt", Activity: a.Activity, Sequence: 1, Authority: b}})
 	recoveryControl(t, l, "child-dispatch", ControlCommand{DispatchAttempt: &DispatchAttemptCommand{Attempt: "child-attempt", Authority: b, Evidence: digest('a')}})
-	result := ActivityResult{ID: "child-result", Activity: a.Activity, Attempt: "child-attempt", RequestDigest: a.RequestDigest, Incarnation: 1, Outcome: "success"}
+	result := ActivityResult{Capture: "full", ID: "child-result", Activity: a.Activity, Attempt: "child-attempt", RequestDigest: a.RequestDigest, Incarnation: 1, Outcome: "success"}
 	recoveryControl(t, l, "raw-result", ControlCommand{CaptureResult: &CaptureResultCommand{Result: result}})
 	recoveryControl(t, l, "raw-settled", ControlCommand{SettleActivity: &SettleActivityCommand{Activity: a.Activity, Status: "settled", Evidence: digest('a')}})
 	completion := CompleteTaskCommand{Task: task.ID, Execution: child.ID, Epoch: 1, Result: digest('a'), Validation: digest('b'), Authority: b}
@@ -435,7 +435,7 @@ func TestChildSpawnAcceptanceDoesNotSkipOtherStepObligations(t *testing.T) {
 	assertRecoveryRejected(t, l, Command{Control: &ControlCommand{FinishStep: &finish}}, ErrConflict)
 	recoveryControl(t, l, "other-claim", ControlCommand{ClaimAttempt: &ClaimAttemptCommand{Activity: a.Activity, Attempt: "other-attempt", Sequence: 1, Authority: authority}})
 	recoveryControl(t, l, "other-dispatch", ControlCommand{DispatchAttempt: &DispatchAttemptCommand{Attempt: "other-attempt", Authority: authority, Evidence: digest('a')}})
-	result := ActivityResult{ID: "other-result", Activity: a.Activity, Attempt: "other-attempt", RequestDigest: a.RequestDigest, Incarnation: 1, Outcome: "success"}
+	result := ActivityResult{Capture: "full", ID: "other-result", Activity: a.Activity, Attempt: "other-attempt", RequestDigest: a.RequestDigest, Incarnation: 1, Outcome: "success"}
 	recoveryControl(t, l, "other-capture", ControlCommand{CaptureResult: &CaptureResultCommand{Result: result}})
 	recoveryControl(t, l, "other-accept", ControlCommand{AcceptActivity: &AcceptActivityCommand{Activity: a.Activity, Result: result.ID, ExpectedVersion: 1, Authority: authority, Evidence: digest('a')}})
 	recoveryControl(t, l, "finish", ControlCommand{FinishStep: &finish})

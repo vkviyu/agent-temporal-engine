@@ -1,0 +1,11 @@
+=== RUN   TestRealModelTypedSummaryReviewAndEvidenceRecallV2
+=== RUN   TestRealModelTypedSummaryReviewAndEvidenceRecallV2/paired-1
+    effects_test.go:203: summary-1 completed by gpt-6.1-sol, status=completed
+    effects_test.go:207: summary-1-review completed by gpt-6.1-sol, status=completed
+    effects_test.go:203: summary-2 completed by gpt-6.1-sol, status=completed
+    effects_test.go:207: summary-2-review completed by gpt-6.1-sol, status=completed
+    effects_test.go:212: v2 trial stopped after factual review rejected round 2; no rejected summary adopted
+--- PASS: TestRealModelTypedSummaryReviewAndEvidenceRecallV2 (63.90s)
+    --- PASS: TestRealModelTypedSummaryReviewAndEvidenceRecallV2/paired-1 (63.90s)
+PASS
+ok  	github.com/vkviyu/agent-temporal-engine/tests/evaluation	64.189s

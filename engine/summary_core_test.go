@@ -51,7 +51,7 @@ func summaryCoreFixture(t *testing.T, options ...engine.Options) (*integrationSt
 	recoveryCoreControl(t, s, "summary-claim", agentprofile.ControlCommand{ClaimAttempt: &agentprofile.ClaimAttemptCommand{Activity: spec.Activity, Attempt: "summary-attempt", Sequence: 1, Authority: binding}})
 	recoveryCoreControl(t, s, "summary-dispatch", agentprofile.ControlCommand{DispatchAttempt: &agentprofile.DispatchAttemptCommand{Attempt: "summary-attempt", Authority: binding, Evidence: proof}})
 	output := []byte("Early evidence remains relevant. Keep the original source for audit.")
-	result := agentprofile.ActivityResult{ID: "summary-result", Activity: spec.Activity, Attempt: "summary-attempt", RequestDigest: spec.RequestDigest, Incarnation: 1, Outcome: "success", Payload: output}
+	result := agentprofile.ActivityResult{Capture: "full", ID: "summary-result", Activity: spec.Activity, Attempt: "summary-attempt", RequestDigest: spec.RequestDigest, Incarnation: 1, Outcome: "success", Payload: output}
 	recoveryCoreControl(t, s, "summary-capture", agentprofile.ControlCommand{CaptureResult: &agentprofile.CaptureResultCommand{Result: result}})
 	recoveryCoreControl(t, s, "summary-accept", agentprofile.ControlCommand{AcceptActivity: &agentprofile.AcceptActivityCommand{Activity: spec.Activity, Result: result.ID, ExpectedVersion: 1, Authority: binding, Evidence: proof}})
 	outputAck := integrationMutate(t, s.e, integrationRequest("summary-output", integrationPut([]byte("summary-output"), api.Value{Kind: api.ValueBytes, Data: output})))
@@ -186,6 +186,62 @@ func TestSummaryCoreCurrentWithdrawalGatesReuseAndHistoricalDisclosure(t *testin
 			}
 			s.reopen()
 			check()
+		})
+	}
+}
+
+func TestSummaryCoreCurrentWithdrawalGatesRawGenerationOutput(t *testing.T) {
+	for _, kind := range []memory.RetractionKind{memory.RetractionFactualCorrection, memory.RetractionUseBan, memory.RetractionPrivacyErasure, memory.RetractionACLRevocation} {
+		t.Run(string(kind), func(t *testing.T) {
+			ctx := context.Background()
+			s, summary := summaryCoreFixture(t)
+			request := api.ApplySummaryRequest{Key: agentKey("raw-output-summary"), Summary: summary}
+			ack, err := s.e.ApplySummary(ctx, request)
+			if err != nil || ack.Code != api.CodeDurableAck {
+				t.Fatal(ack, err)
+			}
+			view := nodeView(t, s.e, "host-principal", nil)
+			read := api.ReadStateRequest{Space: "host-space", Key: []byte("summary-output")}
+			original, err := s.e.GetState(ctx, read)
+			if err != nil || !original.Found {
+				t.Fatalf("published raw output unavailable: %+v %v", original, err)
+			}
+			applyMemory(t, s.e, "raw-output-withdraw-source", memory.Command{RetractSource: &memory.RetractSourceCommand{Source: summary.Sources[0].Content, Retraction: memory.Retraction{Kind: kind, Reason: "raw derived output source withdrawn"}}})
+			before := integrationSnapshot(t, s.e)
+			privacy := kind == memory.RetractionACLRevocation || kind == memory.RetractionPrivacyErasure
+			check := func() {
+				t.Helper()
+				value, err := s.e.GetState(ctx, read)
+				if privacy {
+					if value.Found || !errors.Is(err, memory.ErrHistoryAccessDenied) {
+						t.Fatalf("raw output escaped source withdrawal: %+v %v", value, err)
+					}
+				} else if err != nil || !value.Found || !reflect.DeepEqual(value.Value, original.Value) {
+					t.Fatalf("historical audit changed after correction/use ban: %+v %v", value, err)
+				}
+			}
+			check()
+			_, stateErr := s.e.GetViewState(ctx, api.ReadViewStateRequest{View: view.Ref, Key: read.Key})
+			_, contentErr := s.e.ReadContent(ctx, api.ReadContentRequest{View: view.Ref, Ref: model.NodeRef{Kind: model.NodeObject, Object: summary.Generation.Output.Object}, Projection: "value_bytes"})
+			for _, err := range []error{stateErr, contentErr} {
+				if privacy && !errors.Is(err, memory.ErrHistoryAccessDenied) || !privacy && err != nil {
+					t.Fatalf("fixed View disclosure diverged: %v", err)
+				}
+			}
+			if integrationSnapshot(t, s.e) != before {
+				t.Fatal("disclosure rejection changed or fenced the store")
+			}
+			s.e.CloseView(ctx, api.CloseViewRequest{Ref: view.Ref})
+			s.reopen()
+			check()
+			if _, err := s.e.CompactAuditFull(ctx); err != nil {
+				t.Fatal(err)
+			}
+			s.reopen()
+			check()
+			if retry, err := s.e.ApplySummary(ctx, request); err != nil || retry != ack {
+				t.Fatalf("derived publication receipt changed: %+v %v", retry, err)
+			}
 		})
 	}
 }

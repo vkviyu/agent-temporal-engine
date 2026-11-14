@@ -10,6 +10,7 @@ import (
 	ate "github.com/vkviyu/agent-temporal-engine"
 	"github.com/vkviyu/agent-temporal-engine/agentprofile"
 	"github.com/vkviyu/agent-temporal-engine/api"
+	"github.com/vkviyu/agent-temporal-engine/engine"
 )
 
 func TestTypedRetriesResolveOriginalLiveControlFenceAfterReopen(t *testing.T) {
@@ -38,8 +39,8 @@ func TestTypedRetriesResolveOriginalLiveControlFenceAfterReopen(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.CompleteStep(ctx, profileRequest("complete-step"), execution.ID, 1, 1); err != nil {
-		t.Fatal(err)
+	if _, err := s.CompleteStep(ctx, profileRequest("complete-step"), execution.ID, 1, 1); !errors.Is(err, engine.ErrWorkBoundary) {
+		t.Fatalf("facade bypassed the Work completion boundary: %v", err)
 	}
 	if _, err := s.RebaseGoal(ctx, profileRequest("new-goal"), agentprofile.GoalRebase{Task: task.ID, ExpectedEpoch: 1, NewGoal: "second goal"}); err != nil {
 		t.Fatal(err)
@@ -74,7 +75,7 @@ func TestTypedRetriesResolveOriginalLiveControlFenceAfterReopen(t *testing.T) {
 		t.Fatalf("spawn retry selected canceled state: %+v err=%v", retried, err)
 	}
 	if retried, err := s.StartStep(ctx, stepRequest); err != nil || retried != step {
-		t.Fatalf("step retry selected completed state: %+v err=%v", retried, err)
+		t.Fatalf("step retry selected changed state: %+v err=%v", retried, err)
 	}
 	result, err := s.Apply(ctx, Command{Request: create.Request, CreateTask: &create})
 	if err != nil || result.Task == nil || *result.Task != task || result.Fence != createReceipt.Result.Fence {

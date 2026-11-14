@@ -17,7 +17,7 @@ import (
 )
 
 func graphReadAnchor(e *Engine, ctx context.Context, space model.SpaceID, request *model.SnapshotAnchor) (model.SnapshotAnchor, model.RootSet, model.ObjectID, error) {
-	anchor := model.SnapshotAnchor{Space: space, Fence: e.publication.Fence()}
+	anchor := model.SnapshotAnchor{Space: space, Fence: e.readPublication(ctx).Fence()}
 	if request != nil {
 		anchor = request.Clone()
 	}
@@ -27,15 +27,18 @@ func graphReadAnchor(e *Engine, ctx context.Context, space model.SpaceID, reques
 	if anchor.Knowledge != nil {
 		return model.SnapshotAnchor{}, model.RootSet{}, "", ErrUnsupportedMethod
 	}
+	if request == nil {
+		return anchor, e.readRoots(ctx), e.readRootSet(ctx), nil
+	}
 	roots, id, err := e.rootsAtFence(ctx, anchor.Fence, false)
 	return anchor, roots, id, err
 }
 
-func graphReadError(e *Engine, err error) error {
+func graphReadError(ctx context.Context, e *Engine, err error) error {
 	if graphCommandRejection(err) || isLimit(err) || errors.Is(err, model.ErrAnchorMismatch) || errors.Is(err, ErrUnsupportedMethod) || errors.Is(err, api.ErrInvalidRequest) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return err
 	}
-	return e.readFailure(err)
+	return e.readFailureAt(ctx, err)
 }
 
 func (e *Engine) graphReadStart(ctx context.Context, space model.SpaceID) error {
@@ -45,17 +48,35 @@ func (e *Engine) graphReadStart(ctx context.Context, space model.SpaceID) error 
 	if err := validSpace(space); err != nil {
 		return err
 	}
-	if err := e.publicGate(); err != nil {
-		return err
+	return e.readReady(ctx)
+}
+
+type graphReadSession struct {
+	engine  *Engine
+	ctx     context.Context
+	reader  *cursorReader
+	space   model.SpaceID
+	anchor  model.SnapshotAnchor
+	roots   model.RootSet
+	rootSet model.ObjectID
+}
+
+func (e *Engine) openGraphRead(ctx context.Context, space model.SpaceID, requested *model.SnapshotAnchor) (graphReadSession, error) {
+	if err := e.graphReadStart(ctx, space); err != nil {
+		return graphReadSession{}, err
 	}
-	if err := e.mu.LockContext(ctx); err != nil {
-		return err
+	anchor, roots, rootSet, err := graphReadAnchor(e, ctx, space, requested)
+	if err != nil {
+		return graphReadSession{}, graphReadError(ctx, e, err)
 	}
-	if err := e.ready(); err != nil {
-		e.mu.Unlock()
-		return err
-	}
-	return nil
+	return graphReadSession{
+		engine: e, ctx: ctx, reader: &cursorReader{source: e.reader(ctx)},
+		space: space, anchor: anchor, roots: roots, rootSet: rootSet,
+	}, nil
+}
+
+func (s graphReadSession) allow(ids ...model.RevisionID) error {
+	return graphReadError(s.ctx, s.engine, graphAllowedAtCursor(s.ctx, s.reader, s.roots, s.anchor, ids...))
 }
 
 func graphAllowedAtCursor(ctx context.Context, reader *cursorReader, roots model.RootSet, anchor model.SnapshotAnchor, ids ...model.RevisionID) error {
@@ -97,15 +118,15 @@ func finishGraphRead[T any](ctx context.Context, e *Engine, reader *cursorReader
 	if len(keys) != 0 {
 		root, err := slotSpaceRoot(ctx, reader, roots.BranchRefs, anchor.Space)
 		if err != nil {
-			return zero, graphReadError(e, err)
+			return zero, graphReadError(ctx, e, err)
 		}
 		for _, key := range keys {
 			id, found, err := state.Get(ctx, reader, anchor.Space, root, key)
 			if err != nil {
-				return zero, graphReadError(e, err)
+				return zero, graphReadError(ctx, e, err)
 			}
 			if !found {
-				return zero, graphReadError(e, ErrInvalidStateData)
+				return zero, graphReadError(ctx, e, ErrInvalidStateData)
 			}
 			deps = append(deps, id)
 		}
@@ -122,35 +143,35 @@ func finishGraphRead[T any](ctx context.Context, e *Engine, reader *cursorReader
 }
 
 func (e *Engine) GetGraphRevision(ctx context.Context, req api.ReadGraphRevisionRequest) (api.GraphRevisionResult, error) {
+	if ctx.Value(readDeliveryKey{}) == nil {
+		return embeddedReadDelivery(ctx, e, "get_graph_revision", "embedded-host", req, func(scoped context.Context) (api.GraphRevisionResult, error) {
+			return e.GetGraphRevision(scoped, req)
+		})
+	}
 	if !model.ValidDigest(string(req.ID)) {
 		return api.GraphRevisionResult{}, api.ErrInvalidRequest
 	}
-	if err := e.graphReadStart(ctx, req.Space); err != nil {
+	session, err := e.openGraphRead(ctx, req.Space, req.Anchor)
+	if err != nil {
 		return api.GraphRevisionResult{}, err
 	}
-	defer e.mu.Unlock()
-	anchor, roots, rootID, err := graphReadAnchor(e, ctx, req.Space, req.Anchor)
-	if err != nil {
-		return api.GraphRevisionResult{}, graphReadError(e, err)
+	if err = session.allow(req.ID); err != nil {
+		return api.GraphRevisionResult{}, err
 	}
-	reader := &cursorReader{source: e.index}
-	if err = graphAllowedAtCursor(ctx, reader, roots, anchor, req.ID); err != nil {
-		return api.GraphRevisionResult{}, graphReadError(e, err)
-	}
-	r, err := graphRevisionAt(ctx, reader, roots, req.Space, req.ID)
+	r, err := graphRevisionAt(ctx, session.reader, session.roots, req.Space, req.ID)
 	found := true
 	if errors.Is(err, graph.ErrUnknownRevision) {
 		found = false
 		err = nil
 	}
 	if err != nil {
-		return api.GraphRevisionResult{}, graphReadError(e, err)
+		return api.GraphRevisionResult{}, graphReadError(ctx, e, err)
 	}
 	var revisions []model.RevisionID
 	var deps []model.ObjectID
 	if found {
-		if err = verifyGraphEntries(ctx, reader, r); err != nil {
-			return api.GraphRevisionResult{}, graphReadError(e, err)
+		if err = verifyGraphEntries(ctx, session.reader, r); err != nil {
+			return api.GraphRevisionResult{}, graphReadError(ctx, e, err)
 		}
 		revisions = []model.RevisionID{r.ID}
 		deps = []model.ObjectID{r.StateRoot, model.ObjectID(r.StateParent)}
@@ -164,46 +185,49 @@ func (e *Engine) GetGraphRevision(ctx context.Context, req api.ReadGraphRevision
 			deps = append(deps, entry.Value)
 		}
 	}
-	out := api.GraphRevisionResult{Found: found, Value: r, Fence: anchor.Fence, Anchor: anchor, RootSet: rootID}
-	return finishGraphRead(ctx, e, reader, "get_graph_revision", anchor, roots, out, revisions, nil, deps)
+	out := api.GraphRevisionResult{Found: found, Value: r, Fence: session.anchor.Fence, Anchor: session.anchor, RootSet: session.rootSet}
+	return finishGraphRead(ctx, e, session.reader, "get_graph_revision", session.anchor, session.roots, out, revisions, nil, deps)
 }
 
 func (e *Engine) GetGraphBranch(ctx context.Context, req api.ReadGraphBranchRequest) (api.GraphBranchResult, error) {
+	if ctx.Value(readDeliveryKey{}) == nil {
+		return embeddedReadDelivery(ctx, e, "get_graph_branch", "embedded-host", req, func(scoped context.Context) (api.GraphBranchResult, error) {
+			return e.GetGraphBranch(scoped, req)
+		})
+	}
 	if _, err := graph.EncodeBranch(graph.Branch{ID: req.ID, Head: model.RevisionID("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")}); err != nil {
 		return api.GraphBranchResult{}, api.ErrInvalidRequest
 	}
-	if err := e.graphReadStart(ctx, req.Space); err != nil {
+	session, err := e.openGraphRead(ctx, req.Space, req.Anchor)
+	if err != nil {
 		return api.GraphBranchResult{}, err
 	}
-	defer e.mu.Unlock()
-	anchor, roots, rootID, err := graphReadAnchor(e, ctx, req.Space, req.Anchor)
-	if err != nil {
-		return api.GraphBranchResult{}, graphReadError(e, err)
-	}
-	reader := &cursorReader{source: e.index}
-	b, prune, err := graphBranchAt(ctx, reader, roots, req.Space, req.ID)
+	b, prune, err := graphBranchAt(ctx, session.reader, session.roots, req.Space, req.ID)
 	found := true
 	if errors.Is(err, graph.ErrUnknownBranch) {
 		found = false
 		err = nil
 	}
 	if err != nil {
-		return api.GraphBranchResult{}, graphReadError(e, err)
+		return api.GraphBranchResult{}, graphReadError(ctx, e, err)
 	}
 	var keys [][]byte
 	var deps []model.ObjectID
 	if found {
-		if err = graphAllowedAtCursor(ctx, reader, roots, anchor, b.Head); err != nil {
-			return api.GraphBranchResult{}, graphReadError(e, err)
+		if err = session.allow(b.Head); err != nil {
+			return api.GraphBranchResult{}, err
 		}
 		keys = append(keys, graphBranchKey(b.ID))
 		deps = append(deps, model.ObjectID(b.Head))
+		if b.Scope != nil {
+			deps = append(deps, model.ObjectID(b.Scope.Base), model.ObjectID(b.PublishedHead))
+		}
 		if prune != nil {
 			keys = append(keys, graphPrunedKey(b.ID))
 		}
 	}
-	out := api.GraphBranchResult{Found: found, Value: b, Pruned: prune != nil, Prune: prune, Fence: anchor.Fence, Anchor: anchor, RootSet: rootID}
-	return finishGraphRead(ctx, e, reader, "get_graph_branch", anchor, roots, out, nil, keys, deps)
+	out := api.GraphBranchResult{Found: found, Value: b, Pruned: prune != nil, Prune: prune, Fence: session.anchor.Fence, Anchor: session.anchor, RootSet: session.rootSet}
+	return finishGraphRead(ctx, e, session.reader, "get_graph_branch", session.anchor, session.roots, out, nil, keys, deps)
 }
 
 type graphQueryLimits struct{ nodes, edges, bytes, depth int }
@@ -274,6 +298,11 @@ func graphPageLimit(n int, l graphQueryLimits) (int, error) {
 }
 
 func (e *Engine) DiffGraph(ctx context.Context, req api.DiffGraphRequest) (api.GraphDiffResult, error) {
+	if ctx.Value(readDeliveryKey{}) == nil {
+		return embeddedReadDelivery(ctx, e, "diff_graph", "embedded-host", req, func(scoped context.Context) (api.GraphDiffResult, error) {
+			return e.DiffGraph(scoped, req)
+		})
+	}
 	l, err := checkedGraphLimits(req.Limits)
 	if err != nil {
 		return api.GraphDiffResult{}, err
@@ -285,33 +314,28 @@ func (e *Engine) DiffGraph(ctx context.Context, req api.DiffGraphRequest) (api.G
 	if !model.ValidDigest(string(req.From)) || !model.ValidDigest(string(req.To)) {
 		return api.GraphDiffResult{}, api.ErrInvalidRequest
 	}
-	if err = e.graphReadStart(ctx, req.Space); err != nil {
+	session, err := e.openGraphRead(ctx, req.Space, req.Anchor)
+	if err != nil {
 		return api.GraphDiffResult{}, err
 	}
-	defer e.mu.Unlock()
-	anchor, roots, rootID, err := graphReadAnchor(e, ctx, req.Space, req.Anchor)
-	if err != nil {
-		return api.GraphDiffResult{}, graphReadError(e, err)
+	if err = session.allow(req.From, req.To); err != nil {
+		return api.GraphDiffResult{}, err
 	}
-	reader := &cursorReader{source: e.index}
-	if err = graphAllowedAtCursor(ctx, reader, roots, anchor, req.From, req.To); err != nil {
-		return api.GraphDiffResult{}, graphReadError(e, err)
-	}
-	g, records, err := loadGraphParents(ctx, reader, roots, req.Space, []model.RevisionID{req.From, req.To})
+	g, records, err := loadGraphParents(ctx, session.reader, session.roots, req.Space, []model.RevisionID{req.From, req.To})
 	if err != nil {
-		return api.GraphDiffResult{}, graphReadError(e, err)
+		return api.GraphDiffResult{}, graphReadError(ctx, e, err)
 	}
 	for _, id := range []model.RevisionID{req.From, req.To} {
-		if err = verifyGraphEntries(ctx, reader, records[id]); err != nil {
-			return api.GraphDiffResult{}, graphReadError(e, err)
+		if err = verifyGraphEntries(ctx, session.reader, records[id]); err != nil {
+			return api.GraphDiffResult{}, graphReadError(ctx, e, err)
 		}
 	}
 	diff, err := g.Diff(req.From, req.To)
 	if err != nil {
-		return api.GraphDiffResult{}, graphReadError(e, err)
+		return api.GraphDiffResult{}, graphReadError(ctx, e, err)
 	}
 	bound := req
-	bound.Anchor = &anchor
+	bound.Anchor = &session.anchor
 	bound.Continuation = ""
 	digest := graphQueryDigest(bound)
 	start, err := graphPageAfter(req.Continuation, digest, len(diff.Changes))
@@ -322,7 +346,7 @@ func (e *Engine) DiffGraph(ctx context.Context, req api.DiffGraphRequest) (api.G
 	if end > len(diff.Changes) {
 		end = len(diff.Changes)
 	}
-	out := api.GraphDiffResult{Anchor: anchor, RootSet: rootID, Diff: graph.Diff{From: diff.From, To: diff.To, Changes: diff.Changes[start:end]}}
+	out := api.GraphDiffResult{Anchor: session.anchor, RootSet: session.rootSet, Diff: graph.Diff{From: diff.From, To: diff.To, Changes: diff.Changes[start:end]}}
 	for {
 		if end < len(diff.Changes) {
 			out.Truncated = true
@@ -342,10 +366,15 @@ func (e *Engine) DiffGraph(ctx context.Context, req api.DiffGraphRequest) (api.G
 	for _, change := range out.Diff.Changes {
 		deps = append(deps, change.Before, change.After)
 	}
-	return finishGraphRead(ctx, e, reader, "diff_graph", anchor, roots, out, []model.RevisionID{req.From, req.To}, nil, deps)
+	return finishGraphRead(ctx, e, session.reader, "diff_graph", session.anchor, session.roots, out, []model.RevisionID{req.From, req.To}, nil, deps)
 }
 
 func (e *Engine) PlanGraphJoin(ctx context.Context, req api.PlanGraphJoinRequest) (api.GraphJoinPlanResult, error) {
+	if ctx.Value(readDeliveryKey{}) == nil {
+		return embeddedReadDelivery(ctx, e, "plan_graph_join", "embedded-host", req, func(scoped context.Context) (api.GraphJoinPlanResult, error) {
+			return e.PlanGraphJoin(scoped, req)
+		})
+	}
 	l, err := checkedGraphLimits(req.Limits)
 	if err != nil {
 		return api.GraphJoinPlanResult{}, err
@@ -353,32 +382,27 @@ func (e *Engine) PlanGraphJoin(ctx context.Context, req api.PlanGraphJoinRequest
 	if !model.ValidDigest(string(req.Left)) || !model.ValidDigest(string(req.Right)) {
 		return api.GraphJoinPlanResult{}, api.ErrInvalidRequest
 	}
-	if err = e.graphReadStart(ctx, req.Space); err != nil {
+	session, err := e.openGraphRead(ctx, req.Space, req.Anchor)
+	if err != nil {
 		return api.GraphJoinPlanResult{}, err
 	}
-	defer e.mu.Unlock()
-	anchor, roots, rootID, err := graphReadAnchor(e, ctx, req.Space, req.Anchor)
-	if err != nil {
-		return api.GraphJoinPlanResult{}, graphReadError(e, err)
+	if err = session.allow(req.Left, req.Right); err != nil {
+		return api.GraphJoinPlanResult{}, err
 	}
-	reader := &cursorReader{source: e.index}
-	if err = graphAllowedAtCursor(ctx, reader, roots, anchor, req.Left, req.Right); err != nil {
-		return api.GraphJoinPlanResult{}, graphReadError(e, err)
-	}
-	g, records, err := loadGraphParents(ctx, reader, roots, req.Space, []model.RevisionID{req.Left, req.Right})
+	g, records, err := loadGraphParents(ctx, session.reader, session.roots, req.Space, []model.RevisionID{req.Left, req.Right})
 	if err != nil {
-		return api.GraphJoinPlanResult{}, graphReadError(e, err)
+		return api.GraphJoinPlanResult{}, graphReadError(ctx, e, err)
 	}
 	plan, err := g.PlanJoin(req.Left, req.Right)
 	if err != nil {
-		return api.GraphJoinPlanResult{}, graphReadError(e, err)
+		return api.GraphJoinPlanResult{}, graphReadError(ctx, e, err)
 	}
 	for _, id := range []model.RevisionID{plan.Base, req.Left, req.Right} {
-		if err = verifyGraphEntries(ctx, reader, records[id]); err != nil {
-			return api.GraphJoinPlanResult{}, graphReadError(e, err)
+		if err = verifyGraphEntries(ctx, session.reader, records[id]); err != nil {
+			return api.GraphJoinPlanResult{}, graphReadError(ctx, e, err)
 		}
 	}
-	out := api.GraphJoinPlanResult{Anchor: anchor, RootSet: rootID, Plan: plan}
+	out := api.GraphJoinPlanResult{Anchor: session.anchor, RootSet: session.rootSet, Plan: plan}
 	raw, _ := json.Marshal(out)
 	if len(plan.State)+len(plan.Conflicts) > l.nodes || len(plan.Changes) > l.edges || len(raw) > l.bytes {
 		return api.GraphJoinPlanResult{}, graph.ErrLimit
@@ -393,10 +417,15 @@ func (e *Engine) PlanGraphJoin(ctx context.Context, req api.PlanGraphJoinRequest
 	for _, change := range plan.Changes {
 		deps = append(deps, change.Before, change.After)
 	}
-	return finishGraphRead(ctx, e, reader, "plan_graph_join", anchor, roots, out, []model.RevisionID{plan.Base, req.Left, req.Right}, nil, deps)
+	return finishGraphRead(ctx, e, session.reader, "plan_graph_join", session.anchor, session.roots, out, []model.RevisionID{plan.Base, req.Left, req.Right}, nil, deps)
 }
 
 func (e *Engine) TraceGraph(ctx context.Context, req api.TraceGraphRequest) (api.GraphTraceResult, error) {
+	if ctx.Value(readDeliveryKey{}) == nil {
+		return embeddedReadDelivery(ctx, e, "trace_graph", "embedded-host", req, func(scoped context.Context) (api.GraphTraceResult, error) {
+			return e.TraceGraph(scoped, req)
+		})
+	}
 	l, err := checkedGraphLimits(req.Limits)
 	if err != nil {
 		return api.GraphTraceResult{}, err
@@ -415,30 +444,25 @@ func (e *Engine) TraceGraph(ctx context.Context, req api.TraceGraphRequest) (api
 	if direction != "ancestors" && direction != "descendants" {
 		return api.GraphTraceResult{}, api.ErrInvalidRequest
 	}
-	if err = e.graphReadStart(ctx, req.Space); err != nil {
+	session, err := e.openGraphRead(ctx, req.Space, req.Anchor)
+	if err != nil {
 		return api.GraphTraceResult{}, err
 	}
-	defer e.mu.Unlock()
-	anchor, roots, rootID, err := graphReadAnchor(e, ctx, req.Space, req.Anchor)
-	if err != nil {
-		return api.GraphTraceResult{}, graphReadError(e, err)
+	if err = session.allow(req.Start); err != nil {
+		return api.GraphTraceResult{}, err
 	}
-	reader := &cursorReader{source: e.index}
-	if err = graphAllowedAtCursor(ctx, reader, roots, anchor, req.Start); err != nil {
-		return api.GraphTraceResult{}, graphReadError(e, err)
-	}
-	_, records, err := loadGraphParents(ctx, reader, roots, req.Space, []model.RevisionID{req.Start})
+	_, records, err := loadGraphParents(ctx, session.reader, session.roots, req.Space, []model.RevisionID{req.Start})
 	if err != nil {
-		return api.GraphTraceResult{}, graphReadError(e, err)
+		return api.GraphTraceResult{}, graphReadError(ctx, e, err)
 	}
 	if direction == "descendants" {
-		if anchor.Cursor != nil {
-			_, records, err = loadGraphParents(ctx, reader, roots, req.Space, []model.RevisionID{anchor.Cursor.Revision})
+		if session.anchor.Cursor != nil {
+			_, records, err = loadGraphParents(ctx, session.reader, session.roots, req.Space, []model.RevisionID{session.anchor.Cursor.Revision})
 		} else {
-			records, err = graphAllRevisions(ctx, reader, roots, req.Space)
+			records, err = graphAllRevisions(ctx, session.reader, session.roots, req.Space)
 		}
 		if err != nil {
-			return api.GraphTraceResult{}, graphReadError(e, err)
+			return api.GraphTraceResult{}, graphReadError(ctx, e, err)
 		}
 	}
 	adj := map[model.RevisionID][]model.RevisionID{}
@@ -495,7 +519,7 @@ func (e *Engine) TraceGraph(ctx context.Context, req api.TraceGraphRequest) (api
 		return nodes[i].ID < nodes[j].ID
 	})
 	bound := req
-	bound.Anchor = &anchor
+	bound.Anchor = &session.anchor
 	bound.Direction = direction
 	bound.Continuation = ""
 	digest := graphQueryDigest(bound)
@@ -507,7 +531,7 @@ func (e *Engine) TraceGraph(ctx context.Context, req api.TraceGraphRequest) (api
 	if end > len(nodes) {
 		end = len(nodes)
 	}
-	out := api.GraphTraceResult{Anchor: anchor, RootSet: rootID}
+	out := api.GraphTraceResult{Anchor: session.anchor, RootSet: session.rootSet}
 	for {
 		out.Nodes = nodes[start:end]
 		out.Edges = nil
@@ -544,7 +568,7 @@ func (e *Engine) TraceGraph(ctx context.Context, req api.TraceGraphRequest) (api
 	for _, edge := range out.Edges {
 		revisions = append(revisions, edge.Parent)
 	}
-	return finishGraphRead(ctx, e, reader, "trace_graph", anchor, roots, out, revisions, nil, nil)
+	return finishGraphRead(ctx, e, session.reader, "trace_graph", session.anchor, session.roots, out, revisions, nil, nil)
 }
 
 func graphAllRevisions(ctx context.Context, reader *cursorReader, roots model.RootSet, space model.SpaceID) (map[model.RevisionID]graph.Revision, error) {
@@ -592,25 +616,5 @@ var _ api.GraphQueries = (*Engine)(nil)
 // LoadGraph captures latest exactly once. Every parent comes from that cut;
 // the old facade's repeated latest reads could mix unrelated publications.
 func (e *Engine) LoadGraph(ctx context.Context, space model.SpaceID, head model.RevisionID, maxRevisions int) (*graph.Store, error) {
-	if maxRevisions <= 0 {
-		maxRevisions = graph.MaxWalkNodes
-	}
-	if maxRevisions > graph.MaxWalkNodes || !model.ValidDigest(string(head)) {
-		return nil, api.ErrInvalidRequest
-	}
-	if err := e.graphReadStart(ctx, space); err != nil {
-		return nil, err
-	}
-	defer e.mu.Unlock()
-	g, records, err := loadGraphParents(ctx, &cursorReader{source: e.index}, e.roots, space, []model.RevisionID{head})
-	if err != nil {
-		return nil, graphReadError(e, err)
-	}
-	if len(records) > maxRevisions {
-		return nil, graph.ErrLimit
-	}
-	if err = e.viewOutputGate(); err != nil {
-		return nil, err
-	}
-	return g, nil
+	return e.embeddedLoadGraph(ctx, space, head, maxRevisions)
 }

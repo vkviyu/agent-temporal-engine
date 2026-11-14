@@ -1,6 +1,6 @@
 # Agent 原生时间执行引擎设计
 
-> 本文保留完整 V1 目标。当前候选格式为 Control 5、Invocation 2、Continuation opcode 8、Work 1、Emission 3 和 Packet 4。2026-11-03 独立审计保留当时的反例和证据边界。本文末尾保留当时审计状态，当前实现收口和验证以文末 2026-11-05 段落为准。 [独立审计](validation/V1_INDEPENDENT_CURRENT_AUDIT_2026-11-03.md) · [格式清单](formats/ate-v1-manifest-2026-11-02.md)
+> 完整 V1 目标保持不变。当前格式：Control 6、Invocation 2、Continuation opcode 8、Work 1、Emission 3、Packet 5、Summary 2。严格验收仍开放；历史日期的已完成结论不能覆盖后续发现的反例。当前实现、验证和真实剩余项以 [2026-11-06 交叉审计](validation/V1_CROSS_AUDIT_2026-11-06.md) 为准。
 >
 > 2026-11-01 的逐项实现证据与剩余差距见 [文档—代码审计](validation/V1_DOCUMENT_CODE_CROSS_AUDIT_2026-11-01.md)。本文件的 V1 目标保持不变，不因当前实现缺失而缩减范围。
 
@@ -562,6 +562,25 @@ Commit：上述对象被原子、持久地接受
 Branch：当前选择从哪个 Revision 继续
 View：谁以哪种知识和时间规则读取它
 ~~~
+
+以下对象分工对应长程任务主路径。历史事实、执行输入、经验沉淀和状态发布各有独立的版本与验证边界。
+
+| 对象 | 记录什么 | 与其他对象的关系 |
+| --- | --- | --- |
+| Session、Query、QueryAnswer | Session 是宿主会话标识。Query 是一次请求，QueryAnswer 是发布的答复。 | Query 由 Space、主体和 Query ID 定位，记录所属 Session。最终答复绑定已接受的模型结果、所采用的 TaskOutcome 和最终模型输入证据。 |
+| Task、Execution、Step | Task 定义目标与验收边界。Execution 是推进 Task 的一次执行。Step 是该 Execution 中有序的工作单元。 | Query 启动根 Task 和 Execution。子 Execution 记录父 Execution，可执行自己的 Task。Step 记录输入位置，后续 Step 依赖前一步完成。TaskOutcome 记录接受的任务产物与验证证据。 |
+| Invocation、Activity、Attempt、ActivityResult | Invocation 定位工具调用的逻辑槽。Activity 定义一次模型或工具工作及输入。Attempt 记录其派发尝试，ActivityResult 保存捕获结果。 | Activity 可绑定 Query 或 Execution 下的 Step，也可绑定 Invocation。接受结果和完成 Step 是显式转移。多次尝试仍归属于同一 Activity。 |
+| Work、Continuation、PendingAction | Work 把需要一起可见的控制转移提交成一笔事务。Continuation 记录恢复位置。PendingAction 固定下一次提交的请求身份与命令。 | 恢复以已发布回执、Continuation 和可执行授权为准。对于已跨出引擎边界的工具副作用，宿主先对账，再由引擎记录结果。 |
+| Event、SnapshotAnchor、NodeRef | Event 记录已提交的事实。Anchor 固定发布位置及可选选择器。NodeRef 定位事实、实体或内容。 | Event 因果边只来自已记录的依赖。EventID 与 Anchor 组成可重读的引用，读取仍应用当前权限。 |
+| TaskTrace、Investigation | TaskTrace 按 Query 或 Task 投影关键事件。Investigation 保存对历史引用的调查进展。 | TaskTrace 可附宿主选择的节点、解释关系与证据。解释、反证和支持关系保留来源，记录中的因果 DAG 由提交事实产生。可通过引用展开事件前后及原始内容。 |
+| Observation、Knowledge Revision | Observation 记录某个 Execution 明确采用的一项来源。Knowledge Revision 固定已采用观察的前沿。 | 工作知识按 Actor 和 Execution 隔离。跨执行通过 Import 采用，保留原始来源。 |
+| Summary、ContextPacket | Summary 是可追溯的压缩内容。ContextPacket 固定某次模型输入的选择、来源位置和实际请求字节。 | Summary 可作为 Observation 的来源。Activity 绑定 Packet。Packet 固定本次请求，写入 Packet 不推进 Knowledge Revision。重新派发时复核来源可用性。 |
+| Memory、ExperiencePath | Memory 是经验证、可推广的一条复用主张。ExperiencePath 是由这些主张、原节点及验证证据串成的经验路径。 | 两者均可回到带 Anchor 的源记录。ExperiencePath 显式关联步骤证据和排除项。新的 Execution 可通过 Observation 采用某个可复用版本，受当前适用性、替代版本和撤回规则约束。 |
+| Branch、Revision | Branch 指向状态探索的可移动头部，Revision 固定一份不可变状态。 | 局部分支记录分叉基线和可选执行来源，独立写入，三方合并后按差异发布。旧修订在历史位置仍可审计。 |
+
+执行汇聚由 `JoinExecutions` 记录接受了哪些子执行结果。工作知识由 `Import` 或显式 Observation 采用。状态分支由 `JoinLocal` 与 `PublishBranch` 更新。宿主可分别提交这些动作，使结果选择、模型见闻和状态变更各自可重放。
+
+会话间可按 Space、主体和 Query ID 读取已有轨迹。模型若要使用先前任务的资料，宿主选取引用并将其显式纳入新执行的上下文。跨 Space 的内容由 Transfer 及其授权规则处理。
 
 ### 4.9 实体版本、NodeRef 与引用提取
 
@@ -1681,7 +1700,7 @@ ContextPacket 至少绑定：
 
 v1 选择算法是可解释启发式，不声明最优。语义相关性可由额外模型 Activity 提案，结果需记录并受同一 View 约束。
 
-执行级 `primary_decision` 的 Packet 4 必须包含 `agent_mandatory_context/v1` Requirements。引擎从
+执行级 `primary_decision` 的 ContextPacket 使用当前 Packet schema 5，必须包含 `agent_mandatory_context/v1` Requirements。引擎从
 Packet Source 的历史 LiveControl 推导当前任务与祖先目标、同目标 epoch 的最新验收要求、待处理或未结算调用和行动、
 未消费消息、待 Join 以及已派发或 unknown Attempt，并核对该 KnowledgeKey 下已采用的精确原始内容。
 这些事实必须进入 Packet Items。若记录了 Selection，也必须列入其 Mandatory。`HostPolicyVersion`
@@ -1777,7 +1796,7 @@ Source → Derived 的反向关系用于找出受影响的：
 
 ### 15.5 ExperiencePath 与跨任务复用
 
-经验沉淀不只是压缩一段日志。ExperiencePath 是派生、可撤回的 Memory/Artifact，绑定 SourceAnchor、明确选中节点/关系顺序、适用 Goal/环境版本、成功验证与必要反例。省略的失败探索保留可回查引用/缺口，不能把筛选后的路径冒充原始完整执行，也不能声称新模型会确定地产生同一决策。
+ExperiencePath 是独立的派生经验记录。它绑定 SourceAnchor，按顺序列出锚定节点及对应的 Memory，并保存验证、适用范围与必要反例。省略项保留可回查引用。复用时检查路径及支撑它的 Memory、来源和当前适用性。原始因果图仍可通过 TaskTrace 查阅。
 
 默认逻辑隐藏噪声，不物理删审计事实。只有经验证/晋升与作用域审查的经验才可跨任务复用；跨 Space 按导出/导入重算 ID、脱敏并保留来源映射。Source 撤回同时影响摘要、经验路径和后续复用资格。
 
@@ -2552,6 +2571,12 @@ cut、完整 Invocations 和 exact next request；`query_open/decision/tool/answ
 但 owner 是 Query，不能伪造 Execution authority。历史 QueryProgress 的输入、Packet、Summary
 和工具定义依赖受当前 ACL/UseBan/隐私策略重新检查。
 
+这条规则区分两种完成语义。若 Query 没有提交工作启动动作，它就是 Query-only：最终
+`QueryAnswer` 只需绑定 Query-scoped 的已接受结果，不要求伪造 `TaskOutcome`。若 Query
+显式启动了 Task，则它转为 Task-backed Query；最终答复必须逐一绑定所有已启动 Task 的
+Execution 和已记录 outcome，不能通过省略 outcome 退回 Query-only，也不能添加未启动的
+Task。是否创建 Task 由语义上的工作启动决定，不由持久化需求决定。
+
 跨 Space Transfer 只导出经过当前策略验证的 Memory/ExperiencePath/注册 provenance closure；
 显式 whole-record omission 记录 Gap，导入后保存带 source Anchor 和 source→target 映射的只读
 foreign evidence。它不能安装目标域 Task/Execution/Authority/Continuation，也不能自动 promote；
@@ -2584,3 +2609,11 @@ authority。以上是 11-04 历史审计快照，当前实现收口见本文末�
 所有模型和工具派发都在 `emission_dispatch` Work 中消费绑定 Activity/Attempt grant。Activity 绑定 ContextPacket 时，许可选择同一 Packet 和完整 RecordedInput。工具调用还绑定已发布 ToolDefinition 的名称、版本、schema、dispatch mode/class 和 EffectContract。受保护的 Root/child/message/model decision/FinishStep 使用对应 Work 原子边界。
 
 读取响应使用目的地绑定、一次性、短期的 ReadDeliveryGrant。来源关系沿 Packet、Observation 和 Summary 参与当前撤回判断，固定历史内容保持原始 bytes。Unix 服务缺少读取许可能力的后端时 fail closed。具体逐条证据和外部限制见 [当前交叉验收续记](validation/V1_CURRENT_CROSS_CHECK_2026-11-05.md)。
+
+## 2026-11-06 语义核对
+
+每次响应的持久分块是 Attempt 下的 OutputChunk 记录，拥有独立内容身份及日志发生身份。Capture 的 full/truncated/partial/unknown 与 Outcome 分开；partial/unknown 不能接受，模型结果只接受 full。分块已经确认的前缀在终结结果出现之前就可恢复；终结 Result 必须精确绑定全部已记录分块。
+
+最终 Answer 使用一个已接受的完整成功模型结果，正文不得由宿主另行拼接。任务的成果与验收先完成，再由 Query-scoped 最终模型通过 FinalAnswerInput 绑定确切 TaskOutcome。模型答复失败只留下待恢复答复，不撤销已完成成果。见证的渲染语义由命名宿主策略承担，引擎认证身份、来源、精确字节与当前策略。
+
+Packet 5 / Summary 2 的逻辑记录和原始请求/输出的来源邻接同事务发布。最终 Activity 的原始请求和 witness 来源邻接与控制状态同事务发布。重复内容的明确来源单调合并，读取和复用检查跨两个根的来源闭包。§17.6 的普通嵌入式读取已接入统一的一次性出站许可。 [实现与验收 L-02](validation/V1_CROSS_AUDIT_2026-11-06.md)

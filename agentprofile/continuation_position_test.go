@@ -29,8 +29,8 @@ func TestContinuationPositionRoundTripRestoreAndOwnership(t *testing.T) {
 	recoveryControl(t, l, "branch-intent", ControlCommand{PutAction: &PutActionCommand{Intent: branch, Authority: binding}})
 	c.Position.NextActions = append([]PendingActionRef{{Key: "branch", Generation: 1}}, c.Position.NextActions...)
 	command := ControlCommand{Checkpoint: &CheckpointCommand{Intent: intent, Continuation: c, Authority: binding}}
-	if command.SchemaVersion() != 5 {
-		t.Fatal("recovery position did not select schema 5")
+	if command.SchemaVersion() != 6 {
+		t.Fatal("recovery position did not select schema 6")
 	}
 	raw, err := EncodeCommand(Command{Control: &command})
 	if err != nil {

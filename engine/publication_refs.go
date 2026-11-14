@@ -12,6 +12,11 @@ import (
 // predecessor. Per-transaction envelopes are installed with their own RootSet
 // after P1 and reconstructed from the authenticated log on reopening.
 func (e *Engine) ResolvePublication(ctx context.Context, req api.ResolvePublicationRequest) (api.SourcePublication, error) {
+	if ctx.Value(readDeliveryKey{}) == nil {
+		return embeddedReadDelivery(ctx, e, "resolve_publication", req.Principal, req, func(scoped context.Context) (api.SourcePublication, error) {
+			return e.ResolvePublication(scoped, req)
+		})
+	}
 	if err := req.Source.Validate(); err != nil {
 		return api.SourcePublication{}, err
 	}
@@ -24,45 +29,40 @@ func (e *Engine) ResolvePublication(ctx context.Context, req api.ResolvePublicat
 	if err := e.publicGate(); err != nil {
 		return api.SourcePublication{}, err
 	}
-	if err := e.mu.LockContext(ctx); err != nil {
+	if err := e.readReady(ctx); err != nil {
 		return api.SourcePublication{}, err
 	}
-	defer e.mu.Unlock()
-	if err := e.ready(); err != nil {
-		return api.SourcePublication{}, err
-	}
-	if req.Source.Store != e.publication.Store {
+	if req.Source.Store != e.readPublication(ctx).Store {
 		return api.SourcePublication{}, model.ErrAnchorMismatch
 	}
-	envelopes := e.envelopes
-	if e.baseEnvelopes != nil {
-		envelopes = e.baseEnvelopes
+	proof, ok, err := e.readEnvelope(ctx, req.Source.ProducerTx)
+	if err != nil {
+		return api.SourcePublication{}, err
 	}
-	proof, ok := envelopes[req.Source.ProducerTx]
 	if !ok || proof.space != req.Source.Space || proof.principal != req.Principal {
 		return api.SourcePublication{}, ErrNodeNotFound
 	}
 	anchor := model.SnapshotAnchor{Space: req.Source.Space, Fence: proof.fence, Cursor: req.Source.Clone().Cursor, Knowledge: req.Source.Clone().Knowledge}
 	roots, rootID, err := e.rootsAtFence(ctx, proof.fence, true)
 	if err != nil {
-		return api.SourcePublication{}, e.publicationRefReadError(err)
+		return api.SourcePublication{}, e.publicationRefReadError(ctx, err)
 	}
 	if rootID != proof.rootSet || rootID == "" {
-		return api.SourcePublication{}, e.readFailure(ErrInvalidStateData)
+		return api.SourcePublication{}, e.readFailureAt(ctx, ErrInvalidStateData)
 	}
 	if key := anchor.Knowledge; key != nil {
 		if err = e.authorizeKnowledge(ctx, roots, anchor.Space, req.Principal, *key); err != nil {
-			return api.SourcePublication{}, e.publicationRefReadError(err)
+			return api.SourcePublication{}, e.publicationRefReadError(ctx, err)
 		}
-		if err = e.authorizeKnowledge(ctx, e.roots, anchor.Space, req.Principal, *key); err != nil {
-			return api.SourcePublication{}, e.publicationRefReadError(err)
+		if err = e.authorizeKnowledge(ctx, e.readRoots(ctx), anchor.Space, req.Principal, *key); err != nil {
+			return api.SourcePublication{}, e.publicationRefReadError(ctx, err)
 		}
 		if _, _, _, _, err = e.selectedKnowledge(ctx, roots, anchor, req.Principal); err != nil {
-			return api.SourcePublication{}, e.publicationRefReadError(err)
+			return api.SourcePublication{}, e.publicationRefReadError(ctx, err)
 		}
 	} else if anchor.Cursor != nil {
 		if _, err = e.resolveDomainCursor(ctx, roots, anchor); err != nil {
-			return api.SourcePublication{}, e.publicationRefReadError(err)
+			return api.SourcePublication{}, e.publicationRefReadError(ctx, err)
 		}
 	}
 	if err = ctx.Err(); err != nil {
@@ -85,11 +85,11 @@ func (e *Engine) ResolvePublication(ctx context.Context, req api.ResolvePublicat
 	return finishReadDelivery(ctx, e, "resolve_publication", req.Principal, result, anchor, "", "", dependencies)
 }
 
-func (e *Engine) publicationRefReadError(err error) error {
+func (e *Engine) publicationRefReadError(ctx context.Context, err error) error {
 	if errors.Is(err, ErrNodeNotFound) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || knowledgeCommandRejection(err) || graphCommandRejection(err) || errors.Is(err, ErrUnsupportedMethod) || isLimit(err) {
 		return err
 	}
-	return e.readFailure(err)
+	return e.readFailureAt(ctx, err)
 }
 
 var _ api.PublicationResolver = (*Engine)(nil)

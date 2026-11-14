@@ -94,6 +94,8 @@ func (e *Engine) validateQueryNext(ctx context.Context, req api.CommitRequest, p
 		return ErrWorkBoundary
 	case x.CaptureResult != nil:
 		activity = x.CaptureResult.Result.Activity
+	case x.CaptureOutputChunk != nil:
+		activity = x.CaptureOutputChunk.Chunk.Activity
 	case x.SettleActivity != nil:
 		activity = x.SettleActivity.Activity
 	case x.ReconcileAttempt != nil:

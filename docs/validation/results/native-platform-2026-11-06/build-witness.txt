@@ -1,0 +1,13 @@
+go version go1.27.0 darwin/arm64
+/tmp/ate-native-reboot-linux-arm64.test: go1.27.0
+	path	github.com/vkviyu/agent-temporal-engine/storage.test
+	mod	github.com/vkviyu/agent-temporal-engine	(devel)	
+	build	-buildmode=exe
+	build	-compiler=gc
+	build	CGO_ENABLED=0
+	build	GOARCH=arm64
+	build	GOOS=linux
+	build	GOARM64=v8.0
+42aa39702cd83e2b6af894a3b1b7797e38900954cabb2cae4d20af4cec0ca849  /tmp/ate-native-reboot-linux-arm64.test
+9a84113f021f69a85d36294916e2b4d94f95b35eebe6a347c99d0c7dfe241fc2  storage/native_reboot_linux_test.go
+dc09297588252e5a4a1e3b05b465557f4e7517cfb1ededc74aaffb1325f1354a  storage/native_full_disk_linux_test.go

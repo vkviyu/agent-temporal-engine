@@ -22,15 +22,15 @@ func annotationStateKey(space model.SpaceID, principal model.PrincipalID) []byte
 }
 
 func (e *Engine) loadAnnotations(ctx context.Context, roots model.RootSet, space model.SpaceID, principal model.PrincipalID) (annotation.Snapshot, error) {
-	root, err := slotSpaceRoot(ctx, e.index, roots.ExecutionKnowledge, space)
+	root, err := slotSpaceRoot(ctx, e.reader(ctx), roots.ExecutionKnowledge, space)
 	if err != nil {
 		return annotation.Snapshot{}, err
 	}
-	id, found, err := state.Get(ctx, e.index, space, root, annotationStateKey(space, principal))
+	id, found, err := state.Get(ctx, e.reader(ctx), space, root, annotationStateKey(space, principal))
 	if err != nil || !found {
 		return annotation.Snapshot{}, err
 	}
-	object, err := readObject(ctx, e.index, id)
+	object, err := readObject(ctx, e.reader(ctx), id)
 	if err != nil {
 		return annotation.Snapshot{}, err
 	}
@@ -61,10 +61,10 @@ func (e *Engine) ApplyAnnotation(ctx context.Context, req api.ApplyAnnotationReq
 	return e.Commit(ctx, api.CommitRequest{Space: req.Key.Space, Principal: req.Key.Principal, RequestID: req.Key.RequestID, Method: api.MethodApplyAnnotation, Body: raw, ExpectedFence: req.ExpectedFence})
 }
 
-// annotationSourceEntry authenticates the actual historical read position.
-// It is used while holding the engine lock (or on an isolated reducer), so the
-// current access checks cannot race a newly published privacy restriction.
-func (e *Engine) annotationSourceEntry(ctx context.Context, space model.SpaceID, principal model.PrincipalID, source model.SnapshotAnchor) (*viewEntry, error) {
+// historicalSourceEntry authenticates the actual historical read position.
+// Public reads authorize against their captured cut; isolated reducers use
+// their exclusively owned candidate roots.
+func (e *Engine) historicalSourceEntry(ctx context.Context, space model.SpaceID, principal model.PrincipalID, source model.SnapshotAnchor, mode string) (*viewEntry, error) {
 	if source.Validate() != nil || source.Space != space {
 		return nil, model.ErrAnchorMismatch
 	}
@@ -72,10 +72,10 @@ func (e *Engine) annotationSourceEntry(ctx context.Context, space model.SpaceID,
 	if err != nil {
 		return nil, err
 	}
-	entry := &viewEntry{coreLocked: true, descriptor: api.ViewDescriptor{Anchor: source.Clone()}, roots: roots, rootSet: rootID, principal: principal, mode: "state"}
+	entry := &viewEntry{coreLocked: e.readCut(ctx) == nil, descriptor: api.ViewDescriptor{Anchor: source.Clone()}, roots: roots, rootSet: rootID, principal: principal, mode: mode}
 	if source.Knowledge != nil {
 		entry.mode = "execution_knowledge"
-		for _, cut := range []model.RootSet{roots, e.roots} {
+		for _, cut := range []model.RootSet{roots, e.readRoots(ctx)} {
 			if err := e.authorizeKnowledge(ctx, cut, space, principal, *source.Knowledge); err != nil {
 				return nil, err
 			}
@@ -108,7 +108,7 @@ func (e *Engine) checkAnnotationProvenance(ctx context.Context, space model.Spac
 // it free of recursive output gates makes annotation-event bytes participate in
 // current privacy checks even after their source left the current domain root.
 func (e *Engine) checkAnnotationReferences(ctx context.Context, space model.SpaceID, principal model.PrincipalID, r annotation.Record) (*viewEntry, []model.ObjectID, error) {
-	entry, err := e.annotationSourceEntry(ctx, space, principal, r.Source)
+	entry, err := e.historicalSourceEntry(ctx, space, principal, r.Source, "state")
 	if err != nil {
 		return nil, nil, err
 	}
@@ -183,6 +183,11 @@ func (e *Engine) prepareAnnotation(ctx context.Context, req api.CommitRequest, d
 }
 
 func (e *Engine) GetAnnotations(ctx context.Context, req api.ReadAnnotationsRequest) (api.AnnotationsResult, error) {
+	if ctx.Value(readDeliveryKey{}) == nil {
+		return embeddedReadDelivery(ctx, e, "get_annotations", req.Principal, req, func(scoped context.Context) (api.AnnotationsResult, error) {
+			return e.GetAnnotations(scoped, req)
+		})
+	}
 	if err := ctx.Err(); err != nil {
 		return api.AnnotationsResult{}, err
 	}
@@ -192,14 +197,10 @@ func (e *Engine) GetAnnotations(ctx context.Context, req api.ReadAnnotationsRequ
 	if err := e.publicGate(); err != nil {
 		return api.AnnotationsResult{}, err
 	}
-	if err := e.mu.LockContext(ctx); err != nil {
+	if err := e.readReady(ctx); err != nil {
 		return api.AnnotationsResult{}, err
 	}
-	defer e.mu.Unlock()
-	if err := e.ready(); err != nil {
-		return api.AnnotationsResult{}, err
-	}
-	anchor := model.SnapshotAnchor{Space: req.Space, Fence: e.publication.Fence()}
+	anchor := model.SnapshotAnchor{Space: req.Space, Fence: e.readPublication(ctx).Fence()}
 	if req.Anchor != nil {
 		anchor = req.Anchor.Clone()
 	}
@@ -208,23 +209,23 @@ func (e *Engine) GetAnnotations(ctx context.Context, req api.ReadAnnotationsRequ
 	}
 	roots, rootID, err := e.rootsAtFence(ctx, anchor.Fence, false)
 	if err != nil {
-		return api.AnnotationsResult{}, e.annotationReadFailure(err)
+		return api.AnnotationsResult{}, e.annotationReadFailure(ctx, err)
 	}
 	snapshot, err := e.loadAnnotations(ctx, roots, req.Space, req.Principal)
 	if err != nil {
-		return api.AnnotationsResult{}, e.annotationReadFailure(err)
+		return api.AnnotationsResult{}, e.annotationReadFailure(ctx, err)
 	}
 	var dependencies []model.ObjectID
 	collect := ctx.Value(readDeliveryKey{}) != nil
 	for _, record := range snapshot.Records {
 		entry, ids, err := e.checkAnnotationProvenance(ctx, req.Space, req.Principal, record)
 		if err != nil {
-			return api.AnnotationsResult{}, e.annotationReadFailure(err)
+			return api.AnnotationsResult{}, e.annotationReadFailure(ctx, err)
 		}
 		if collect {
 			selected, err := e.selectedReadDependencies(ctx, entry)
 			if err != nil {
-				return api.AnnotationsResult{}, e.annotationReadFailure(err)
+				return api.AnnotationsResult{}, e.annotationReadFailure(ctx, err)
 			}
 			dependencies = append(dependencies, ids...)
 			dependencies = append(dependencies, selected...)
@@ -240,11 +241,11 @@ func (e *Engine) GetAnnotations(ctx context.Context, req api.ReadAnnotationsRequ
 	return finishReadDelivery(ctx, e, "get_annotations", req.Principal, out, anchor, "", "", dependencies)
 }
 
-func (e *Engine) annotationReadFailure(err error) error {
+func (e *Engine) annotationReadFailure(ctx context.Context, err error) error {
 	if annotationCommandRejection(err) || isLimit(err) {
 		return err
 	}
-	return e.readFailure(err)
+	return e.readFailureAt(ctx, err)
 }
 func annotationCommandRejection(err error) bool {
 	if errors.Is(err, ErrStoredObject) || errors.Is(err, ErrInvalidStateData) || errors.Is(err, ErrObjectIO) || errors.Is(err, ErrSemanticCorruption) {

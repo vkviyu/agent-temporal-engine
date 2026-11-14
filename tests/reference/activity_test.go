@@ -91,7 +91,7 @@ func TestIndependentActivityUnknownEffectsAndStaleResults(t *testing.T) {
 				apply("dispatch-"+id, func(a *oracle.Activity) error { return a.Dispatch(id, auth.Incarnation, retryCheck(use)) }, agentprofile.ControlCommand{DispatchAttempt: &agentprofile.DispatchAttemptCommand{Attempt: id, Authority: binding(auth), Evidence: digest("c"), Use: use}})
 			}
 			capture := func(id, attempt, outcome string, inc uint64) {
-				apply("capture-"+id, func(a *oracle.Activity) error { return a.Capture(id, attempt, outcome) }, agentprofile.ControlCommand{CaptureResult: &agentprofile.CaptureResultCommand{Result: agentprofile.ActivityResult{ID: id, Activity: spec.Activity, Attempt: attempt, RequestDigest: spec.RequestDigest, Incarnation: inc, Outcome: outcome, Payload: []byte(id)}}})
+				apply("capture-"+id, func(a *oracle.Activity) error { return a.Capture(id, attempt, outcome) }, agentprofile.ControlCommand{CaptureResult: &agentprofile.CaptureResultCommand{Result: agentprofile.ActivityResult{Capture: "full", ID: id, Activity: spec.Activity, Attempt: attempt, RequestDigest: spec.RequestDigest, Incarnation: inc, Outcome: outcome, Payload: []byte(id)}}})
 			}
 			retryCount := 0
 			retry := func() {

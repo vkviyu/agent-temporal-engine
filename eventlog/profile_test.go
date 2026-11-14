@@ -39,7 +39,7 @@ func TestProfileOccurrenceAndCoreManifestRoundTrip(t *testing.T) {
 		t.Fatal(co, err)
 	}
 	got, err := Decode(co)
-	if err != nil || got.ProfileRegistryVersion != 1 || !reflect.DeepEqual(got.ProfileEvents, core.ProfileEvents) || got.PreviousInStream != core.PreviousInStream {
+	if err != nil || got.ProfileRegistryVersion != ProfileRegistryVersion || !reflect.DeepEqual(got.ProfileEvents, core.ProfileEvents) || got.PreviousInStream != core.PreviousInStream {
 		t.Fatalf("core manifest: %+v %v", got, err)
 	}
 	for _, mutate := range []func(*model.Event){

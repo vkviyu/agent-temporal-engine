@@ -60,6 +60,11 @@ func (e *Engine) prepareContentRead(ctx context.Context, req api.ReadContentRequ
 	if req.MaxBytes < 1 || req.MaxBytes > 1<<20 {
 		return nil, storage.ErrLimit
 	}
+	ctx, release, err := e.beginReadCut(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	entry, err := e.acquireView(ctx, req.View)
 	if err != nil {
 		return nil, err
@@ -75,7 +80,7 @@ func (e *Engine) prepareContentRead(ctx context.Context, req api.ReadContentRequ
 		if err == model.ErrInvalidNodeRef {
 			return nil, err
 		}
-		return nil, e.nodeReadError(err)
+		return nil, e.nodeReadError(ctx, err)
 	}
 	object, visible := catalog.objects[req.Ref.Object]
 	if !visible {
@@ -83,7 +88,7 @@ func (e *Engine) prepareContentRead(ctx context.Context, req api.ReadContentRequ
 	}
 	data, err := objectContentProjection(object, req.Projection)
 	if err != nil {
-		return nil, e.nodeReadError(err)
+		return nil, e.nodeReadError(ctx, err)
 	}
 	if req.Offset > uint64(len(data)) {
 		return nil, api.ErrInvalidRequest
@@ -99,7 +104,7 @@ func (e *Engine) prepareContentRead(ctx context.Context, req api.ReadContentRequ
 	}
 	ids, err := e.contentReadDependencies(ctx, entry, catalog, req.Ref.Object)
 	if err != nil {
-		return nil, e.nodeReadError(err)
+		return nil, e.nodeReadError(ctx, err)
 	}
 	grant := &contentReadGrant{
 		destination: destination,

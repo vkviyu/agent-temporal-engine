@@ -1,5 +1,7 @@
 # Strict V1 交叉验收续记 · 2026-11-05
 
+> 2026-11-06 以后当前源树的修复、格式与仍未验收项见 [当前交叉审计](V1_CROSS_AUDIT_2026-11-06.md)。本页保留其历史证据，不代替严格 V1 验收。
+
 此页逐项追踪 [四文档基线矩阵](V1_REQUIREMENTS_MATRIX_2026-11-02.md) 和
 [11-03 独立审计](V1_INDEPENDENT_CURRENT_AUDIT_2026-11-03.md) 的复核证据。D 是总体设计，A 是实施架构，P 是
 API 协议，W 是执行场景。保留旧报告在其源树上的结论。这里的已验证项目有明确的行为和证据范围。
@@ -25,11 +27,11 @@ Engine、service 与独立参考包的相关回归通过。类型化响应覆盖
 
 派生来源扫描从 `content_policy.go` 拆到 `engine/derived_disclosure.go`，读取许可和服务分发仍保持同一接口。当前源树已运行：
 
-- `GOCACHE=/tmp/ate-gocache GOTOOLCHAIN=local go test -count=1 -timeout=240s ./...`，退出 0。最终 Agent 文件职责拆分后的完整 24 个包通过。
+- `GOCACHE=/tmp/ate-gocache GOTOOLCHAIN=local go test -count=1 -timeout=240s ./...`，退出 0。最终 Agent 文件职责拆分后的完整 28 个测试包通过。
 - `GOCACHE=/tmp/ate-gocache GOTOOLCHAIN=local go vet ./...`，退出 0。
 - `GOCACHE=/tmp/ate-gocache GOTOOLCHAIN=local go build ./...`，退出 0。
 - `GOOS=linux GOARCH=amd64 GOCACHE=/tmp/ate-gocache GOTOOLCHAIN=local go test -run '^$' -exec /usr/bin/true ./...`，退出 0。该命令只证明交叉编译。
-- `GOCACHE=/tmp/ate-gocache GOTOOLCHAIN=local go test -race -count=1 -timeout=300s ./...`，退出 0。最终 Agent 文件职责拆分后的完整 24 个包通过，包含 Engine、Unix service、host 和 reference 场景。
+- `GOCACHE=/tmp/ate-gocache GOTOOLCHAIN=local go test -race -count=1 -timeout=300s ./...`，退出 0。最终 Agent 文件职责拆分后的完整 28 个测试包通过，包含 Engine、Unix service、host 和 reference 场景。
 - `GOCACHE=/tmp/ate-gocache GOTOOLCHAIN=local go test -race -count=1 -timeout=180s ./service`，退出 0，覆盖无许可后端的 fail-closed 路由回归。
 - `GOCACHE=/tmp/ate-gocache GOTOOLCHAIN=local go test ./tests/benchmarks -run '^$' -bench 'Benchmark(NativeStore|Knowledge|ContextSelection)$' -benchtime=1x -count=1 -cpu=1 -benchmem`，退出 0，当前源树的 Darwin/arm64 小样本结果写入本机临时日志。
 

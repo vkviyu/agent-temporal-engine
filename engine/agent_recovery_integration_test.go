@@ -218,7 +218,7 @@ func TestManagedParentChildHostRecoveryPreservesEffectAndExactContinuation(t *te
 	}
 	rootNext, childNext := resume(root.ID, rootAuthority), resume(child.ID, childAuthority)
 	recoveryCoreReject(t, s, "unknown-retry", agentprofile.ControlCommand{RetryActivity: &agentprofile.RetryActivityCommand{Activity: activity.Activity, ExpectedVersion: 1, Authority: childNext}})
-	result := agentprofile.ActivityResult{ID: "external-response", Activity: activity.Activity, Attempt: "write-attempt", RequestDigest: activity.RequestDigest, Incarnation: 1, Outcome: "success", Payload: []byte("file exists with expected bytes")}
+	result := agentprofile.ActivityResult{Capture: "full", ID: "external-response", Activity: activity.Activity, Attempt: "write-attempt", RequestDigest: activity.RequestDigest, Incarnation: 1, Outcome: "success", Payload: []byte("file exists with expected bytes")}
 	recoveryCoreControl(t, s, "late-response", agentprofile.ControlCommand{CaptureResult: &agentprofile.CaptureResultCommand{Result: result}})
 	recoveryCoreReject(t, s, "automatic-stale-accept", agentprofile.ControlCommand{AcceptActivity: &agentprofile.AcceptActivityCommand{Activity: activity.Activity, Result: result.ID, ExpectedVersion: 1, Authority: childNext, Evidence: proof}})
 	actual, err := os.ReadFile(effectPath)
@@ -246,7 +246,7 @@ func TestManagedParentChildHostRecoveryPreservesEffectAndExactContinuation(t *te
 	}
 	recoveryCoreControl(t, s, "next-applied", agentprofile.ControlCommand{ResolveAction: &agentprofile.ResolveActionCommand{Resolution: agentprofile.ActionResolution{Key: intent.Action.Key, Generation: 2, Outcome: "applied", ObservedFence: out.Fence, Receipt: out.ResultDigest}}})
 	finish := agentprofile.ControlCommand{FinishStep: &agentprofile.FinishStepCommand{Execution: root.ID, Sequence: 1, Epoch: 1, Authority: rootNext}}
-	closeCheckpoint := workCheckpoint(t, root.ID, rootNext, integrationSnapshot(t, s.e).Fence, "after-root-step", continuation.Version, root.Actor, uint64(1))
+	closeCheckpoint := workCheckpoint(t, root.ID, rootNext, integrationSnapshot(t, s.e).Fence, "after-root-step", continuation.Version, 1)
 	closeWork := api.ApplyWorkRequest{Key: agentKey("finish-root-step"), Unit: api.WorkUnit{Kind: "checkpoint", Steps: []api.WorkStep{workControl(t, finish), closeCheckpoint}}}
 	workApply(t, s, closeWork)
 	settleTestWorkCheckpoints(t, s, closeWork)

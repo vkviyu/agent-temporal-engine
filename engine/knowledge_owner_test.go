@@ -145,7 +145,7 @@ func TestKnowledgeExplicitlyBridgesPromotedMemoryByTypedLogicalID(t *testing.T) 
 	o := knowledge.Observation{Key: key, Source: knowledge.SourceAnchor{Anchor: model.SnapshotAnchor{Space: "host-space", Fence: cut}}, Payload: promoted.ID, PayloadKind: "memory", Sequence: 1, Label: "promoted memory"}
 	o.ID = knowledge.ObservationID(o)
 	applyObservation(t, s.e, "bridge-observation", o)
-	pathAck := applyMemory(t, s.e, "bridge-path", memory.Command{BuildPath: &memory.BuildPathCommand{Space: "host-space", Anchor: sourceAnchor(cut), Steps: []memory.Step{{Node: model.NodeRef{Kind: model.NodeObject, Object: promoted.ID}, Memory: promoted.ID, Order: 0, Outcome: "confirmed"}}, Validation: memory.Validation{StrategyVersion: 1, Passed: true, Evidence: []memory.Source{{SourceID: payload, Anchor: sourceAnchor(source)}}}}})
+	pathAck := applyMemory(t, s.e, "bridge-path", memory.Command{BuildPath: &memory.BuildPathCommand{Space: "host-space", Anchor: sourceAnchor(cut), Steps: []memory.Step{{Node: model.NodeRef{Kind: model.NodeObject, Object: payload}, Memory: promoted.ID, Order: 0, Outcome: "confirmed"}}, Validation: memory.Validation{StrategyVersion: 1, Passed: true, Evidence: []memory.Source{{SourceID: payload, Anchor: sourceAnchor(source)}}}}})
 	memoryState, err := s.e.GetMemoryState(context.Background(), api.ReadMemoryStateRequest{Space: "host-space"})
 	if err != nil || len(memoryState.Snapshot.Paths) != 1 {
 		t.Fatalf("typed path missing: %+v %v", memoryState, err)
