@@ -140,12 +140,31 @@ func TestBranchRetriesReturnOriginalTypedResultAfterLaterAdvancesAndReopen(t *te
 }
 
 func TestBranchReplayRejectsSpaceAndGenerationBeforeRepair(t *testing.T) {
-	for _, mismatch := range []string{"space", "generation"} {
+	for _, mismatch := range []string{"space", "generation before LSN", "LSN", "repeated generation", "regressed generation"} {
 		t.Run(mismatch, func(t *testing.T) {
 			path := t.TempDir()
 			d := openDir(t, path)
 			defer d.Close()
 			s, err := Create(d, storage.JournalOptions{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := s.Close(); err != nil {
+				t.Fatal(err)
+			}
+			j, _, err := storage.OpenJournal(d, storage.JournalOptions{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			for i := 0; i < 2; i++ {
+				if _, err := j.CompactAuditFull(context.Background()); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := j.Close(); err != nil {
+				t.Fatal(err)
+			}
+			s, _, err = Open(d, storage.JournalOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -156,7 +175,7 @@ func TestBranchReplayRejectsSpaceAndGenerationBeforeRepair(t *testing.T) {
 			if err = s.Close(); err != nil {
 				t.Fatal(err)
 			}
-			j, _, err := storage.OpenJournal(d, storage.JournalOptions{})
+			j, _, err = storage.OpenJournal(d, storage.JournalOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -169,11 +188,35 @@ func TestBranchReplayRejectsSpaceAndGenerationBeforeRepair(t *testing.T) {
 				t.Fatal(err)
 			}
 			digest := branchDigest(raw)
-			tx := storage.Transaction{TxID: "02020202020202020202020202020202", Request: model.RequestKey{Space: "space", Principal: principal, RequestID: branchRequestID(raw)}, RequestDigest: digest, LSN: 2, PreviousDigest: p.Position.Digest, Records: []storage.Record{{Kind: storage.KindEvent, Payload: raw}}, ControlUpdates: encodePublicationMetadata(2), Receipt: digest, PostRootSet: digest}
-			if mismatch == "space" {
+			tx := storage.Transaction{
+				TxID: "02020202020202020202020202020202",
+				Request: model.RequestKey{
+					Space:     "space",
+					Principal: principal,
+					RequestID: branchRequestID(raw),
+				},
+				RequestDigest:  digest,
+				LSN:            2,
+				PreviousDigest: p.Position.Digest,
+				Records: []storage.Record{{
+					Kind:    storage.KindEvent,
+					Payload: raw,
+				}},
+				ControlUpdates: encodePublicationMetadata(2, 4),
+				Receipt:        digest,
+				PostRootSet:    digest,
+			}
+			switch mismatch {
+			case "space":
 				tx.Request.Space = "other"
-			} else {
-				tx.ControlUpdates = encodePublicationMetadata(1)
+			case "generation before LSN":
+				tx.ControlUpdates = encodePublicationMetadata(2, 1)
+			case "LSN":
+				tx.ControlUpdates = encodePublicationMetadata(1, 4)
+			case "repeated generation":
+				tx.ControlUpdates = encodePublicationMetadata(2, 3)
+			case "regressed generation":
+				tx.ControlUpdates = encodePublicationMetadata(2, 2)
 			}
 			if _, err = j.Publish(context.Background(), tx); err != nil {
 				t.Fatal(err)

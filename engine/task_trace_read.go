@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"sort"
-	"strconv"
 	"unicode/utf8"
 
 	"github.com/vkviyu/agent-temporal-engine/api"
@@ -73,25 +71,25 @@ func (e *Engine) readTaskTrace(ctx context.Context, req api.TaskTraceRequest) (t
 	if err != nil {
 		return taskTraceRead{}, e.nodeReadError(ctx, err)
 	}
-	ledger, _, _, err := loadAgentLedger(ctx, e.reader(ctx), entry.roots.LiveControl, req.Space, req.Principal)
+	profile, err := e.traceProfiles.load(ctx, e.reader(ctx), entry.roots.LiveControl, req.Space, req.Principal)
 	if err != nil {
 		return taskTraceRead{}, e.nodeReadError(ctx, err)
 	}
-	snapshot := ledger.Snapshot()
-	keys, err := taskTraceScope(req, ledger, snapshot)
+	keys, err := profile.scope(req)
 	if err != nil {
 		return taskTraceRead{}, err
 	}
 	reader := &nodeQueryReader{source: e.reader(ctx)}
 	result := taskTraceRead{anchor: anchor, entry: entry, reader: reader, edit: edit, record: record,
 		events: make(map[model.EventID]taskTraceOccurrence), boundary: map[model.EventID]model.Event{},
-		provenance: newTraceProvenance(entry.roots, snapshot), keys: keys}
+		provenance: profile.provenanceAt(entry.roots), keys: keys}
 	result.metadata = e.traceEventMetadata
 	result.allItems = func(loadCtx context.Context) ([]eventMetadataItem, error) {
 		return e.traceEventIDs(loadCtx, keys, anchor.Fence)
 	}
+	selected := newTraceScope(keys)
 	result.inScope = func(loadCtx context.Context, id model.EventID) (bool, error) {
-		return e.traceEventInScope(loadCtx, id, keys, anchor.Fence)
+		return e.traceEventInScope(loadCtx, id, selected, anchor.Fence)
 	}
 	result.children = func(loadCtx context.Context, id model.EventID) ([]eventMetadataItem, error) {
 		return e.traceEventChildren(loadCtx, id, anchor.Fence)
@@ -174,168 +172,6 @@ func isTraceMilestoneOperation(operation string) bool {
 		return true
 	}
 	return false
-}
-
-func (r taskTraceRead) overview(ctx context.Context, ids []model.EventID, milestones map[model.EventID]api.TraceMilestone) ([]api.TaskTraceEdge, []model.EventID, error) {
-	// Condense only recorded dependencies, stopping at the next selected
-	// predecessor on each traversal path. Chronology supplies display order.
-	var edges []api.TaskTraceEdge
-	relevant := make(map[model.EventID]bool, len(ids))
-	totalVisits := 0
-	for _, id := range ids {
-		relevant[id] = true
-		seen := map[model.EventID]bool{}
-		event, err := r.loadEvent(ctx, id)
-		if err != nil {
-			return nil, nil, err
-		}
-		queue := append([]model.EventID(nil), event.CausalParents...)
-		for i := 0; i < len(queue); i++ {
-			if err := ctx.Err(); err != nil {
-				return nil, nil, err
-			}
-			parent := queue[i]
-			if seen[parent] {
-				continue
-			}
-			seen[parent] = true
-			totalVisits++
-			if totalVisits > maxDerivationEdges {
-				return nil, nil, storage.ErrLimit
-			}
-			if _, found := milestones[parent]; found {
-				if _, err := r.loadEvent(ctx, parent); err != nil {
-					return nil, nil, err
-				}
-				edges = append(edges, api.TaskTraceEdge{From: parent, To: id, Relation: "causal"})
-				relevant[parent] = true
-				continue
-			}
-			meta, found, err := r.metadata(ctx, parent)
-			if err != nil {
-				return nil, nil, err
-			}
-			if found && isTraceMilestoneOperation(meta.operation) {
-				if _, err := r.loadEvent(ctx, parent); err != nil {
-					return nil, nil, err
-				}
-				edges = append(edges, api.TaskTraceEdge{From: parent, To: id, Relation: "causal"})
-				relevant[parent] = true
-				continue
-			}
-			inside, err := r.inScope(ctx, parent)
-			if err != nil {
-				return nil, nil, err
-			}
-			if inside {
-				parentEvent, err := r.loadEvent(ctx, parent)
-				if err != nil {
-					return nil, nil, err
-				}
-				relevant[parent] = true
-				queue = append(queue, parentEvent.CausalParents...)
-			} else {
-				edges = append(edges, api.TaskTraceEdge{From: parent, To: id, Relation: "causal", Boundary: true})
-				relevant[parent] = true
-			}
-			if len(edges) > maxTaskTraceEdges {
-				return nil, nil, storage.ErrLimit
-			}
-		}
-	}
-	page := make(map[model.EventID]bool, len(ids))
-	for _, id := range ids {
-		page[id] = true
-	}
-	for _, assertion := range r.edit.Assertions {
-		if page[assertion.To] {
-			edges = append(edges, api.TaskTraceEdge{From: assertion.From, To: assertion.To, Relation: assertion.Relation, Reason: assertion.Reason, Evidence: assertion.Evidence})
-			relevant[assertion.From] = true
-		}
-	}
-	sort.Slice(edges, func(i, j int) bool {
-		a, b := edges[i], edges[j]
-		if a.To != b.To {
-			return a.To < b.To
-		}
-		if a.From != b.From {
-			return a.From < b.From
-		}
-		return a.Relation < b.Relation
-	})
-	deps := make([]model.EventID, 0, len(relevant))
-	for id := range relevant {
-		deps = append(deps, id)
-	}
-	return edges, deps, nil
-}
-
-func tracePage(req api.TaskTraceRequest, anchor model.SnapshotAnchor, filter any, count int) (start, end int, next string, err error) {
-	rawScope, err := json.Marshal(struct {
-		Anchor    model.SnapshotAnchor
-		Principal model.PrincipalID
-		Subject   api.TraceSubject
-		Session   string
-		Limit     int
-		Filter    any
-	}{anchor, req.Principal, req.Subject, req.Session, req.Limit, filter})
-	if err != nil {
-		return 0, 0, "", err
-	}
-	scope := string(emissionDigest(rawScope))
-	if req.Continuation != "" {
-		raw, err := readNodeToken(req.Continuation, scope)
-		if err != nil {
-			return 0, 0, "", err
-		}
-		start, err = strconv.Atoi(raw)
-		if err != nil || start < 1 || start >= count {
-			return 0, 0, "", api.ErrInvalidRequest
-		}
-	}
-	size := req.Limit
-	if size == 0 {
-		size = defaultTaskTracePage
-	}
-	end = min(start+size, count)
-	if end < count {
-		next = writeNodeToken(scope, strconv.Itoa(end))
-	}
-	return start, end, next, nil
-}
-
-func tracePositionScope(req api.TaskTraceRequest, anchor model.SnapshotAnchor) (string, error) {
-	raw, err := json.Marshal(struct {
-		Anchor    model.SnapshotAnchor
-		Principal model.PrincipalID
-		Subject   api.TraceSubject
-		Session   string
-		Limit     int
-		Filter    string
-	}{anchor, req.Principal, req.Subject, req.Session, req.Limit, "overview-position-v1"})
-	if err != nil {
-		return "", err
-	}
-	return string(emissionDigest(raw)), nil
-}
-
-func readTracePosition(req api.TaskTraceRequest, anchor model.SnapshotAnchor) (tracePosition, string, error) {
-	scope, err := tracePositionScope(req, anchor)
-	if err != nil {
-		return tracePosition{}, "", err
-	}
-	if req.Continuation == "" {
-		return tracePosition{}, scope, nil
-	}
-	raw, err := readNodeToken(req.Continuation, scope)
-	if err != nil {
-		return tracePosition{}, "", err
-	}
-	var position tracePosition
-	if json.Unmarshal([]byte(raw), &position) != nil || position.ID == "" {
-		return tracePosition{}, "", api.ErrInvalidRequest
-	}
-	return position, scope, nil
 }
 
 func (e *Engine) GetTaskTrace(ctx context.Context, req api.TaskTraceRequest) (api.TaskTraceResult, error) {
@@ -436,16 +272,14 @@ func (e *Engine) GetTaskTraceEvidence(ctx context.Context, req api.TaskTraceEvid
 	}
 	out := api.TaskTraceEvidenceResult{Anchor: r.anchor}
 	var ids []model.EventID
+	var dependencies []model.ObjectID
+	var causal *traceEvidence
 	if req.Relation == "causal" {
-		ids, err = r.between(ctx, req.From, req.To)
+		causal, err = e.causalTraceEvidence(ctx, req, r)
 		if err != nil {
 			return out, err
 		}
-		if _, inside := r.events[req.From]; !inside {
-			if err := e.loadTraceBoundary(ctx, r, req.From); err != nil {
-				return out, e.nodeReadError(ctx, err)
-			}
-		}
+		ids, dependencies = causal.ids, causal.dependencies
 	} else {
 		for _, edge := range r.edit.Assertions {
 			if edge.From == req.From && edge.To == req.To && edge.Relation == req.Relation {
@@ -463,108 +297,26 @@ func (e *Engine) GetTaskTraceEvidence(ctx context.Context, req api.TaskTraceEvid
 		return out, err
 	}
 	for _, id := range ids[start:end] {
+		if causal != nil {
+			if id == req.From && causal.externalFrom {
+				err = e.loadTraceBoundary(ctx, r, id)
+			} else {
+				_, err = r.loadEvent(ctx, id)
+			}
+			if err != nil {
+				return api.TaskTraceEvidenceResult{}, e.nodeReadError(ctx, err)
+			}
+		}
 		out.Events = append(out.Events, r.node(id, api.TraceMilestone{}))
 	}
 	out.Continuation = next
-	dependencies, err := e.taskTraceDependencies(ctx, req.TaskTraceRequest, r, ids)
-	if err != nil {
-		return api.TaskTraceEvidenceResult{}, err
+	if causal == nil {
+		dependencies, err = e.taskTraceDependencies(ctx, req.TaskTraceRequest, r, ids)
+		if err != nil {
+			return api.TaskTraceEvidenceResult{}, err
+		}
 	}
 	return finishReadDelivery(ctx, e, "get_task_trace_evidence", req.Principal, out, r.anchor, "", "", dependencies)
-}
-
-// between returns the intersection of From's descendants and To's ancestors
-// in publication order. An intervening unrelated event never enters the page.
-func (r taskTraceRead) between(ctx context.Context, from, to model.EventID) ([]model.EventID, error) {
-	insideTo, err := r.inScope(ctx, to)
-	if err != nil {
-		return nil, err
-	}
-	if !insideTo {
-		return nil, ErrNodeNotFound
-	}
-	descendants := map[model.EventID]bool{from: true}
-	queue := []model.EventID{from}
-	visits := 0
-	for i := 0; i < len(queue); i++ {
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-		children, err := r.children(ctx, queue[i])
-		if err != nil {
-			return nil, err
-		}
-		for _, child := range children {
-			inside, err := r.inScope(ctx, child.id)
-			if err != nil {
-				return nil, err
-			}
-			if !inside || descendants[child.id] {
-				continue
-			}
-			visits++
-			if visits > maxDerivationEdges {
-				return nil, storage.ErrLimit
-			}
-			if _, err := r.loadEvent(ctx, child.id); err != nil {
-				return nil, err
-			}
-			descendants[child.id] = true
-			queue = append(queue, child.id)
-		}
-	}
-	if !descendants[to] {
-		return nil, ErrNodeNotFound
-	}
-	ancestors := map[model.EventID]bool{to: true}
-	queue = []model.EventID{to}
-	for i := 0; i < len(queue); i++ {
-		id := queue[i]
-		event, err := r.loadEvent(ctx, id)
-		if err != nil {
-			return nil, err
-		}
-		for _, parent := range event.CausalParents {
-			if parent == from {
-				ancestors[parent] = true
-				continue
-			}
-			inside, err := r.inScope(ctx, parent)
-			if err != nil {
-				return nil, err
-			}
-			if inside && !ancestors[parent] {
-				visits++
-				if visits > maxDerivationEdges {
-					return nil, storage.ErrLimit
-				}
-				ancestors[parent] = true
-				queue = append(queue, parent)
-			}
-		}
-	}
-	var ids []model.EventID
-	insideFrom, err := r.inScope(ctx, from)
-	if err != nil {
-		return nil, err
-	}
-	if !insideFrom && ancestors[from] {
-		ids = append(ids, from)
-	}
-	for id := range descendants {
-		if ancestors[id] && (id != from || insideFrom) {
-			ids = append(ids, id)
-		}
-	}
-	sort.Slice(ids, func(i, j int) bool {
-		a, aFound, _ := r.metadata(ctx, ids[i])
-		b, bFound, _ := r.metadata(ctx, ids[j])
-		if !aFound || !bFound {
-			return ids[i] < ids[j]
-		}
-		return compareTracePosition(traceItemPosition(a), traceItemPosition(b)) < 0
-	})
-	return ids, nil
 }
 
 var _ api.TaskTraceCommands = (*Engine)(nil)

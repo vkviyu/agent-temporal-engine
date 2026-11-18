@@ -173,9 +173,9 @@ func TestMetadataInvalidEnvelopeAndCanonical(t *testing.T) {
 			magic, payload := string(gold[:8]), gold[8:len(gold)-32]
 			invalidVersion := byte(2)
 			if test.name == "manifest" {
-				// Manifest schema 3 is supported by the retirement/compaction
+				// Manifest schema 4 is supported by recovery checkpoints.
 				// protocol; use the next unknown version for this negative case.
-				invalidVersion = 4
+				invalidVersion = 5
 			}
 			cases := []struct {
 				name            string

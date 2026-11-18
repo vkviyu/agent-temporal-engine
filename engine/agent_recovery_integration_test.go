@@ -1,7 +1,6 @@
 package engine_test
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -195,11 +194,28 @@ func TestManagedParentChildHostRecoveryPreservesEffectAndExactContinuation(t *te
 	if err != nil {
 		t.Fatal(err)
 	}
-	beforeBytes, _ := agentprofile.EncodeSnapshot(before.Snapshot)
+	beforeImage, err := agentprofile.EncodeRecordImage(before.Snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	beforeSnapshot, err := beforeImage.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
 	s.reopen() // all worker memory is discarded; the external response was lost
 	after, err := s.e.GetAgentState(ctx, api.ReadAgentStateRequest{Space: "host-space", Principal: "host-principal"})
-	afterBytes, _ := agentprofile.EncodeSnapshot(after.Snapshot)
-	if err != nil || !bytes.Equal(beforeBytes, afterBytes) || len(after.Snapshot.Lifecycle.Continuations) != 2 || !reflect.DeepEqual(after.Snapshot.Lifecycle.Continuations[1], continuation) {
+	if err != nil {
+		t.Fatal(err)
+	}
+	afterImage, err := agentprofile.EncodeRecordImage(after.Snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	afterSnapshot, err := afterImage.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(beforeSnapshot, afterSnapshot) || len(after.Snapshot.Lifecycle.Continuations) != 2 || !reflect.DeepEqual(after.Snapshot.Lifecycle.Continuations[1], continuation) {
 		t.Fatalf("restart changed checkpoint: %+v %v", after.Snapshot.Lifecycle.Continuations, err)
 	}
 	if again := recoveryCoreControl(t, s, "root-checkpoint", checkpoint); again != checkpointAck {

@@ -100,33 +100,6 @@ func decodeImport(raw []byte) (ImportCommand, error) {
 	return c, nil
 }
 
-func applyImport(s Snapshot, c ImportCommand) (Snapshot, error) {
-	source, _, err := SelectRevision(s, c.Source.Anchor.Space, *c.Source.Anchor.Knowledge, c.Source.Anchor.Cursor.Revision)
-	if err != nil {
-		return Snapshot{}, err
-	}
-	var sequence uint64
-	for _, item := range s.Observations {
-		if item.Key == c.Target && item.Source.Anchor.Space == c.Source.Anchor.Space {
-			sequence++
-		}
-	}
-	if sequence != c.ExpectedSequence {
-		return Snapshot{}, ErrObservationSequence
-	}
-	origins := make(map[model.ObjectID]Observation, len(source.Observations))
-	for _, item := range source.Observations {
-		origins[item.ID] = item
-	}
-	out := s.Clone()
-	imported, err := ImportedObservations(c, origins)
-	if err != nil {
-		return Snapshot{}, err
-	}
-	out.Observations = append(out.Observations, imported...)
-	return out, nil
-}
-
 // ImportedObservations derives the ordered target records from origins that
 // the caller has authenticated at the selected source position.
 func ImportedObservations(c ImportCommand, origins map[model.ObjectID]Observation) ([]Observation, error) {

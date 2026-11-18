@@ -178,7 +178,19 @@ func (e *Engine) traceEventMetadata(ctx context.Context, id model.EventID) (even
 	return item, found, nil
 }
 
-func (e *Engine) traceEventInScope(ctx context.Context, id model.EventID, keys []traceEventKey, fence model.CommitFence) (bool, error) {
+// traceScope is immutable after construction and belongs to one trace request.
+// Reuse it throughout traversal instead of rebuilding it under the engine lock.
+type traceScope map[traceEventKey]struct{}
+
+func newTraceScope(keys []traceEventKey) traceScope {
+	selected := make(traceScope, len(keys))
+	for _, key := range keys {
+		selected[key] = struct{}{}
+	}
+	return selected
+}
+
+func (e *Engine) traceEventInScope(ctx context.Context, id model.EventID, selected traceScope, fence model.CommitFence) (bool, error) {
 	if err := e.mu.LockContext(ctx); err != nil {
 		return false, err
 	}
@@ -187,12 +199,8 @@ func (e *Engine) traceEventInScope(ctx context.Context, id model.EventID, keys [
 	if !found || item.entry.LSN > fence.LSN {
 		return false, nil
 	}
-	selected := make(map[traceEventKey]bool, len(keys))
-	for _, key := range keys {
-		selected[key] = true
-	}
 	for _, key := range e.traceEventKeys[id] {
-		if selected[key] {
+		if _, found := selected[key]; found {
 			return true, nil
 		}
 	}
@@ -203,10 +211,12 @@ func (e *Engine) traceEventChildren(ctx context.Context, id model.EventID, fence
 	if err := e.mu.LockContext(ctx); err != nil {
 		return nil, err
 	}
-	children := append([]eventMetadataItem(nil), e.traceCausalChildren[id]...)
-	e.mu.Unlock()
+	defer e.mu.Unlock()
+	children := e.traceCausalChildren[id]
 	end := sort.Search(len(children), func(i int) bool { return children[i].entry.LSN > fence.LSN })
-	return children[:end], nil
+	// Return owned metadata from the historical prefix only. Later children
+	// must not increase the copy cost or become visible to this request.
+	return append([]eventMetadataItem(nil), children[:end]...), nil
 }
 
 func taskTraceScope(req api.TaskTraceRequest, ledger *agentprofile.Ledger, snapshot agentprofile.Snapshot) ([]traceEventKey, error) {

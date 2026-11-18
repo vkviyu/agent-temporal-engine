@@ -17,6 +17,11 @@ func (j *Journal) VerifyPublished(ctx context.Context, replay ReplayFunc) (Publi
 		return Publication{}, 0, err
 	}
 	defer j.writerMu.Unlock()
+	return j.verifyPublishedLocked(ctx, replay)
+}
+
+// Caller holds writerMu, including across certification and publication.
+func (j *Journal) verifyPublishedLocked(ctx context.Context, replay ReplayFunc) (Publication, uint64, error) {
 	j.mu.Lock()
 	source := j.journalWriterState
 	j.mu.Unlock()

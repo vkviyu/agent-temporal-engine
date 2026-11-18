@@ -29,6 +29,10 @@ func (c *Client) ApplyAgent(ctx context.Context, r api.ApplyAgentRequest) (api.C
 	return out, err
 }
 
+// GetAgentState returns a full snapshot, with no pagination. The complete JSON
+// response must fit protocol.MaxFrameBytes (16 MiB), even when the embedded
+// record-backed state is valid and larger. Oversized responses return a
+// *protocol.Error with Code ResourceLimit and leave the connection usable.
 func (c *Client) GetAgentState(ctx context.Context, r api.ReadAgentStateRequest) (api.AgentStateResult, error) {
 	var out api.AgentStateResult
 	if err := c.principal(r.Principal); err != nil {
@@ -75,7 +79,7 @@ func validateAgentState(r api.AgentStateResult) error {
 	if !r.Found && (len(r.Snapshot.Tasks) != 0 || len(r.Snapshot.Executions) != 0 || len(r.Snapshot.Steps) != 0 || len(r.Snapshot.Invocations) != 0 || len(r.Snapshot.Actions) != 0) {
 		return protocol.ErrProtocol
 	}
-	if _, err := agentprofile.EncodeSnapshot(r.Snapshot); err != nil {
+	if err := agentprofile.ValidateStateSnapshot(r.Snapshot); err != nil {
 		return protocol.ErrProtocol
 	}
 	return nil

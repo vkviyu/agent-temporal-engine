@@ -3,6 +3,7 @@ package journalstore
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"os"
@@ -181,6 +182,175 @@ func TestRequestReceiptIsExactBeforeAndAfterReopen(t *testing.T) {
 	again, err = reopened.Append(context.Background(), retry)
 	if err != nil || !reflect.DeepEqual(again, ack) {
 		t.Fatalf("replayed retry: %+v %v", again, err)
+	}
+}
+
+func TestAppendAfterCompactionReopensWithOriginalReceipts(t *testing.T) {
+	for _, prepared := range []bool{false, true} {
+		t.Run(fmt.Sprintf("prepared=%v", prepared), func(t *testing.T) {
+			_, _, d := nativeIO(t)
+			ctx := context.Background()
+			options := storage.JournalOptions{SegmentTargetBytes: storage.MinSegmentTargetBytes, MaxPublishedTransactions: 6}
+			var projected []Record
+			apply := func(r Record) error { projected = append(projected, r); return nil }
+			prepare := func(r Record) (func(), error) {
+				return func() { projected = append(projected, r) }, nil
+			}
+			var s *Store
+			var err error
+			if prepared {
+				s, err = CreatePrepared(d, options, prepare)
+			} else {
+				s, err = Create(d, options, apply)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() {
+				if s != nil {
+					_ = s.Close()
+				}
+			}()
+			var records []Record
+			var receipts []storage.PublishedTransaction
+			var compactions uint64
+			checkReceipts := func() {
+				t.Helper()
+				before, err := s.journal.Published()
+				if err != nil {
+					t.Fatal(err)
+				}
+				d.mutations = nil
+				for i, r := range records {
+					got, ok, err := s.Lookup(r.Request)
+					if err != nil || !ok || !reflect.DeepEqual(got, receipts[i]) {
+						t.Fatalf("lookup %d: %+v %v %v; want %+v", i, got, ok, err, receipts[i])
+					}
+					got, err = s.Append(ctx, r)
+					if err != nil || !reflect.DeepEqual(got, receipts[i]) {
+						t.Fatalf("retry %d: %+v %v; want %+v", i, got, err, receipts[i])
+					}
+					got.RecordLocations[0].PayloadOffset = -1
+				}
+				after, err := s.journal.Published()
+				if err != nil || after != before || len(d.mutations) != 0 || !reflect.DeepEqual(projected, records) {
+					t.Fatalf("retry mutated state: before=%+v after=%+v err=%v mutations=%v", before, after, err, d.mutations)
+				}
+				got, err := s.ReadRecords()
+				if err != nil || !reflect.DeepEqual(got, records) {
+					t.Fatalf("records after compaction: %+v %v", got, err)
+				}
+			}
+			reopen := func() {
+				t.Helper()
+				if err := s.Close(); err != nil {
+					t.Fatal(err)
+				}
+				projected = nil
+				var report Report
+				if prepared {
+					s, report, err = OpenPrepared(d, options, prepare)
+				} else {
+					s, report, err = Open(d, options, apply)
+				}
+				if err != nil || report.ScannedTransactions != uint64(len(records)) {
+					t.Fatalf("reopen after compaction and append: %+v %v", report, err)
+				}
+				checkReceipts()
+			}
+			for round := 0; round < 3; round++ {
+				if round > 0 {
+					if err := s.Close(); err != nil {
+						t.Fatal(err)
+					}
+					j, _, err := storage.OpenJournal(d, options)
+					if err != nil {
+						t.Fatal(err)
+					}
+					for n := 0; n < round; n++ {
+						report, err := j.CompactAuditFull(ctx)
+						if err != nil {
+							_ = j.Close()
+							t.Fatal(err)
+						}
+						if report.After.Generation != report.Before.Generation+1 ||
+							report.After.Position != report.Before.Position ||
+							report.After.PublishedEnd != report.Before.PublishedEnd ||
+							report.After.PostRootSet != report.Before.PostRootSet {
+							t.Fatalf("compaction changed logical publication: %+v", report)
+						}
+						compactions++
+					}
+					if err := j.Close(); err != nil {
+						t.Fatal(err)
+					}
+					reopen()
+				}
+				for n := 0; n < 2; n++ {
+					r := testRecord(fmt.Sprintf("record-%d", len(records)+1))
+					ack, err := s.Append(ctx, r)
+					if err != nil {
+						t.Fatal(err)
+					}
+					records = append(records, r)
+					receipts = append(receipts, cloneResult(ack))
+					if ack.Publication.Position.LSN != uint64(len(records)) ||
+						ack.Publication.Generation != uint64(len(records))+compactions {
+						t.Fatalf("logical and physical counters: %+v", ack)
+					}
+					checkReceipts()
+				}
+				reopen()
+			}
+			d.mutations = nil
+			out, err := s.Append(ctx, testRecord("over-quota"))
+			zeroResult(t, out)
+			if !errors.Is(err, storage.ErrLimit) || len(d.mutations) != 0 {
+				t.Fatalf("quota rejection mutated journal: %v %v", err, d.mutations)
+			}
+			changed := testRecord("record-1")
+			changed.Payload = []byte("different")
+			out, err = s.Append(ctx, changed)
+			zeroResult(t, out)
+			if !errors.Is(err, ErrIdempotencyConflict) || len(d.mutations) != 0 {
+				t.Fatalf("conflict lost at quota: %v %v", err, d.mutations)
+			}
+			checkReceipts()
+		})
+	}
+}
+
+func TestNextMetadataChecksBothCounters(t *testing.T) {
+	const max = ^uint64(0)
+	for _, tc := range []struct {
+		name            string
+		lsn, generation uint64
+		overflow        bool
+	}{
+		{"genesis", 0, 0, false},
+		{"after compaction", 7, 10, false},
+		{"last generation", 7, max - 1, false},
+		{"last LSN", max - 1, max - 1, false},
+		{"generation exhausted", 7, max, true},
+		{"LSN exhausted", max, max - 1, true},
+		{"both exhausted", max, max, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			raw, err := nextMetadata(storage.Publication{Position: storage.Position{LSN: tc.lsn}, Generation: tc.generation})
+			if tc.overflow {
+				if !errors.Is(err, storage.ErrLimit) || raw != nil {
+					t.Fatalf("overflow returned metadata: %x %v", raw, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := decodeMetadata(raw)
+			if err != nil || got.lsn != tc.lsn+1 || got.generation != tc.generation+1 {
+				t.Fatalf("counter mismatch: %+v %v", got, err)
+			}
+		})
 	}
 }
 
@@ -427,7 +597,11 @@ func TestClosingFailureRejectsReadsAndWritesUntilRetry(t *testing.T) {
 }
 
 func TestReplayChecksKindScopeCommitmentsAndDuplicateKeys(t *testing.T) {
-	for _, kind := range []string{"kind", "request", "receipt", "root", "metadata", "duplicate"} {
+	for _, kind := range []string{
+		"kind", "request", "receipt", "root", "metadata", "duplicate",
+		"zero LSN", "future LSN", "zero generation", "generation before LSN",
+		"repeated generation", "regressed generation", "legacy metadata",
+	} {
 		t.Run(kind, func(t *testing.T) {
 			_, _, d := nativeIO(t)
 			j, err := storage.CreateJournal(d, storage.JournalOptions{})
@@ -435,16 +609,39 @@ func TestReplayChecksKindScopeCommitmentsAndDuplicateKeys(t *testing.T) {
 				t.Fatal(err)
 			}
 			count := 1
-			if kind == "duplicate" {
+			if kind == "duplicate" || kind == "generation before LSN" || kind == "repeated generation" || kind == "regressed generation" {
 				count = 2
+			}
+			if kind == "repeated generation" || kind == "regressed generation" {
+				for i := 0; i < 2; i++ {
+					if _, err := j.CompactAuditFull(context.Background()); err != nil {
+						t.Fatal(err)
+					}
+				}
 			}
 			for i := 0; i < count; i++ {
 				r := testRecord("r")
+				if kind != "duplicate" {
+					r = testRecord(fmt.Sprintf("r-%d", i))
+				}
 				p, err := j.Published()
 				if err != nil {
 					t.Fatal(err)
 				}
-				tx := storage.Transaction{TxID: model.TxID(fmt.Sprintf("%032x", i+1)), Request: r.Request, RequestDigest: requestDigest(r), LSN: p.Position.LSN + 1, PreviousDigest: p.Position.Digest, Records: []storage.Record{{Kind: r.Kind, Payload: r.Payload}}, RefUpdates: encodeMetadata(p.Generation + 1), Receipt: receiptDigest(r), PostRootSet: recordDigest(r)}
+				tx := storage.Transaction{
+					TxID:           model.TxID(fmt.Sprintf("%032x", i+1)),
+					Request:        r.Request,
+					RequestDigest:  requestDigest(r),
+					LSN:            p.Position.LSN + 1,
+					PreviousDigest: p.Position.Digest,
+					Records: []storage.Record{{
+						Kind:    r.Kind,
+						Payload: r.Payload,
+					}},
+					RefUpdates:  encodeMetadata(p.Position.LSN+1, p.Generation+1),
+					Receipt:     receiptDigest(r),
+					PostRootSet: recordDigest(r),
+				}
 				switch kind {
 				case "kind":
 					tx.Records[0].Kind = storage.KindRevision
@@ -456,6 +653,27 @@ func TestReplayChecksKindScopeCommitmentsAndDuplicateKeys(t *testing.T) {
 					tx.PostRootSet[0] ^= 1
 				case "metadata":
 					tx.RefUpdates = nil
+				case "zero LSN":
+					tx.RefUpdates = encodeMetadata(0, 1)
+				case "future LSN":
+					tx.RefUpdates = encodeMetadata(2, 2)
+				case "zero generation":
+					tx.RefUpdates = encodeMetadata(1, 0)
+				case "generation before LSN":
+					if i == 1 {
+						tx.RefUpdates = encodeMetadata(2, 1)
+					}
+				case "repeated generation":
+					if i == 1 {
+						tx.RefUpdates = encodeMetadata(2, 3)
+					}
+				case "regressed generation":
+					if i == 1 {
+						tx.RefUpdates = encodeMetadata(2, 2)
+					}
+				case "legacy metadata":
+					tx.RefUpdates = append([]byte("ATE-JOURNALSTORE-1\x00"), make([]byte, 8)...)
+					binary.BigEndian.PutUint64(tx.RefUpdates[len(tx.RefUpdates)-8:], 1)
 				}
 				if _, err = j.Publish(context.Background(), tx); err != nil {
 					t.Fatal(err)
@@ -470,7 +688,10 @@ func TestReplayChecksKindScopeCommitmentsAndDuplicateKeys(t *testing.T) {
 			if opened != nil || err == nil || report.Verified || len(d.mutations) != 0 {
 				t.Fatalf("malformed adapter log accepted: %+v %v mutations=%v", report, err, d.mutations)
 			}
-			if kind != "duplicate" && called {
+			if kind == "legacy metadata" && !errors.Is(err, storage.ErrUnsupported) {
+				t.Fatalf("old schema not explicitly rejected: %v", err)
+			}
+			if count == 1 && called {
 				t.Fatal("unchecked commitments reached semantic callback")
 			}
 		})
@@ -590,7 +811,7 @@ func TestRequestScopeAndKindHaveDistinctIdentities(t *testing.T) {
 			t.Fatalf("unbound request identity: %+v", other)
 		}
 	}
-	if strings.Contains(string(encodeMetadata(1)), "payload") {
+	if strings.Contains(string(encodeMetadata(1, 1)), "payload") {
 		t.Fatal("metadata unexpectedly contains caller payload")
 	}
 }

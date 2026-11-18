@@ -122,9 +122,14 @@ func TestSummaryCoreRejectsForgedProvenanceWithoutFencing(t *testing.T) {
 		"unknown-result":   func(s *knowledge.Summary) { s.Generation.Result = "missing-result" },
 		"claimed-model":    func(s *knowledge.Summary) { s.Generation.Model = "different-model" },
 		"input-object":     func(s *knowledge.Summary) { s.Generation.Input.Object = s.Generation.Output.Object },
-		"input-encoding":   func(s *knowledge.Summary) { s.Generation.Input.Encoding = "different-framing" },
-		"output-object":    func(s *knowledge.Summary) { s.Generation.Output.Object = s.Sources[0].Content },
-		"unknown-content":  func(s *knowledge.Summary) { s.Generation.Output.Object = model.ObjectID(integrationID('f')) },
+		// The input bytes remain visible at this later cut, but generation
+		// must still reference the exact anchor recorded in its packet.
+		"input-anchor": func(s *knowledge.Summary) {
+			s.Generation.Input.Anchor = s.Generation.Output.Anchor.Clone()
+		},
+		"input-encoding":  func(s *knowledge.Summary) { s.Generation.Input.Encoding = "different-framing" },
+		"output-object":   func(s *knowledge.Summary) { s.Generation.Output.Object = s.Sources[0].Content },
+		"unknown-content": func(s *knowledge.Summary) { s.Generation.Output.Object = model.ObjectID(integrationID('f')) },
 		"forged-source": func(s *knowledge.Summary) {
 			s.Source.Anchor.Fence.CommitDigest = model.CommitDigest(integrationID('b'))
 		},

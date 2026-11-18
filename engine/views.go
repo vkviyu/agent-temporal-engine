@@ -14,6 +14,7 @@ import (
 	"github.com/vkviyu/agent-temporal-engine/api"
 	"github.com/vkviyu/agent-temporal-engine/codec"
 	"github.com/vkviyu/agent-temporal-engine/model"
+	"github.com/vkviyu/agent-temporal-engine/observation"
 	"github.com/vkviyu/agent-temporal-engine/state"
 	"github.com/vkviyu/agent-temporal-engine/storage"
 )
@@ -144,7 +145,12 @@ func (e *Engine) stopViews() {
 		e.finishViewRetirement(view.entry, view.pin)
 	}
 }
-func (e *Engine) waitViews(ctx context.Context) error {
+func (e *Engine) waitViews(ctx context.Context) (err error) {
+	var start time.Time
+	var owners uint64
+	defer func() {
+		e.options.Observation.Finish(start, observation.Event{Kind: observation.PinWait, Outcome: observationOutcome(err), Count: owners})
+	}()
 	v := &e.views
 	for {
 		v.mu.Lock()
@@ -154,6 +160,10 @@ func (e *Engine) waitViews(ctx context.Context) error {
 			return nil
 		}
 		changed := v.changed
+		if start.IsZero() && e.options.Observation.Enabled() {
+			start = e.options.Observation.Start()
+			owners = uint64(v.pending + v.retiring + v.readers + len(v.entries))
+		}
 		v.mu.Unlock()
 		select {
 		case <-changed:
@@ -380,7 +390,12 @@ func (e *Engine) viewDomainRoot(ctx context.Context, entry *viewEntry) (model.Ob
 	return domainRoot(ctx, e.reader(ctx), entry.roots, entry.descriptor.Anchor.Space)
 }
 
-func (e *Engine) CloseView(ctx context.Context, req api.CloseViewRequest) error {
+func (e *Engine) CloseView(ctx context.Context, req api.CloseViewRequest) (err error) {
+	var start time.Time
+	var owners uint64
+	defer func() {
+		e.options.Observation.Finish(start, observation.Event{Kind: observation.PinWait, Outcome: observationOutcome(err), Count: owners})
+	}()
 	v := &e.views
 	v.mu.Lock()
 	v.init()
@@ -395,6 +410,13 @@ func (e *Engine) CloseView(ctx context.Context, req api.CloseViewRequest) error 
 	e.finishViewRetirement(entry, pin)
 	v.mu.Lock()
 	for entry.active > 0 || entry.retiring {
+		if start.IsZero() && e.options.Observation.Enabled() {
+			start = e.options.Observation.Start()
+			owners = uint64(entry.active)
+			if entry.retiring {
+				owners++
+			}
+		}
 		changed := v.changed
 		v.mu.Unlock()
 		select {
@@ -537,7 +559,8 @@ func (e *Engine) GetViewEntries(ctx context.Context, req api.ReadViewEntriesRequ
 		return api.StateEntriesResult{}, e.viewReadFailure(err)
 	}
 	entries, err := state.Entries(ctx, e.reader(ctx), space, root, state.ScanLimits{
-		MaxNodes: req.Limits.MaxNodes, MaxEntries: req.Limits.MaxEntries,
+		Observation: e.options.Observation,
+		MaxNodes:    req.Limits.MaxNodes, MaxEntries: req.Limits.MaxEntries,
 		MaxBytes: req.Limits.MaxBytes, MaxReadBytes: req.Limits.MaxReadBytes,
 	})
 	if err != nil {

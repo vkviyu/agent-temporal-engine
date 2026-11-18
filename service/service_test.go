@@ -3,18 +3,145 @@ package service
 import (
 	"context"
 	"errors"
-	ate "github.com/vkviyu/agent-temporal-engine"
-	"github.com/vkviyu/agent-temporal-engine/api"
-	"github.com/vkviyu/agent-temporal-engine/client"
-	"github.com/vkviyu/agent-temporal-engine/model"
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"testing"
 	"time"
+
+	ate "github.com/vkviyu/agent-temporal-engine"
+	"github.com/vkviyu/agent-temporal-engine/api"
+	"github.com/vkviyu/agent-temporal-engine/client"
+	"github.com/vkviyu/agent-temporal-engine/model"
 )
+
+type capabilityProfileFlags struct {
+	Backend
+	enabled bool
+}
+
+func (b capabilityProfileFlags) AgentProfileEnabled() bool { return b.enabled }
+func (b capabilityProfileFlags) EventProfileEnabled() bool { return b.enabled }
+func (b capabilityProfileFlags) TaskTraceEnabled() bool    { return b.enabled }
+
+func TestCapabilitiesMatchHelloForOptionalBackends(t *testing.T) {
+	// Nil embedded interfaces expose only the selected method sets. Any data
+	// access during capability discovery or hello would panic.
+	for _, tc := range []struct {
+		name    string
+		backend Backend
+		extra   []string
+	}{
+		{"core-only", struct{ Backend }{}, nil},
+		{"readers-without-grants", struct {
+			Backend
+			api.BasicNodeReader
+			api.NodeExplorer
+			api.ContentReader
+		}{}, nil},
+		{"grants-without-readers", struct {
+			Backend
+			api.ReadDeliveryPreparer
+		}{}, nil},
+		{"node-reader-with-grants", struct {
+			Backend
+			api.BasicNodeReader
+			api.ReadDeliveryPreparer
+		}{}, []string{"core/node-query-v1"}},
+		{"node-explorer-with-grants", struct {
+			Backend
+			api.NodeExplorer
+			api.ReadDeliveryPreparer
+		}{}, []string{"core/node-explore-v1"}},
+		{"content-emission-reader", struct {
+			Backend
+			api.ContentEmissionReader
+		}{}, []string{"core/content-range-v1"}},
+		{"publication-resolver", struct {
+			Backend
+			api.PublicationResolver
+		}{}, []string{"core/publication-ref-v1"}},
+		{"graph-queries", struct {
+			Backend
+			api.GraphQueries
+		}{}, []string{"graph/query-v1"}},
+		{"graph-commands", struct {
+			Backend
+			api.GraphCommands
+		}{}, []string{"graph/v1"}},
+		{"memory-commands", struct {
+			Backend
+			api.MemoryCommands
+		}{}, []string{"memory/v1"}},
+		{"knowledge-commands", struct {
+			Backend
+			api.KnowledgeCommands
+		}{}, []string{"knowledge/v1"}},
+		{"annotation-commands", struct {
+			Backend
+			api.AnnotationCommands
+		}{}, []string{"annotation/v1"}},
+		{"investigation-without-grants", struct {
+			Backend
+			api.InvestigationCommands
+		}{}, nil},
+		{"investigation-with-grants", struct {
+			Backend
+			api.InvestigationCommands
+			api.ReadDeliveryPreparer
+		}{}, []string{"investigation/v1"}},
+		{"transfer-commands", struct {
+			Backend
+			api.TransferCommands
+		}{}, []string{"transfer/archive-v1"}},
+		{"profile-flags-without-commands", capabilityProfileFlags{enabled: true}, []string{"event/v1"}},
+		{"profile-commands-without-flags", struct {
+			Backend
+			api.AgentCommands
+			api.TaskTraceCommands
+		}{}, nil},
+		{"profiles-disabled", struct {
+			capabilityProfileFlags
+			api.AgentCommands
+			api.TaskTraceCommands
+		}{}, nil},
+		{"profiles-enabled", struct {
+			capabilityProfileFlags
+			api.AgentCommands
+			api.TaskTraceCommands
+		}{capabilityProfileFlags: capabilityProfileFlags{enabled: true}}, []string{"agent/v1", "event/v1", "agent/task-trace-v1"}},
+		{"record-reader-without-grants", struct {
+			capabilityProfileFlags
+			api.AgentRecordReader
+		}{capabilityProfileFlags: capabilityProfileFlags{enabled: true}}, []string{"event/v1"}},
+		{"record-reader-with-grants", struct {
+			capabilityProfileFlags
+			api.AgentRecordReader
+			api.ReadDeliveryPreparer
+		}{capabilityProfileFlags: capabilityProfileFlags{enabled: true}}, []string{"agent/record-read-v1", "event/v1"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := newServer(t, tc.backend, Options{})
+			want := append([]string{"core/storage-v1", "core/state-view-v1", "protocol/local-v1"}, tc.extra...)
+			got := s.Capabilities()
+			if !slices.Equal(got, want) {
+				t.Fatalf("capabilities = %v, want %v", got, want)
+			}
+			// A caller cannot change future discovery or hello results.
+			got[0] = "caller-modified"
+			if got := s.Capabilities(); !slices.Equal(got, want) {
+				t.Fatalf("capabilities shared caller-owned storage: %v", got)
+			}
+			c := pipeClient(t, s, "secret")
+			if got := c.Identity().Capabilities; !slices.Equal(got, want) {
+				t.Fatalf("hello capabilities = %v, want %v", got, want)
+			}
+		})
+	}
+}
 
 func TestLocalServiceClientConformance(t *testing.T) {
 	dir, err := os.MkdirTemp("/tmp", "ate-svc-")
@@ -51,8 +178,9 @@ func TestLocalServiceClientConformance(t *testing.T) {
 	done := make(chan error, 1)
 	go func() { done <- srv.Serve(ctx) }()
 	defer func() { _ = srv.Shutdown(context.Background()); <-done }()
-	time.Sleep(10 * time.Millisecond)
-	c, err := client.Dial(context.Background(), sock, client.Options{Token: "secret"})
+	dialCtx, dialCancel := context.WithTimeout(ctx, 3*time.Second)
+	defer dialCancel()
+	c, err := client.Dial(dialCtx, sock, client.Options{Token: "secret"})
 	if err != nil {
 		t.Fatal(err)
 	}

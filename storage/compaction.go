@@ -186,6 +186,7 @@ func (j *Journal) CompactAuditFull(ctx context.Context) (report CompactionReport
 		return report, err
 	}
 	m := Manifest{Store: before.Store, Generation: before.Generation + 1, ManifestID: manifestID, SegmentID: segmentID, SegmentHeaderDigest: Digest(sha256.Sum256(header)), PublishedEnd: before.PublishedEnd, PrefixDigest: hashDigest(prefix), Position: before.Position, PostRootSet: before.PostRootSet, LayoutSource: &source}
+	m.RecoveryCheckpoint = sourceManifest.RecoveryCheckpoint
 	for _, s := range sourceSegments {
 		m.RetiredSegments = append(m.RetiredSegments, s.descriptor)
 	}

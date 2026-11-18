@@ -2,30 +2,40 @@ package knowledge
 
 import (
 	"bytes"
-	"github.com/vkviyu/agent-temporal-engine/model"
+	"reflect"
 	"testing"
 )
 
-func TestSnapshotRoundTripAndCommand(t *testing.T) {
-	f := model.CommitFence{Store: "store", LSN: 1, CommitDigest: model.CommitDigest("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")}
-	a := model.SnapshotAnchor{Fence: f, Space: "space"}
-	o := Observation{ID: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", Key: model.KnowledgeKey{Actor: "actor", Execution: "exec"}, Source: SourceAnchor{Anchor: a}, Payload: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", Sequence: 1, Label: "tool"}
-	// IDs are content identities in the public contract; build the canonical ID.
-	o.ID = ObservationID(o)
-	s, e := ApplyCommand(Snapshot{}, Command{Observation: &o})
-	if e != nil {
-		t.Fatal(e)
+func TestSnapshotDTOFromCanonicalRecords(t *testing.T) {
+	o := snapshotObservation("space", "one", 1)
+	p := snapshotPacket(o)
+	observationRaw, err := o.Canonical()
+	if err != nil {
+		t.Fatal(err)
 	}
-	raw, e := EncodeSnapshot(s)
-	if e != nil {
-		t.Fatal(e)
+	packetRaw, err := p.Canonical()
+	if err != nil {
+		t.Fatal(err)
 	}
-	got, e := DecodeSnapshot(raw)
-	if e != nil {
-		t.Fatal(e)
+	observation, err := DecodeObservation(observationRaw)
+	if err != nil {
+		t.Fatal(err)
 	}
-	again, e := EncodeSnapshot(got)
-	if e != nil || !bytes.Equal(raw, again) {
-		t.Fatalf("canonical: %v", e)
+	packet, err := DecodePacket(packetRaw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := Snapshot{Observations: []Observation{observation}, Packets: []ContextPacket{packet}}
+	if err := got.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got, Snapshot{Observations: []Observation{o}, Packets: []ContextPacket{p}}) {
+		t.Fatal("canonical records changed DTO values")
+	}
+	if again, err := observation.Canonical(); err != nil || !bytes.Equal(observationRaw, again) {
+		t.Fatalf("observation canonical bytes changed: %v", err)
+	}
+	if again, err := packet.Canonical(); err != nil || !bytes.Equal(packetRaw, again) {
+		t.Fatalf("packet canonical bytes changed: %v", err)
 	}
 }

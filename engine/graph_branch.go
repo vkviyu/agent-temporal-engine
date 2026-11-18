@@ -120,12 +120,14 @@ func (e *Engine) prepareForkLocal(ctx context.Context, req api.CommitRequest, di
 }
 
 func (e *Engine) checkBranchUse(ctx context.Context, space model.SpaceID, revisions ...graph.Revision) error {
-	var ids []model.ObjectID
+	// Callers resolve revisions in the Space and authorize the branch scope
+	// before collecting logical revision and physical content dependencies.
+	var dependencies []policyDependency
 	for _, revision := range revisions {
-		ids = append(ids, model.ObjectID(revision.ID))
-		ids = append(ids, graph.ContentReferences(revision)...)
+		dependencies = append(dependencies, policyDependency{kind: policyRevision, id: model.ObjectID(revision.ID)})
+		dependencies = append(dependencies, objectPolicyDependencies(graph.ContentReferences(revision)...)...)
 	}
-	return e.checkPolicyIDs(ctx, space, ids, memory.AccessReuse)
+	return e.checkPolicyIDs(ctx, space, policyIdentities(dependencies), memory.AccessReuse)
 }
 
 // prepareWriteBranch derives the new revision from the pinned branch root,
@@ -242,7 +244,7 @@ func (e *Engine) prepareJoinLocal(ctx context.Context, req api.CommitRequest, di
 }
 
 func (e *Engine) finishLocalRevision(ctx context.Context, req api.CommitRequest, digest model.ObjectID, txID model.TxID, lsn uint64, recorded *operationsRecord, b *objectBuilder, branch graph.Branch, revision graph.Revision) (*commitPlan, error) {
-	if err := verifyContentClosure(ctx, b, graph.ContentReferences(revision)); err != nil {
+	if err := verifyContentClosure(ctx, b, physicalReferences(graph.ContentReferences(revision))); err != nil {
 		return nil, err
 	}
 	branch.Head = revision.ID

@@ -2,11 +2,32 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-ATE 是一个面向 Agent 的时间引擎。
+ATE 是外部 Agent 系统的持久化时间轨迹、知识和恢复层。
 
-它为外部 Agent 系统提供一种持久化方式，用来记录：发生了什么、发生在什么时候、某个 Agent 在当时知道什么、哪些决策依赖这些信息，以及发生故障后可以从哪里继续执行。
+当一项工作会持续超过一个进程或一段对话时，可以使用 ATE。它记录发生了
+什么、发生在什么时候、Agent 做出决策时知道什么、父子 Execution 如何关联，
+以及发生故障后可以从哪里安全继续。它把长程 Agent 任务变成一段可以校验、
+查询、分支和恢复的历史。
 
-ATE 刻意不承担 Agent Loop。它不会替 Agent 思考，不会自己调用模型，不会执行工具，也不会管理工作区。这些职责由宿主 Agent 系统负责；ATE 负责记录、校验和回溯由这些行为形成的时间轨迹。
+ATE 刻意不承担 Agent Loop。它不会替 Agent 思考，不会自己调用模型，不会执行
+工具，也不会管理工作区。这些职责由宿主 Agent 系统负责；ATE 负责记录和校验
+这些行为形成的时间轨迹。
+
+## ATE 提供什么能力
+
+ATE 可以让外部 Agent 系统：
+
+- 让一项任务持续运行数天或数周，并在进程重启后继续执行而不丢失执行历史；
+- 让 Root Agent 协调多个子 Agent，同时明确隔离它们的发现、owner 和知识边界；
+- 解释 Agent 做出某次决策时究竟知道什么，不必从一段混杂的对话记录中重新猜测上下文；
+- 让一个 Agent 显式采用另一个 Agent 的结果，同时保留结果来源和历史含义；
+- 在重试、重启或外部效果未知后恢复工作，不把未经确认的外部操作当成成功；
+- 查看任务在历史某个时间点的状态，并追踪某个结果或决策为什么对当时的 Agent 可见；
+- 在相互隔离的分支中探索不同领域状态，并显式合并最终选择的结果；
+- 通过嵌入式 Go 宿主或本地 Unix 服务接入同一套持久化任务模型。
+
+ATE 提供的是持久化记录和校验边界。宿主仍然决定调用哪个模型或工具，执行
+外部操作，并对账真实世界中的结果。
 
 ## 为什么需要时间引擎？
 
@@ -106,9 +127,9 @@ Pending Action → Authority → Continuation → Resume
 
 核心身份和时间类型位于 [`model/`](model/)，公共 API 契约位于 [`api/`](api/)。
 
-## ATE 当前提供什么
+## 这些能力如何实现
 
-ATE 当前已经提供以下核心机制：
+当前实现用以下核心机制支撑上面的能力：
 
 - 不可变、内容寻址的对象；
 - 历史快照和基于 Anchor 的读取；
@@ -169,6 +190,8 @@ ATE
 
 Go SDK 和 Unix Socket 的方法、参数、返回值及调用示例见 [ATE API 参考](docs/ATE_API_REFERENCE.md)。
 
+后续整体重构的任务清单、依赖顺序、验收标准和进度统一维护在 [ATE 全库重构主计划](docs/ATE_REFACTOR_MASTER_PLAN.md)。
+
 如果你刚开始理解这个项目，建议按下面的顺序阅读：
 
 1. [`docs/AGENT_TEMPORAL_ENGINE_DESIGN.md`](docs/AGENT_TEMPORAL_ENGINE_DESIGN.md)：整体设计和语义。
@@ -183,13 +206,21 @@ Go SDK 和 Unix Socket 的方法、参数、返回值及调用示例见 [ATE API
 项目目标使用 Go 1.27.0：
 
 ```sh
-go test ./...
-go test -race ./...
-go vet ./...
+go run ./scripts/verify full
+go run ./scripts/verify race
 ```
+
+统一入口执行测试、vet、build、格式和 diff 检查，并在仓库外的私有报告目录中记录源码指纹、执行结果和跳过的测试。快速检查、报告选项与验证边界见 [验证入口说明](docs/validation/VERIFY.md)。
 
 状态存储初始化、恢复、本地服务和格式细节见 [`docs/ATE_IMPLEMENTATION_STATUS.zh-CN.md`](docs/ATE_IMPLEMENTATION_STATUS.zh-CN.md)。
 
 ## 项目状态
 
-ATE 当前是一个实验性的 V1 实现。核心状态、Agent Profile、Graph、Knowledge、Memory、查询、恢复和本地服务路径已经实现，并有包级和集成测试覆盖。Strict V1 acceptance、Linux 原生持久性、设备掉电认证以及广泛意义上的外部 exactly-once 保证，仍然属于明确的证据边界。
+ATE 当前是一个实验性的 V1 实现。核心状态、Agent Profile、Graph、Knowledge、
+Memory、查询、恢复和本地服务路径已经实现，并有包级和集成测试覆盖。R23–R25
+已经完成 adapter 锁、内存/index/cache 以及逻辑配额的第一阶段基线；R14 仍等待
+mutation-delta 等价性和成本证据。Strict V1 acceptance、最终 full/race/native
+验证以及部分外部 durability 证据仍未关闭。设备掉电认证和广泛意义上的外部
+exactly-once 保证不在当前声明范围内。当前范围和证据见
+[ATE 全库重构主计划](docs/ATE_REFACTOR_MASTER_PLAN.md) 和
+[实现状态](docs/ATE_IMPLEMENTATION_STATUS.zh-CN.md)。

@@ -24,6 +24,9 @@ type RecoveryReport struct {
 	QuarantineFiles             []string
 	ReclaimedSegments           []string
 	DiscardedCompactionSegments []string
+	// CheckpointTransactions counts certified reducer transitions skipped.
+	// ScannedTransactions still counts the complete physical audit prefix.
+	CheckpointTransactions uint64
 }
 
 // OpenJournal follows CURRENT only. It never falls back to a different manifest
@@ -35,6 +38,10 @@ func OpenJournal(d DurableIO, options JournalOptions) (*Journal, RecoveryReport,
 }
 
 func openJournal(d DurableIO, options JournalOptions, replay ReplayFunc) (_ *Journal, report RecoveryReport, err error) {
+	return openJournalCheckpoint(d, options, replay, nil)
+}
+
+func openJournalCheckpoint(d DurableIO, options JournalOptions, replay ReplayFunc, load CheckpointLoader) (_ *Journal, report RecoveryReport, err error) {
 	o, err := checkIO(d, options)
 	if err != nil {
 		return nil, report, err
@@ -66,17 +73,24 @@ func openJournal(d DurableIO, options JournalOptions, replay ReplayFunc) (_ *Jou
 		}
 	}()
 	metadata, err := readRecoveryMetadata(d, o)
+	// Failed metadata reads can still own intent handles; adopt them before
+	// returning so deferred cleanup retires every file before the owner lock.
+	compactions = metadata.compactions
 	if err != nil {
 		return nil, report, err
 	}
 	current := metadata.current
 	id := metadata.identity
 	m := metadata.manifest
-	compactions = metadata.compactions
 	genesis := metadata.genesis
 	descriptors := metadata.descriptors
 	var activeSize int64
 	segments, activeSize, err = openReferencedSegments(d, descriptors)
+	if err != nil {
+		return nil, report, err
+	}
+	replay, report.CheckpointTransactions, err = prepareCheckpointReplay(d, m,
+		logicalReader{segments: snapshotReadSegments(segments), end: m.PublishedEnd}, replay, load)
 	if err != nil {
 		return nil, report, err
 	}
@@ -105,6 +119,17 @@ func openJournal(d DurableIO, options JournalOptions, replay ReplayFunc) (_ *Jou
 	orphans, err = collectOrphans(d, compactionIgnoredDescriptors(descriptors, m, compactions), &report)
 	if err != nil {
 		return nil, report, err
+	}
+	// A successful CURRENT replacement can still be non-durable at the root
+	// directory. Stabilize that selection before removing any source layout
+	// which the previous durable CURRENT may still require after a crash.
+	if len(compactions) > 0 || len(m.RetiredSegments) > 0 {
+		if err = d.SyncDir("."); err != nil {
+			return nil, report, fmt.Errorf(
+				"%w: layout publication stabilization: %w",
+				ErrRecoveryIncomplete, err,
+			)
+		}
 	}
 	if err = cleanupCompactionIntents(d, m, genesis, compactions, &report); err != nil {
 		return nil, report, fmt.Errorf("%w: compaction staging cleanup: %w", ErrRecoveryIncomplete, err)

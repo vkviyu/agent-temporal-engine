@@ -38,18 +38,9 @@ func (e *Engine) nodeReadDeliveryDependencies(ctx context.Context, entry *viewEn
 	return dependencies, nil
 }
 
+// nodeReadRefID returns only a policy identity, never a physical read address.
+// NodeObject selectors also name embedded Knowledge records; catalog resolution
+// and authorization must precede using their digest at the policy boundary.
 func nodeReadRefID(ref model.NodeRef) model.ObjectID {
-	switch ref.Kind {
-	case model.NodeObject:
-		return ref.Object
-	case model.NodeRevision:
-		return model.ObjectID(ref.Revision)
-	case model.NodeEvent:
-		return model.ObjectID(ref.Event)
-	case model.NodeEntity:
-		if model.ValidDigest(string(ref.Entity.ID)) {
-			return model.ObjectID(ref.Entity.ID)
-		}
-	}
-	return ""
+	return policyIdentities([]policyDependency{nodePolicyDependency(ref)})[0]
 }

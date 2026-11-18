@@ -91,11 +91,9 @@ func (e *Engine) installEvent(p *commitPlan) {
 		e.events[event.ID] = eventEntry{Space: event.Space, Principal: event.RecordedBy, LSN: p.transaction.LSN, Transaction: event.Transaction}
 		item := eventMetadataItem{id: event.ID, entry: e.events[event.ID], operation: event.Attribution.Operation, ordinal: event.Attribution.Ordinal}
 		block.entries = append(block.entries, item)
-		if e.traceEventMeta == nil {
-			e.traceEventMeta = make(map[model.EventID]eventMetadataItem)
+		if !e.skipTaskTraceIndex {
+			e.indexTaskTraceEvent(event, e.events[event.ID])
 		}
-		e.traceEventMeta[event.ID] = item
-		e.indexTaskTraceEvent(event, e.events[event.ID])
 		e.eventHeads[profileStreamKey(event.Space, event.RecordedBy, event.Stream)] = eventHead{ID: event.ID, Sequence: event.Sequence}
 		e.eventHeads[profileFactKey(event.Space, event.RecordedBy, event.Attribution.Operation, string(event.Attribution.Subject.ID))] = eventHead{ID: event.ID}
 	}

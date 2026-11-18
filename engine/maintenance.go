@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/vkviyu/agent-temporal-engine/observation"
 	"github.com/vkviyu/agent-temporal-engine/storage"
 )
 
@@ -12,7 +13,11 @@ import (
 // only its physical layout. Full history is the retention root: no current or
 // historical object, receipt, unknown effect or independent event is swept.
 // Existing views keep their exact logical object addresses and anchors.
-func (e *Engine) CompactAuditFull(ctx context.Context) (storage.CompactionReport, error) {
+func (e *Engine) CompactAuditFull(ctx context.Context) (report storage.CompactionReport, err error) {
+	start := e.options.Observation.Start()
+	defer func() {
+		e.options.Observation.Finish(start, observation.Event{Kind: observation.Compaction, Outcome: observationOutcome(err), Count: uint64(report.RetiredSegments), Bytes: report.CopiedBytes})
+	}()
 	if err := e.publicGate(); err != nil {
 		return storage.CompactionReport{}, err
 	}
@@ -31,7 +36,7 @@ func (e *Engine) CompactAuditFull(ctx context.Context) (storage.CompactionReport
 	e.publicationPending.Store(true)
 	e.mu.Unlock()
 	defer e.publicationPending.Store(false)
-	candidate := newEngine(e.options)
+	candidate := newAuditVerifier(e.options)
 	p, count, err := e.journal.VerifyPublished(ctx, candidate.replay)
 	if err == nil && count > 0 && (candidate.roots != roots || candidate.rootSet != rootSet || candidate.publication.Fence() != p.Fence() || candidate.index.count() != e.index.count()) {
 		err = ErrInvalidStateData
@@ -48,7 +53,7 @@ func (e *Engine) CompactAuditFull(ctx context.Context) (storage.CompactionReport
 	if err != nil {
 		return storage.CompactionReport{}, err
 	}
-	report, err := e.journal.CompactAuditFull(ctx)
+	report, err = e.journal.CompactAuditFull(ctx)
 	e.mu.Lock()
 	if report.After.Store != "" {
 		e.publication = report.After

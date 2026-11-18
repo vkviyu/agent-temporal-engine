@@ -36,10 +36,10 @@ Profile、Knowledge、BranchRef、Memory 的纯转换只能读取该候选 bundl
 ## 分阶段实施
 
 - 已完成：以现有 `commitPlan`/staging object index 表示私有 bundle，抽取共同 `finishPlan`；普通 core.state.mutate/v1 的字节格式保持不变。
-- 已完成：静态 `agentprofile.Command` → core.prepareAgent → LiveControl radix → 统一 receipt/RootSet → 既有 P1；replay 重算同一转换。`agentstore` 已移除旧 domain snapshot 写入和本地 ledger 权威，旧快照需显式迁移。
+- 已完成：静态 `agentprofile.Command` → core.prepareAgent → LiveControl radix → 统一 receipt/RootSet → 既有 P1；replay 重算同一转换。`agentstore` 已移除旧 domain snapshot 写入和本地 ledger 权威，开发数据如需切换格式直接重建 store。
 - 已完成当前子集：Graph、Memory、Knowledge 的 canonical command → core reducer → 受保护 root slot → 统一 receipt/RootSet/P1。回归覆盖原始 StateBatch 注入拒绝、状态变化后原 key 重试、恢复、CURRENT 前后故障与 group publication。
 - 已完成查询能力：Knowledge 按 Space/Principal 分区，Key 选择检查 Actor/Execution 所属；领域 Cursor 与知识 Cursor 都从固定 Fence 解析精确 Revision。Node/Context/Search/Trace/Content 按历史 View 成员关系、有界资源和当前主体权限输出。
 - 已完成传输能力：service/client 的 Agent/Graph/Memory/Knowledge、Node Explorer、ContentReader、SourcePublicationRef 绑定同一内核，身份由连接映射；formal Event occurrence 与 Recovery control nodes 也可在固定 View 导航。
 - 已完成维护与恢复：explicit Import、RecordedInput、完整外部 parent/child unknown-effect recovery、schema 引用提取、AuditFull compaction、reader pin/retire、重启和逐持久化故障点回归均已加入。
 
-`agentstore` 和根包的 domain facade 均调用 core；standalone 适配器不等于 core RootSet authority。Agent profile 仍为有界整分区 snapshot；Knowledge/Memory 在受保护 slot 中保存有界 snapshot，转换成本为 O(n)。这不等于已经解决长程任务容量与回收。确切已实现 registry 见 [agent/core experimental 1](formats/agent-core-experimental-1.md) 和 [本地协议](formats/local-protocol-experimental-1.md)。
+`agentstore` 和根包的 domain facade 均调用 core；standalone 适配器不等于 core RootSet authority。Agent profile 使用有界 record root/radix；Knowledge/Memory 在受保护 slot 中保存有界 snapshot，转换成本为 O(n)。这不等于已经解决长程任务容量与回收。确切已实现 registry 见 [agent/core experimental 1](formats/agent-core-experimental-1.md) 和 [本地协议](formats/local-protocol-experimental-1.md)。

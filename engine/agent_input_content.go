@@ -117,14 +117,14 @@ func isModelActivityRole(role string) bool {
 // whose promoted memory or experience-path provenance has since been
 // superseded or retracted. Historical packet reads remain available; current
 // execution must make the revocation visible before invoking the model.
-func (e *Engine) validateCurrentTypedPacket(ctx context.Context, packet knowledge.ContextPacket, snapshot knowledge.Snapshot, space model.SpaceID, principal model.PrincipalID, historicalPolicy bool) error {
+func (e *Engine) validateCurrentTypedPacket(ctx context.Context, packet knowledge.ContextPacket, snapshot knowledge.Snapshot, space model.SpaceID, principal model.PrincipalID) error {
 	if len(snapshot.Observations) != len(packet.Items) {
 		return ErrInvalidStateData
 	}
-	return e.validateCurrentTypedObservations(ctx, snapshot.Observations, space, principal, historicalPolicy)
+	return e.validateCurrentTypedObservations(ctx, snapshot.Observations, space, principal)
 }
 
-func (e *Engine) validateCurrentTypedObservations(ctx context.Context, selected []knowledge.Observation, space model.SpaceID, principal model.PrincipalID, historicalPolicy bool) error {
+func (e *Engine) validateCurrentTypedObservations(ctx context.Context, selected []knowledge.Observation, space model.SpaceID, principal model.PrincipalID) error {
 	var pending []knowledge.SummarySource
 	for _, observation := range selected {
 		if observation.PayloadKind != "" {
@@ -156,14 +156,9 @@ func (e *Engine) validateCurrentTypedObservations(ctx context.Context, selected 
 				}
 			}
 			var err error
-			switch {
-			case source.PayloadKind == "memory" && historicalPolicy:
-				_, err = store.ReusableMemory(source.Content, at)
-			case historicalPolicy:
-				_, err = store.ReusablePath(source.Content, at)
-			case source.PayloadKind == "memory":
+			if source.PayloadKind == "memory" {
 				_, err = store.ReusableMemoryFor(source.Content, query)
-			default:
+			} else {
 				_, err = store.ReusablePathFor(source.Content, query)
 			}
 			if err != nil {
@@ -180,12 +175,10 @@ func (e *Engine) validateCurrentTypedObservations(ctx context.Context, selected 
 			if err := e.checkPolicyIDs(ctx, space, summaryPolicyIDs(summary), memory.AccessReuse); err != nil {
 				return errors.Join(agentprofile.ErrConflict, err)
 			}
-			if !historicalPolicy {
-				for _, dependency := range summary.Sources {
-					if dependency.PayloadKind != "" {
-						pending = append(pending, knowledge.SummarySource{Content: dependency.Content, PayloadKind: dependency.PayloadKind})
-						edges++
-					}
+			for _, dependency := range summary.Sources {
+				if dependency.PayloadKind != "" {
+					pending = append(pending, knowledge.SummarySource{Content: dependency.Content, PayloadKind: dependency.PayloadKind})
+					edges++
 				}
 			}
 		default:

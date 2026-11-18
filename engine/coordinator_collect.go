@@ -54,6 +54,7 @@ func (e *Engine) requeueFront(batch []*flight) {
 	defer a.mu.Unlock()
 	for _, f := range batch {
 		f.phase = "queued"
+		f.queuedAt = e.options.Observation.Start()
 	}
 	queue := make([]*flight, 0, len(batch)+len(a.queue))
 	queue = append(queue, batch...)

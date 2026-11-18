@@ -58,6 +58,8 @@ type Manifest struct {
 	// names only obsolete physical copies, never discardable logical history.
 	LayoutSource    *LayoutSource
 	RetiredSegments []SegmentDescriptor
+	// RecoveryCheckpoint is selected only through this manifest and CURRENT.
+	RecoveryCheckpoint *RecoveryCheckpoint
 }
 
 type LayoutSource struct {
@@ -318,7 +320,10 @@ func (m Manifest) validate() error {
 			return err
 		}
 	}
-	return m.validateRetirement()
+	if err := m.validateRetirement(); err != nil {
+		return err
+	}
+	return m.validateRecoveryCheckpoint()
 }
 
 func EncodeManifest(m Manifest) ([]byte, error) {
@@ -335,6 +340,10 @@ func EncodeManifest(m Manifest) ([]byte, error) {
 		payload = codec.AppendUint(codec.AppendUint(nil, 3), 0)
 		maximum = MaxManifestBytes
 	}
+	if m.RecoveryCheckpoint != nil {
+		payload = codec.AppendUint(codec.AppendUint(nil, 4), 0)
+		maximum = MaxManifestBytes
+	}
 	b := metadataAppendID(payload, string(m.Store))
 	b = codec.AppendUint(b, m.Generation)
 	b = metadataAppendID(b, m.ManifestID)
@@ -345,6 +354,16 @@ func EncodeManifest(m Manifest) ([]byte, error) {
 	b = codec.AppendUint(b, m.Position.LSN)
 	b = appendDigest(b, m.Position.Digest)
 	b = appendDigest(b, m.PostRootSet)
+	if m.RecoveryCheckpoint != nil {
+		b = appendSegmentDescriptors(b, m.Segments)
+		b = codec.AppendUint(b, boolUint(m.LayoutSource != nil))
+		if m.LayoutSource != nil {
+			b = appendLayoutSource(b, *m.LayoutSource)
+			b = appendSegmentDescriptors(b, m.RetiredSegments)
+		}
+		b = appendRecoveryCheckpoint(b, *m.RecoveryCheckpoint)
+		return metadataEnvelopeBounded(manifestMagic, b, maximum)
+	}
 	if m.Segments != nil {
 		b = appendSegmentDescriptors(b, m.Segments)
 	}
@@ -364,10 +383,10 @@ func EncodeManifest(m Manifest) ([]byte, error) {
 func DecodeManifest(b []byte) (Manifest, error) {
 	var m Manifest
 	// A legacy manifest never gains the larger schema2 allocation budget.
-	if len(b) > MaxManifestBytes || (len(b) > MaxMetadataBytes && (len(b) < 9 || (b[8] != 2 && b[8] != 3))) {
+	if len(b) > MaxManifestBytes || (len(b) > MaxMetadataBytes && (len(b) < 9 || (b[8] != 2 && b[8] != 3 && b[8] != 4))) {
 		return m, ErrLimit
 	}
-	d, version, err := metadataDecoderVersioned(b, manifestMagic, MaxManifestBytes, 1, 2, 3)
+	d, version, err := metadataDecoderVersioned(b, manifestMagic, MaxManifestBytes, 1, 2, 3, 4)
 	if err != nil {
 		return m, err
 	}
@@ -420,6 +439,30 @@ func DecodeManifest(b []byte) (Manifest, error) {
 		if m.RetiredSegments, err = readSegmentDescriptorsOptional(d, 2*MaxSegments); err != nil {
 			return Manifest{}, err
 		}
+	}
+	if version == 4 {
+		if m.Segments, err = readSegmentDescriptorsOptional(d, MaxSegments); err != nil {
+			return Manifest{}, err
+		}
+		present, e := d.Uint()
+		if e != nil || present > 1 {
+			return Manifest{}, ErrMalformed
+		}
+		if present == 1 {
+			source, e := readLayoutSource(d)
+			if e != nil {
+				return Manifest{}, e
+			}
+			m.LayoutSource = &source
+			if m.RetiredSegments, err = readSegmentDescriptorsOptional(d, 2*MaxSegments); err != nil {
+				return Manifest{}, err
+			}
+		}
+		checkpoint, e := readRecoveryCheckpoint(d)
+		if e != nil {
+			return Manifest{}, e
+		}
+		m.RecoveryCheckpoint = &checkpoint
 	}
 	if err := d.Done(); err != nil {
 		return Manifest{}, metadataError(err)

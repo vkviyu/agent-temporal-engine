@@ -86,16 +86,22 @@ func TestSelectedPacketPersistsFullProposalAndRecomputableResult(t *testing.T) {
 	if decodedInput, err := DecodePacket(inputRaw); err != nil || !reflect.DeepEqual(decodedInput.Input, withInput.Input) {
 		t.Fatal("schema3 input lost", decodedInput, err)
 	}
-	next, err := ApplyCommand(req.Snapshot, Command{Packet: &packet})
+	commandRaw, err := EncodeCommand(Command{Packet: &packet})
 	if err != nil {
 		t.Fatal(err)
 	}
-	snapshotRaw, err := EncodeSnapshot(next)
+	command, err := DecodeCommand(commandRaw)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if restored, err := DecodeSnapshot(snapshotRaw); err != nil || len(restored.Packets) != 1 || restored.Packets[0].ID != packet.ID {
-		t.Fatal("selection snapshot cannot restore", err)
+	if command.Packet == nil || !reflect.DeepEqual(*command.Packet, packet) {
+		t.Fatal("packet command lost selection")
+	}
+	if again, err := EncodeCommand(command); err != nil || !bytes.Equal(again, commandRaw) {
+		t.Fatal("packet command canonical bytes changed", err)
+	}
+	if err := (Snapshot{Observations: req.Snapshot.Observations, Packets: []ContextPacket{*command.Packet}}).Validate(); err != nil {
+		t.Fatal("decoded selection DTO rejected", err)
 	}
 	for i := 0; i < len(raw); i++ {
 		if _, err := DecodePacket(raw[:i]); err == nil {
@@ -128,7 +134,7 @@ func TestSelectedPacketRejectsForgedResultInputAndGoal(t *testing.T) {
 	bad := packet.Clone()
 	bad.Selection.Result.Omitted[0].Reason = "capacity"
 	bad.ID = PacketID(bad)
-	if _, err := ApplyCommand(req.Snapshot, Command{Packet: &bad}); !errors.Is(err, ErrContextSelectionInvalid) {
+	if err := (Snapshot{Observations: req.Snapshot.Observations, Packets: []ContextPacket{bad}}).Validate(); !errors.Is(err, ErrContextSelectionInvalid) {
 		t.Fatal("pure snapshot accepted invented omission", err)
 	}
 	owned := packet.Clone()

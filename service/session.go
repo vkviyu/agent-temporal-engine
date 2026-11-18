@@ -129,52 +129,70 @@ func (ss *session) hello(raw []byte, correlation string) error {
 		ss.spaces[space] = true
 	}
 	ss.globalSnapshot = cred.AllowGlobalSnapshot
+	result := protocol.HelloResult{
+		Principal:    ss.principal,
+		Spaces:       cred.Spaces,
+		Capabilities: ss.server.Capabilities(),
+	}
+	return ss.reply(protocol.Response{
+		Version:       protocol.Version,
+		CorrelationID: correlation,
+		Body:          mustJSON(result),
+	})
+}
+
+// Capabilities returns a fresh list of the capabilities supported by the
+// backend's optional interfaces and enabled profiles, without reading store data.
+func (s *Server) Capabilities() []string {
 	capabilities := []string{"core/storage-v1", "core/state-view-v1", "protocol/local-v1"}
-	if _, preparesReads := ss.server.backend.(api.ReadDeliveryPreparer); preparesReads {
-		if _, ok := ss.server.backend.(api.BasicNodeReader); ok {
+	if _, preparesReads := s.backend.(api.ReadDeliveryPreparer); preparesReads {
+		if _, ok := s.backend.(api.BasicNodeReader); ok {
 			capabilities = append(capabilities, "core/node-query-v1")
 		}
-		if _, ok := ss.server.backend.(api.NodeExplorer); ok {
+		if _, ok := s.backend.(api.NodeExplorer); ok {
 			capabilities = append(capabilities, "core/node-explore-v1")
 		}
 	}
-	if _, ok := ss.server.backend.(api.ContentEmissionReader); ok {
+	if _, ok := s.backend.(api.ContentEmissionReader); ok {
 		capabilities = append(capabilities, "core/content-range-v1")
 	}
-	if _, ok := ss.server.backend.(api.PublicationResolver); ok {
+	if _, ok := s.backend.(api.PublicationResolver); ok {
 		capabilities = append(capabilities, "core/publication-ref-v1")
 	}
-	if _, enabled := ss.server.agentBackend(); enabled {
+	if _, enabled := s.agentBackend(); enabled {
 		capabilities = append(capabilities, "agent/v1")
 	}
-	if b, ok := ss.server.backend.(interface{ EventProfileEnabled() bool }); ok && b.EventProfileEnabled() {
+	if b, ok := s.backend.(agentRecordBackend); ok && b.AgentProfileEnabled() {
+		capabilities = append(capabilities, "agent/record-read-v1")
+	}
+	if b, ok := s.backend.(interface{ EventProfileEnabled() bool }); ok && b.EventProfileEnabled() {
 		capabilities = append(capabilities, "event/v1")
 	}
-	if b, ok := ss.server.backend.(taskTraceBackend); ok && b.TaskTraceEnabled() {
+	if b, ok := s.backend.(taskTraceBackend); ok && b.TaskTraceEnabled() {
 		capabilities = append(capabilities, "agent/task-trace-v1")
 	}
-	if _, ok := ss.server.backend.(api.GraphQueries); ok {
+	if _, ok := s.backend.(api.GraphQueries); ok {
 		capabilities = append(capabilities, "graph/query-v1")
 	}
-	if _, ok := ss.server.backend.(graphBackend); ok {
+	if _, ok := s.backend.(graphBackend); ok {
 		capabilities = append(capabilities, "graph/v1")
 	}
-	if _, ok := ss.server.backend.(memoryBackend); ok {
+	if _, ok := s.backend.(memoryBackend); ok {
 		capabilities = append(capabilities, "memory/v1")
 	}
-	if _, ok := ss.server.backend.(knowledgeBackend); ok {
+	if _, ok := s.backend.(knowledgeBackend); ok {
 		capabilities = append(capabilities, "knowledge/v1")
 	}
-	if _, ok := ss.server.backend.(api.AnnotationCommands); ok {
+	if _, ok := s.backend.(api.AnnotationCommands); ok {
 		capabilities = append(capabilities, "annotation/v1")
 	}
-	if _, ok := ss.server.backend.(investigationBackend); ok {
+	if _, ok := s.backend.(investigationBackend); ok {
 		capabilities = append(capabilities, "investigation/v1")
 	}
-	if _, ok := ss.server.backend.(api.TransferCommands); ok {
+	if _, ok := s.backend.(api.TransferCommands); ok {
 		capabilities = append(capabilities, "transfer/archive-v1")
 	}
-	return ss.reply(protocol.Response{Version: protocol.Version, CorrelationID: correlation, Body: mustJSON(protocol.HelloResult{Principal: ss.principal, Spaces: cred.Spaces, Capabilities: capabilities})})
+	return capabilities
 }
 func (ss *session) allowed(space model.SpaceID) bool { return ss.spaces[space] }
 
@@ -248,6 +266,8 @@ func (ss *session) dispatch(ctx context.Context, req protocol.Request) protocol.
 		return dispatchTyped(ss, ctx, req, ss.applyAgent)
 	case "get_agent_state":
 		return dispatchTyped(ss, ctx, req, ss.getAgentState)
+	case "get_agent_state_records":
+		return dispatchTyped(ss, ctx, req, ss.getAgentStateRecords)
 	case "apply_graph":
 		return dispatchTyped(ss, ctx, req, ss.applyGraph)
 	case "get_graph_revision":
@@ -267,14 +287,32 @@ func (ss *session) dispatch(ctx context.Context, req protocol.Request) protocol.
 	}
 }
 func (ss *session) reply(r protocol.Response) error {
-	if err := ss.conn.SetWriteDeadline(time.Now().Add(ss.server.options.RequestTimeout)); err != nil {
-		return err
+	b, err := encodeResponse(r)
+	if errors.Is(err, protocol.ErrFrameLimit) {
+		// Reject the entire result before writing even a frame header. This is
+		// an application limit, so a subsequent request can reuse the session.
+		b, err = encodeResponse(ss.errResponse(r.CorrelationID, protocol.ErrFrameLimit))
 	}
-	b, err := json.Marshal(r)
 	if err != nil {
 		return err
 	}
+	if err := ss.conn.SetWriteDeadline(time.Now().Add(ss.server.options.RequestTimeout)); err != nil {
+		return err
+	}
 	return protocol.WriteFrame(ss.conn, b)
+}
+
+// The full JSON envelope (including escaping and correlation ID), not just the
+// typed body, must fit the unchanged protocol ceiling.
+func encodeResponse(r protocol.Response) ([]byte, error) {
+	b, err := json.Marshal(r)
+	if err != nil {
+		return nil, err
+	}
+	if len(b) > protocol.MaxFrameBytes {
+		return nil, protocol.ErrFrameLimit
+	}
+	return b, nil
 }
 func (ss *session) errResponse(id string, err error) protocol.Response {
 	return protocol.Response{Version: protocol.Version, CorrelationID: id, Body: json.RawMessage(`{}`), Error: &protocol.Error{Code: ss.classify(err), Message: err.Error()}}

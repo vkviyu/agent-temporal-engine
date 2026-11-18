@@ -77,14 +77,7 @@ func TestControlV3ExpectedFenceSurvivesRebindAndOwnedSnapshots(t *testing.T) {
 	reboundFence := recoveryFence()
 	reboundFence.LSN = 9
 	recoveryControl(t, l, "rebind", ControlCommand{RebindAction: &RebindActionCommand{Key: "next", ExpectedGeneration: 1, NewRequest: commandKey("rebound"), Method: intent.Method, ExactCommand: intent.ExactCommand, CommandDigest: intent.Action.CommandDigest, Authority: next, FenceEvidence: digest('a'), ExpectedFence: &reboundFence}})
-	raw, err := EncodeSnapshot(l.Snapshot())
-	if err != nil {
-		t.Fatal(err)
-	}
-	restored, err := RestoreSnapshot(raw)
-	if err != nil {
-		t.Fatal(err)
-	}
+	restored := restoreRecord(t, l.Snapshot())
 	for _, record := range restored.Snapshot().Lifecycle.Recovery.Actions {
 		want := &expected
 		if record.Action.Generation == 2 {

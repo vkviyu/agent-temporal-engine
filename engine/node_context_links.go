@@ -229,22 +229,39 @@ func (e *Engine) nodeContextOutputGate(ctx context.Context, entry *viewEntry, id
 }
 
 func nodeDisclosureIDs(n nodeProjection) []model.ObjectID {
-	ids := []model.ObjectID{n.detail.Payload}
+	return policyIdentities(nodeDisclosureDependencies(n))
+}
+
+func nodeDisclosureDependencies(n nodeProjection) []policyDependency {
+	payload := policyDependency{kind: policyObject, id: n.detail.Payload}
+	switch n.detail.Encoding {
+	case "memory/Memory/v1+json":
+		payload.kind = policyMemory
+	case "memory/ExperiencePath/v1+json":
+		payload.kind = policyPath
+	case "memory/SourceBan/v1+json":
+		payload.kind = policyNode
+	case "knowledge/Summary/v1+json":
+		// Knowledge catalogs carry the logical Summary ID; domain catalogs
+		// carry the physical record. Digest equality cannot distinguish them.
+		if n.detail.Anchor.Knowledge != nil {
+			payload.kind = policySummary
+		}
+	}
+	dependencies := []policyDependency{payload}
 	if n.detail.Encoding == "annotation/Record/v1+json" {
 		var record annotation.Record
 		if json.Unmarshal(n.detail.Data, &record) == nil {
-			ids = append(ids, record.ID, record.Retracts)
+			dependencies = append(dependencies,
+				policyDependency{kind: policyAnnotation, id: record.ID},
+				policyDependency{kind: policyAnnotation, id: record.Retracts})
 			for _, ref := range append([]model.NodeRef{record.Target}, record.Evidence...) {
 				switch ref.Kind {
-				case model.NodeObject:
-					ids = append(ids, ref.Object)
-				case model.NodeRevision:
-					ids = append(ids, model.ObjectID(ref.Revision))
-				case model.NodeEvent:
-					ids = append(ids, model.ObjectID(ref.Event))
+				case model.NodeObject, model.NodeRevision, model.NodeEvent:
+					dependencies = append(dependencies, nodePolicyDependency(ref))
 				case model.NodeEntity:
 					if model.ValidDigest(string(ref.Entity.ID)) {
-						ids = append(ids, model.ObjectID(ref.Entity.ID))
+						dependencies = append(dependencies, nodePolicyDependency(ref))
 					}
 				}
 			}
@@ -252,23 +269,26 @@ func nodeDisclosureIDs(n nodeProjection) []model.ObjectID {
 	}
 	for _, source := range n.detail.Sources {
 		if source.Kind == model.NodeObject {
-			ids = append(ids, source.Object)
+			// NodeObject is a catalog selector, also used by embedded
+			// Knowledge records; it does not promise a physical object.
+			dependencies = append(dependencies, nodePolicyDependency(source))
 		}
 	}
 	if n.detail.Encoding == "knowledge/ContextPacket/v1+json" {
 		var p knowledge.ContextPacket
 		if json.Unmarshal(n.detail.Data, &p) == nil {
-			ids = append(ids, p.GoalRef)
+			dependencies = append(dependencies, policyDependency{kind: policyNode, id: p.GoalRef})
 			for _, item := range p.Items {
-				ids = append(ids, item.Content)
+				// A packet alone does not carry the adopted payload kind.
+				dependencies = append(dependencies, policyDependency{kind: policyNode, id: item.Content})
 			}
 		}
 	}
 	if n.detail.Encoding == "knowledge/Summary/v1+json" {
 		var s knowledge.Summary
 		if json.Unmarshal(n.detail.Data, &s) == nil {
-			ids = append(ids, summaryPolicyIDs(s)...)
+			dependencies = append(dependencies, summaryPolicyDependencies(s)...)
 		}
 	}
-	return ids
+	return dependencies
 }

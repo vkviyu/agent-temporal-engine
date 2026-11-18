@@ -2,9 +2,13 @@ package service
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"net"
 	"reflect"
 	"runtime"
+	"slices"
+	"strings"
 	"testing"
 
 	ate "github.com/vkviyu/agent-temporal-engine"
@@ -189,6 +193,7 @@ func TestAgentServiceCapabilityAndCanonicalWireValidation(t *testing.T) {
 				{"apply_agent", protocol.ApplyAgentRequest{Space: "s", RequestID: "unknown", Command: unknown}, api.ErrorUnsupported},
 				{"apply_agent", map[string]any{"space": "s", "request_id": "spoof", "command": []byte("x"), "principal": "other"}, api.ErrorInvalidRequest},
 				{"get_agent_state", map[string]any{"space": "s", "principal": "other"}, api.ErrorInvalidRequest},
+				{"get_agent_state_records", map[string]any{"space": "s", "principal": "other"}, api.ErrorInvalidRequest},
 			}
 			for _, test := range tests {
 				response := exchange(t, a, test.method, test.method, test.body)
@@ -200,5 +205,126 @@ func TestAgentServiceCapabilityAndCanonicalWireValidation(t *testing.T) {
 				t.Fatalf("malformed wire fenced core: %v", err)
 			}
 		})
+	}
+}
+
+func TestAgentStateRecordsServiceConformance(t *testing.T) {
+	for _, transport := range []string{"pipe", "unix"} {
+		t.Run(transport, func(t *testing.T) {
+			core, _ := nativeAgentStore(t, true)
+			_, owner, other := conformanceClients(t, core, transport)
+			for i := 0; i < 3; i++ {
+				request := agentCreateRequest("paged-" + string(rune('a'+i)))
+				request.Command.CreateTask.ID = model.EntityID("task-" + string(rune('a'+i)))
+				if _, err := owner.ApplyAgent(context.Background(), request); err != nil {
+					t.Fatal(err)
+				}
+			}
+			first, err := owner.GetAgentStateRecords(context.Background(), api.ReadAgentStateRecordsRequest{Space: "s", Limit: 1})
+			if err != nil || !first.Found || len(first.Records) != 1 || first.Continuation == "" {
+				t.Fatalf("first=%+v err=%v", first, err)
+			}
+			full, err := owner.ReadFullAgentState(context.Background(), api.ReadAgentStateRequest{Space: "s"})
+			if err != nil || len(full.Snapshot.Tasks) != 3 {
+				t.Fatalf("full=%+v err=%v", full, err)
+			}
+			legacy, err := owner.GetAgentState(context.Background(), api.ReadAgentStateRequest{Space: "s", Anchor: &full.Anchor})
+			if err != nil || len(legacy.Snapshot.Tasks) != len(full.Snapshot.Tasks) {
+				t.Fatalf("legacy=%+v full=%+v err=%v", legacy, full, err)
+			}
+			legacyTasks := append([]agentprofile.Task(nil), legacy.Snapshot.Tasks...)
+			fullTasks := append([]agentprofile.Task(nil), full.Snapshot.Tasks...)
+			slices.SortFunc(legacyTasks, func(a, b agentprofile.Task) int { return strings.Compare(string(a.ID), string(b.ID)) })
+			slices.SortFunc(fullTasks, func(a, b agentprofile.Task) int { return strings.Compare(string(a.ID), string(b.ID)) })
+			if !reflect.DeepEqual(legacyTasks, fullTasks) ||
+				len(legacy.Snapshot.Executions) != len(full.Snapshot.Executions) ||
+				len(legacy.Snapshot.Steps) != len(full.Snapshot.Steps) ||
+				len(legacy.Snapshot.Invocations) != len(full.Snapshot.Invocations) ||
+				len(legacy.Snapshot.Actions) != len(full.Snapshot.Actions) ||
+				len(legacy.Snapshot.Lifecycle.Queries) != len(full.Snapshot.Lifecycle.Queries) ||
+				len(legacy.Snapshot.Lifecycle.Activities) != len(full.Snapshot.Lifecycle.Activities) ||
+				len(legacy.Snapshot.Lifecycle.Attempts) != len(full.Snapshot.Lifecycle.Attempts) ||
+				len(legacy.Snapshot.Lifecycle.Results) != len(full.Snapshot.Lifecycle.Results) ||
+				len(legacy.Snapshot.Lifecycle.Messages) != len(full.Snapshot.Lifecycle.Messages) ||
+				len(legacy.Snapshot.Lifecycle.Consumptions) != len(full.Snapshot.Lifecycle.Consumptions) ||
+				len(legacy.Snapshot.Lifecycle.Continuations) != len(full.Snapshot.Lifecycle.Continuations) {
+				t.Fatalf("legacy and paged snapshots differ: legacy=%+v full=%+v", legacy.Snapshot, full.Snapshot)
+			}
+			next, err := owner.GetAgentStateRecords(context.Background(), api.ReadAgentStateRecordsRequest{
+				Space: "s", Anchor: &first.Anchor, Limit: 1, Continuation: first.Continuation,
+			})
+			if err != nil || next.Fence != first.Fence || next.Catalog != first.Catalog || len(next.Records) != 1 {
+				t.Fatalf("next=%+v err=%v", next, err)
+			}
+			empty, err := other.GetAgentStateRecords(context.Background(), api.ReadAgentStateRecordsRequest{Space: "s"})
+			if err != nil || empty.Found || len(empty.Records) != 0 || empty.Catalog != "" {
+				t.Fatalf("other=%+v err=%v", empty, err)
+			}
+		})
+	}
+}
+
+func TestAgentStateRecordsLargeRealStoreUnixReassemblesAndLegacyRemainsUsable(t *testing.T) {
+	core, _ := nativeAgentStore(t, true)
+	_, owner, _ := conformanceClients(t, core, "unix")
+	ctx := context.Background()
+	seed, err := owner.Mutate(ctx, api.MutateRequest{
+		Key: model.RequestKey{Space: "s", RequestID: "large-input-fence"},
+		Batch: api.StateBatch{Operations: []api.StateMutation{{
+			Key: []byte("large-input"), Kind: api.MutationPut,
+			Value: api.Value{Kind: api.ValueBytes, Data: []byte("ordinary input fence")},
+		}}},
+	})
+	if err != nil || seed.Code != api.CodeDurableAck {
+		t.Fatalf("seed=%+v err=%v", seed, err)
+	}
+	raw := make([]byte, 900<<10)
+	for i := range raw {
+		raw[i] = byte(i)
+	}
+	for i := 0; i < 20; i++ {
+		query := agentprofile.Query{
+			ID: fmt.Sprintf("large-query-%02d", i), Session: "large-session", Space: "s", Owner: "owner",
+			Input: raw, InputFence: seed.Fence, Status: "open", Version: 1,
+		}
+		result, err := owner.ApplyAgent(ctx, api.ApplyAgentRequest{
+			Key:     model.RequestKey{Space: "s", RequestID: model.RequestID(fmt.Sprintf("large-query-%02d", i))},
+			Command: agentprofile.Command{Lifecycle: &agentprofile.LifecycleCommand{PutQuery: &query}},
+		})
+		if err != nil || result.Code != api.CodeDurableAck {
+			t.Fatalf("query %d result=%+v err=%v", i, result, err)
+		}
+	}
+	embedded, err := core.GetAgentState(ctx, api.ReadAgentStateRequest{Space: "s", Principal: "owner"})
+	if err != nil || !embedded.Found {
+		t.Fatalf("embedded=%+v err=%v", embedded, err)
+	}
+	wireBody, err := json.Marshal(embedded)
+	if err != nil || len(wireBody) <= protocol.MaxFrameBytes {
+		t.Fatalf("fixture did not exceed frame: bytes=%d err=%v", len(wireBody), err)
+	}
+	firstPage, err := owner.GetAgentStateRecords(ctx, api.ReadAgentStateRecordsRequest{Space: "s"})
+	if err != nil || firstPage.RecordBytes <= api.MaxAgentStatePageBytes {
+		t.Fatalf("record page metadata=%+v err=%v", firstPage, err)
+	}
+	if _, err := owner.GetAgentState(ctx, api.ReadAgentStateRequest{Space: "s"}); err == nil {
+		t.Fatal("legacy full read accepted an oversized frame")
+	} else {
+		remoteCode(t, err, api.ErrorResourceLimit)
+	}
+	full, err := owner.ReadFullAgentState(ctx, api.ReadAgentStateRequest{Space: "s"})
+	if err != nil || !full.Found || len(full.Snapshot.Lifecycle.Queries) != 20 {
+		t.Fatalf("paged full=%+v err=%v", full, err)
+	}
+	expectedImage, err := agentprofile.EncodeRecordImage(embedded.Snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected, err := expectedImage.Snapshot()
+	if err != nil || !reflect.DeepEqual(expected, full.Snapshot) {
+		t.Fatalf("reassembled snapshot differs: expected=%+v full=%+v err=%v", expected, full.Snapshot, err)
+	}
+	if _, err := owner.GetState(ctx, api.ReadStateRequest{Space: "s", Key: []byte("large-input")}); err != nil {
+		t.Fatalf("connection unusable after legacy resource rejection: %v", err)
 	}
 }

@@ -11,6 +11,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/vkviyu/agent-temporal-engine/codec"
 	"github.com/vkviyu/agent-temporal-engine/graph"
 	"github.com/vkviyu/agent-temporal-engine/model"
 	"github.com/vkviyu/agent-temporal-engine/storage"
@@ -48,6 +49,196 @@ func checkOriginalProof(t testing.TB, got, want storage.PublishedTransaction) {
 	t.Helper()
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("publication proof changed: got=%+v want=%+v", got, want)
+	}
+}
+
+func TestWritesAfterCompactionReopenWithOriginalReceipts(t *testing.T) {
+	for _, firstWrite := range []string{"revision", "fork", "advance", "join"} {
+		t.Run(firstWrite, func(t *testing.T) {
+			path := t.TempDir()
+			d := openDir(t, path)
+			defer d.Close()
+			ctx := context.Background()
+			options := storage.JournalOptions{SegmentTargetBytes: storage.MinSegmentTargetBytes, MaxPublishedTransactions: 12}
+			s, err := Create(d, options)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() {
+				if s != nil {
+					_ = s.Close()
+				}
+			}()
+			plan := joinFixture(t, s)
+			type operation func() (any, storage.PublishedTransaction, error)
+			var retries []func()
+			var lsn, compactions uint64 = 3, 0
+			record := func(op operation) {
+				t.Helper()
+				value, proof, err := op()
+				if err != nil {
+					t.Fatal(err)
+				}
+				lsn++
+				if proof.Publication.Position.LSN != lsn || proof.Publication.Generation != lsn+compactions {
+					t.Fatalf("logical and physical counters: %+v", proof)
+				}
+				retries = append(retries, func() {
+					t.Helper()
+					got, again, err := op()
+					if err != nil || !reflect.DeepEqual(got, value) {
+						t.Fatalf("retry changed typed result: got=%+v want=%+v err=%v", got, value, err)
+					}
+					checkOriginalProof(t, again, proof)
+					again.RecordLocations[0].PayloadOffset = -1
+				})
+			}
+			checkRetries := func() {
+				t.Helper()
+				before, err := s.journal.Published()
+				if err != nil {
+					t.Fatal(err)
+				}
+				for _, retry := range retries {
+					retry()
+				}
+				after, err := s.journal.Published()
+				if err != nil || after != before {
+					t.Fatalf("retry published: before=%+v after=%+v err=%v", before, after, err)
+				}
+			}
+			reopen := func() {
+				t.Helper()
+				if err := s.Close(); err != nil {
+					t.Fatal(err)
+				}
+				var report Report
+				s, report, err = Open(d, options)
+				if err != nil || report.ScannedTransactions != lsn {
+					t.Fatalf("reopen after compaction and write: %+v %v", report, err)
+				}
+				checkRetries()
+			}
+			record(func() (any, storage.PublishedTransaction, error) {
+				return s.Fork(ctx, "main", plan.Left)
+			})
+			reopen()
+			for round := 1; round <= 2; round++ {
+				if err := s.Close(); err != nil {
+					t.Fatal(err)
+				}
+				j, _, err := storage.OpenJournal(d, options)
+				if err != nil {
+					t.Fatal(err)
+				}
+				for n := 0; n < round; n++ {
+					report, err := j.CompactAuditFull(ctx)
+					if err != nil {
+						_ = j.Close()
+						t.Fatal(err)
+					}
+					if report.After.Generation != report.Before.Generation+1 ||
+						report.After.Position != report.Before.Position ||
+						report.After.PublishedEnd != report.Before.PublishedEnd ||
+						report.After.PostRootSet != report.Before.PostRootSet {
+						t.Fatalf("compaction changed logical publication: %+v", report)
+					}
+					compactions++
+				}
+				if err := j.Close(); err != nil {
+					t.Fatal(err)
+				}
+				reopen()
+				// Each writer must be the first transaction after a layout change.
+				ops := map[string]operation{
+					"revision": func() (any, storage.PublishedTransaction, error) {
+						return s.AddRevision(ctx, "space", plan.Left, nil, gid(byte('d'+round)), nil, nil)
+					},
+					"fork": func() (any, storage.PublishedTransaction, error) {
+						return s.Fork(ctx, model.BranchID(fmt.Sprintf("fork-%d", round)), plan.Right)
+					},
+					"advance": func() (any, storage.PublishedTransaction, error) {
+						return s.AdvanceBranch(ctx, "main", uint64(round-1), plan.Right)
+					},
+					"join": func() (any, storage.PublishedTransaction, error) {
+						return s.CommitJoin(ctx, plan, gid(byte('a'+round)), nil)
+					},
+				}
+				record(ops[firstWrite])
+				reopen()
+				for _, name := range []string{"revision", "fork", "advance", "join"} {
+					if name != firstWrite {
+						record(ops[name])
+					}
+				}
+				checkRetries()
+				reopen()
+				branch, err := s.Branch("main")
+				if err != nil || branch.Version != uint64(round) || branch.Head != plan.Right {
+					t.Fatalf("retry changed latest branch: %+v %v", branch, err)
+				}
+			}
+			before := treeBytes(t, path)
+			for _, op := range []operation{
+				func() (any, storage.PublishedTransaction, error) {
+					return s.AddRevision(ctx, "space", plan.Left, nil, gid('9'), nil, nil)
+				},
+				func() (any, storage.PublishedTransaction, error) {
+					return s.Fork(ctx, "over-quota", plan.Right)
+				},
+				func() (any, storage.PublishedTransaction, error) {
+					return s.AdvanceBranch(ctx, "main", 2, plan.Left)
+				},
+				func() (any, storage.PublishedTransaction, error) {
+					return s.CommitJoin(ctx, plan, gid('f'), nil)
+				},
+			} {
+				value, proof, err := op()
+				if !errors.Is(err, storage.ErrLimit) ||
+					!reflect.DeepEqual(proof, storage.PublishedTransaction{}) ||
+					!reflect.ValueOf(value).IsZero() {
+					t.Fatalf("quota returned a result: %+v %+v %v", value, proof, err)
+				}
+			}
+			checkRetries()
+			if !reflect.DeepEqual(before, treeBytes(t, path)) {
+				t.Fatal("quota rejection or retry changed durable bytes")
+			}
+		})
+	}
+}
+
+func TestNextPublicationMetadataChecksBothCounters(t *testing.T) {
+	const max = ^uint64(0)
+	for _, tc := range []struct {
+		name            string
+		lsn, generation uint64
+		overflow        bool
+	}{
+		{"genesis", 0, 0, false},
+		{"after compaction", 7, 10, false},
+		{"last generation", 7, max - 1, false},
+		{"last LSN", max - 1, max - 1, false},
+		{"generation exhausted", 7, max, true},
+		{"LSN exhausted", max, max - 1, true},
+		{"both exhausted", max, max, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			raw, err := nextPublicationMetadata(storage.Publication{Position: storage.Position{LSN: tc.lsn}, Generation: tc.generation})
+			if tc.overflow {
+				if !errors.Is(err, storage.ErrLimit) || raw != nil {
+					t.Fatalf("overflow returned metadata: %x %v", raw, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := decodePublicationMetadata(raw)
+			if err != nil || got.lsn != tc.lsn+1 || got.generation != tc.generation+1 {
+				t.Fatalf("counter mismatch: %+v %v", got, err)
+			}
+		})
 	}
 }
 
@@ -451,7 +642,12 @@ func TestReplayRejectsSemanticBindingErrorsBeforeRepair(t *testing.T) {
 		{"post root", func(tx *storage.Transaction) { tx.PostRootSet = digestOf(string(gid('b'))) }},
 		{"record kind", func(tx *storage.Transaction) { tx.Records[0].Kind = storage.KindObject }},
 		{"ref update", func(tx *storage.Transaction) { tx.RefUpdates = []byte("unexpected update") }},
-		{"future generation", func(tx *storage.Transaction) { tx.ControlUpdates = encodePublicationMetadata(2) }},
+		{"future LSN", func(tx *storage.Transaction) { tx.ControlUpdates = encodePublicationMetadata(2, 2) }},
+		{"zero LSN", func(tx *storage.Transaction) { tx.ControlUpdates = encodePublicationMetadata(0, 1) }},
+		{"zero generation", func(tx *storage.Transaction) { tx.ControlUpdates = encodePublicationMetadata(1, 0) }},
+		{"legacy metadata", func(tx *storage.Transaction) {
+			tx.ControlUpdates = codec.AppendUint(codec.AppendUint([]byte(metadataDomain), 1), 1)
+		}},
 		{"metadata trailing bytes", func(tx *storage.Transaction) { tx.ControlUpdates = append(tx.ControlUpdates, 0) }},
 	}
 	for _, tc := range changes {
@@ -474,7 +670,24 @@ func TestReplayRejectsSemanticBindingErrorsBeforeRepair(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			tx := storage.Transaction{TxID: model.TxID("01010101010101010101010101010101"), Request: model.RequestKey{Space: r.Space, Principal: principal, RequestID: revisionRequestID(r.ID)}, RequestDigest: digestOfBytes(raw), LSN: 1, PreviousDigest: p.Position.Digest, Records: []storage.Record{{Kind: storage.KindRevision, Payload: raw}}, ControlUpdates: encodePublicationMetadata(1), Receipt: digestOf(string(r.ID)), PostRootSet: digestOf(string(r.ID))}
+			tx := storage.Transaction{
+				TxID: model.TxID("01010101010101010101010101010101"),
+				Request: model.RequestKey{
+					Space:     r.Space,
+					Principal: principal,
+					RequestID: revisionRequestID(r.ID),
+				},
+				RequestDigest:  digestOfBytes(raw),
+				LSN:            1,
+				PreviousDigest: p.Position.Digest,
+				Records: []storage.Record{{
+					Kind:    storage.KindRevision,
+					Payload: raw,
+				}},
+				ControlUpdates: encodePublicationMetadata(1, 1),
+				Receipt:        digestOf(string(r.ID)),
+				PostRootSet:    digestOf(string(r.ID)),
+			}
 			tc.change(&tx)
 			if _, err = j.Publish(context.Background(), tx); err != nil {
 				t.Fatalf("fixture not physically valid: %v", err)
@@ -487,6 +700,9 @@ func TestReplayRejectsSemanticBindingErrorsBeforeRepair(t *testing.T) {
 			opened, report, err := Open(d, storage.JournalOptions{TailPolicy: storage.TailQuarantine})
 			if opened != nil || report.Verified || err == nil {
 				t.Fatalf("semantic mismatch accepted: %+v %v", report, err)
+			}
+			if tc.name == "legacy metadata" && (!errors.Is(err, storage.ErrUnsupported) || !errors.Is(err, ErrUnsupportedAdapterSchema)) {
+				t.Fatalf("old schema not explicitly rejected: %v", err)
 			}
 			if !reflect.DeepEqual(before, treeBytes(t, path)) {
 				t.Fatal("semantic mismatch allowed repair")

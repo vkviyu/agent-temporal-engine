@@ -4,11 +4,11 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"errors"
 	"fmt"
 
 	"github.com/vkviyu/agent-temporal-engine/api"
 	"github.com/vkviyu/agent-temporal-engine/model"
+	"github.com/vkviyu/agent-temporal-engine/observation"
 	"github.com/vkviyu/agent-temporal-engine/storage"
 )
 
@@ -63,12 +63,27 @@ func (e *Engine) rejectRemaining(batch []*flight, err error) {
 func (e *Engine) processBatch(batch []*flight) {
 	e.writerMu.Lock()
 	defer e.writerMu.Unlock()
+	for _, f := range batch {
+		e.options.Observation.Finish(f.queuedAt, observation.Event{Kind: observation.AdmissionWait, Count: 1})
+	}
 
 	view, ok := e.beginBatch(batch)
 	if !ok {
 		return
 	}
+	start := e.options.Observation.Start()
 	plan, ok := e.prepareBatch(view, batch)
+	if e.options.Observation.Enabled() {
+		outcome := observation.Success
+		if !ok {
+			e.mu.Lock()
+			outcome = observationOutcome(e.fenced)
+			e.mu.Unlock()
+		} else if len(plan.planned) == 0 {
+			outcome = observation.Skipped
+		}
+		e.options.Observation.Finish(start, observation.Event{Kind: observation.Prepare, Outcome: outcome, Count: uint64(len(plan.planned)), Bytes: plan.bytes})
+	}
 	if !ok || len(plan.planned) == 0 {
 		return
 	}
@@ -142,52 +157,8 @@ func (e *Engine) prepareBatch(view *Engine, batch []*flight) (batchPlan, bool) {
 		txID := model.TxID(hex.EncodeToString(random[:]))
 		compiled, err := view.prepare(context.Background(), f.request, f.digest, txID, view.publication.Position.LSN+1, nil)
 		if err != nil {
-			if errors.Is(err, errCAS) {
-				finishValidation(f, api.CommitResult{Code: api.CodeConflict, RequestID: f.request.RequestID, Conflict: api.ConflictPrecondition}, nil)
-				continue
-			}
-			if isLimit(err) {
-				finishValidation(f, api.CommitResult{Code: api.CodeResourceLimit, RequestID: f.request.RequestID}, err)
-				continue
-			}
-			if f.request.Method == api.MethodApplyAgent && agentCommandRejection(err) {
-				finishValidation(f, api.CommitResult{Code: api.CodeRejected, RequestID: f.request.RequestID}, err)
-				continue
-			}
-			if errors.Is(err, ErrActionReservation) {
-				finishValidation(f, api.CommitResult{Code: api.CodeRejected, RequestID: f.request.RequestID}, err)
-				continue
-			}
-			if f.request.Method == api.MethodApplyWork && workCommandRejection(err) {
-				finishValidation(f, api.CommitResult{Code: api.CodeRejected, RequestID: f.request.RequestID}, err)
-				continue
-			}
-			if f.request.Method == api.MethodApplyAnnotation && annotationCommandRejection(err) {
-				finishValidation(f, api.CommitResult{Code: api.CodeRejected, RequestID: f.request.RequestID}, err)
-				continue
-			}
-			if f.request.Method == api.MethodUpdateInvestigation && investigationCommandRejection(err) {
-				finishValidation(f, api.CommitResult{Code: api.CodeRejected, RequestID: f.request.RequestID}, err)
-				continue
-			}
-			if f.request.Method == api.MethodApplyTaskTrace && taskTraceRejection(err) {
-				finishValidation(f, api.CommitResult{Code: api.CodeRejected, RequestID: f.request.RequestID}, err)
-				continue
-			}
-			if f.request.Method == api.MethodApplySummary && summaryCommandRejection(err) {
-				finishValidation(f, api.CommitResult{Code: api.CodeRejected, RequestID: f.request.RequestID}, err)
-				continue
-			}
-			if f.request.Method == api.MethodImportTransfer && transferCommandRejection(err) {
-				finishValidation(f, api.CommitResult{Code: api.CodeRejected, RequestID: f.request.RequestID}, err)
-				continue
-			}
-			if f.request.Method == api.MethodApplyEmission && emissionCommandRejection(err) {
-				finishValidation(f, api.CommitResult{Code: api.CodeRejected, RequestID: f.request.RequestID}, err)
-				continue
-			}
-			if (f.request.Method == api.MethodApplyKnowledge && knowledgeCommandRejection(err)) || (f.request.Method == api.MethodApplyGraph && graphCommandRejection(err)) || (f.request.Method == api.MethodApplyMemory && memoryCommandRejection(err)) {
-				finishValidation(f, api.CommitResult{Code: api.CodeRejected, RequestID: f.request.RequestID}, err)
+			if result, responseErr, handled := classifyPrepareError(f.request, err); handled {
+				finishValidation(f, result, responseErr)
 				continue
 			}
 			e.abortPlanning(batch[i:], plan.planned, plan.deferred, err)

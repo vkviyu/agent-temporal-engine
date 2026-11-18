@@ -406,7 +406,7 @@ func (e *Engine) prepareGraphJoin(ctx context.Context, req api.CommitRequest, di
 	if err != nil {
 		return nil, err
 	}
-	if err = verifyContentClosure(ctx, b, graph.ContentReferences(r)); err != nil {
+	if err = verifyContentClosure(ctx, b, physicalReferences(graph.ContentReferences(r))); err != nil {
 		return nil, err
 	}
 	branch.Head = r.ID

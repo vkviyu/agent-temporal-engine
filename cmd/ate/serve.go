@@ -84,19 +84,12 @@ func serve(ctx context.Context, args []string, out, errOut io.Writer) int {
 	if err = server.Listen(*socket); err != nil {
 		return finish(err)
 	}
-	capabilities := []string{"core/storage-v1", "core/state-view-v1", "protocol/local-v1"}
-	if store.AgentProfileEnabled() {
-		capabilities = append(capabilities, "agent/v1")
-	}
-	if store.EventProfileEnabled() {
-		capabilities = append(capabilities, "event/v1")
-	}
 	if err = json.NewEncoder(out).Encode(struct {
 		Socket       string            `json:"socket"`
 		Principal    model.PrincipalID `json:"principal"`
 		Spaces       []model.SpaceID   `json:"spaces"`
 		Capabilities []string          `json:"capabilities"`
-	}{*socket, model.PrincipalID(*principal), spaces, capabilities}); err != nil {
+	}{*socket, model.PrincipalID(*principal), spaces, server.Capabilities()}); err != nil {
 		return finish(err)
 	}
 	return finish(server.Serve(ctx))

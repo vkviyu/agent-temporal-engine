@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/vkviyu/agent-temporal-engine/api"
+	"github.com/vkviyu/agent-temporal-engine/observation"
 	"github.com/vkviyu/agent-temporal-engine/storage"
 )
 
@@ -32,7 +33,9 @@ func (e *Engine) publishBatch(plan batchPlan) (storage.PublishedBatch, bool) {
 		return storage.PublishedBatch{}, false
 	}
 	// Caller wait contexts are deliberately absent from planning and P1.
+	start := e.options.Observation.Start()
 	published, err := e.journal.PublishPreparedBatch(context.Background(), prepared)
+	e.options.Observation.Finish(start, observation.Event{Kind: observation.P1, Outcome: observationOutcome(err), Count: uint64(len(prepared)), Bytes: plan.bytes})
 	if err != nil {
 		if errors.Is(err, storage.ErrCommitUnknown) {
 			e.mu.Lock()

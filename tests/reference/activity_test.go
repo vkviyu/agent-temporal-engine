@@ -61,14 +61,14 @@ func TestIndependentActivityUnknownEffectsAndStaleResults(t *testing.T) {
 			apply := func(name string, expected func(*oracle.Activity) error, c agentprofile.ControlCommand) {
 				t.Helper()
 				sequence++
-				before, _ := agentprofile.EncodeSnapshot(h.actual.Snapshot())
+				before := agentStateBytes(t, h.actual.Snapshot())
 				wantErr := want.Batch(expected)
 				_, gotErr := h.actual.ApplyCommand(key(fmt.Sprintf("activity-%d", sequence)), h.control(c))
 				if (wantErr == nil) != (gotErr == nil) {
 					t.Fatalf("%s mismatch expected=%v actual=%v", name, wantErr, gotErr)
 				}
 				if gotErr != nil {
-					after, _ := agentprofile.EncodeSnapshot(h.actual.Snapshot())
+					after := agentStateBytes(t, h.actual.Snapshot())
 					if !bytes.Equal(before, after) {
 						t.Fatalf("%s rejected transition mutated state", name)
 					}
@@ -179,14 +179,7 @@ func TestIndependentActivityUnknownEffectsAndStaleResults(t *testing.T) {
 			capture("success", "third", "success", 2)
 			apply("accept-success", func(a *oracle.Activity) error { return a.Accept("success", 2) }, agentprofile.ControlCommand{AcceptActivity: &agentprofile.AcceptActivityCommand{Activity: spec.Activity, Result: "success", ExpectedVersion: want.Version, Authority: binding(auth), Evidence: digest("d")}})
 			claim("after-accept", 4)
-			raw, err := agentprofile.EncodeSnapshot(h.actual.Snapshot())
-			if err != nil {
-				t.Fatal(err)
-			}
-			h.actual, err = agentprofile.RestoreSnapshot(raw)
-			if err != nil {
-				t.Fatal(err)
-			}
+			h.actual = restoreAgentState(t, h.actual)
 			compare("restored")
 		})
 	}

@@ -31,7 +31,10 @@ var (
 // with larger streams should use RecordsPage instead of materializing the log.
 const MaxReadRecordsBytes = 64 << 20
 const MaxPageRecords = 256
-const metadataMagic = "ATE-JOURNALSTORE-1\x00"
+
+// V2 separates the logical LSN from the physical generation saved for receipts.
+// V1 metadata is rejected rather than reinterpreted or migrated during recovery.
+const metadataMagic = "ATE-JOURNALSTORE-2\x00"
 
 type Record struct {
 	Kind    storage.Kind
@@ -127,7 +130,9 @@ func open(d storage.DurableIO, o storage.JournalOptions, apply Apply, prepare Pr
 		if err != nil {
 			return err
 		}
-		if next == 0 || next != generation+1 || len(tx.ControlUpdates) != 0 {
+		// Journal verifies contiguous LSNs. Layout-only publications can leave
+		// gaps in Generation, which is retained solely for the original receipt.
+		if next.lsn != tx.LSN || next.generation <= generation || len(tx.ControlUpdates) != 0 {
 			return fmt.Errorf("%w: publication metadata", ErrInvalidRecord)
 		}
 		rd := requestDigest(r)
@@ -143,7 +148,7 @@ func open(d storage.DurableIO, o storage.JournalOptions, apply Apply, prepare Pr
 		if err := s.project(r); err != nil {
 			return err
 		}
-		generation = next
+		generation = next.generation
 		result := storage.PublishedTransaction{Publication: storage.Publication{Store: tx.Store, Generation: generation, Position: storage.Position{LSN: tx.LSN, Digest: tx.CommitDigest}, PostRootSet: tx.PostRootSet, PublishedEnd: uint64(tx.EndOffset), Profile: d.Profile()}, RecordLocations: append([]storage.RecordLocation(nil), tx.RecordLocations...)}
 		s.receipts[r.Request] = receipt{digest: rd, result: result}
 		s.records = append(s.records, recordEntry{kind: r.Kind, request: r.Request, location: tx.RecordLocations[0], digest: rd})
@@ -213,17 +218,40 @@ func digestHash(h hash.Hash) storage.Digest {
 	copy(out[:], h.Sum(nil))
 	return out
 }
-func encodeMetadata(generation uint64) []byte {
-	b := make([]byte, len(metadataMagic)+8)
+
+type publicationMetadata struct {
+	lsn        uint64
+	generation uint64
+}
+
+func encodeMetadata(lsn, generation uint64) []byte {
+	b := make([]byte, len(metadataMagic)+16)
 	copy(b, metadataMagic)
-	binary.BigEndian.PutUint64(b[len(metadataMagic):], generation)
+	binary.BigEndian.PutUint64(b[len(metadataMagic):], lsn)
+	binary.BigEndian.PutUint64(b[len(metadataMagic)+8:], generation)
 	return b
 }
-func decodeMetadata(b []byte) (uint64, error) {
-	if len(b) != len(metadataMagic)+8 || string(b[:len(metadataMagic)]) != metadataMagic {
-		return 0, fmt.Errorf("%w: journalstore transaction schema", storage.ErrUnsupported)
+func decodeMetadata(b []byte) (publicationMetadata, error) {
+	if len(b) != len(metadataMagic)+16 || string(b[:len(metadataMagic)]) != metadataMagic {
+		return publicationMetadata{}, fmt.Errorf("%w: journalstore transaction schema", storage.ErrUnsupported)
 	}
-	return binary.BigEndian.Uint64(b[len(metadataMagic):]), nil
+	m := publicationMetadata{
+		lsn:        binary.BigEndian.Uint64(b[len(metadataMagic):]),
+		generation: binary.BigEndian.Uint64(b[len(metadataMagic)+8:]),
+	}
+	if m.lsn == 0 || m.generation < m.lsn {
+		return publicationMetadata{}, fmt.Errorf("%w: publication metadata", ErrInvalidRecord)
+	}
+	return m, nil
+}
+
+func nextMetadata(p storage.Publication) ([]byte, error) {
+	// Each append consumes one logical LSN and one physical publication.
+	// Check both before addition; compaction can exhaust Generation first.
+	if p.Position.LSN == ^uint64(0) || p.Generation == ^uint64(0) {
+		return nil, storage.ErrLimit
+	}
+	return encodeMetadata(p.Position.LSN+1, p.Generation+1), nil
 }
 
 func (s *Store) ready() error {
@@ -324,11 +352,28 @@ func (s *Store) Append(ctx context.Context, r Record) (storage.PublishedTransact
 	if err != nil {
 		return storage.PublishedTransaction{}, err
 	}
+	metadata, err := nextMetadata(p)
+	if err != nil {
+		return storage.PublishedTransaction{}, err
+	}
 	var raw [16]byte
 	if _, err = rand.Read(raw[:]); err != nil {
 		return storage.PublishedTransaction{}, err
 	}
-	tx := storage.Transaction{TxID: model.TxID(hex.EncodeToString(raw[:])), Request: r.Request, RequestDigest: rd, LSN: p.Position.LSN + 1, PreviousDigest: p.Position.Digest, Records: []storage.Record{{Kind: r.Kind, Payload: r.Payload}}, RefUpdates: encodeMetadata(p.Generation + 1), Receipt: receiptDigest(r), PostRootSet: recordDigest(r)}
+	tx := storage.Transaction{
+		TxID:           model.TxID(hex.EncodeToString(raw[:])),
+		Request:        r.Request,
+		RequestDigest:  rd,
+		LSN:            p.Position.LSN + 1,
+		PreviousDigest: p.Position.Digest,
+		Records: []storage.Record{{
+			Kind:    r.Kind,
+			Payload: r.Payload,
+		}},
+		RefUpdates:  metadata,
+		Receipt:     receiptDigest(r),
+		PostRootSet: recordDigest(r),
+	}
 	// PostRootSet is the typed record commitment of this experimental adapter,
 	// not a five-root ATE core state object. Core Engine must not open this log.
 	published, err := s.journal.PublishWithRecords(ctx, tx)

@@ -2,8 +2,8 @@ package knowledge
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -61,7 +61,7 @@ func TestSnapshotRejectsForgedIdentityAndNoncontiguousSequence(t *testing.T) {
 	}{"same slot different content", Snapshot{Observations: []Observation{o, duplicateSequence}}, ErrObservationSequence})
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if _, err := EncodeSnapshot(tc.snapshot); !errors.Is(err, tc.want) {
+			if err := tc.snapshot.Validate(); !errors.Is(err, tc.want) {
 				t.Fatalf("got %v, want %v", err, tc.want)
 			}
 		})
@@ -93,62 +93,60 @@ func TestSnapshotPacketRequiresObservedMatchingEvidence(t *testing.T) {
 			candidate := clonePacket(p)
 			tc.mutate(&candidate)
 			candidate.ID = PacketID(candidate)
-			_, err := ApplyCommand(Snapshot{Observations: tc.observations}, Command{Packet: &candidate})
+			err := (Snapshot{Observations: tc.observations, Packets: []ContextPacket{candidate}}).Validate()
 			if !errors.Is(err, tc.want) {
 				t.Fatalf("got %v, want %v", err, tc.want)
 			}
 		})
 	}
 	p.ID = dig('1')
-	if _, err := ApplyCommand(Snapshot{Observations: []Observation{o}}, Command{Packet: &p}); !errors.Is(err, ErrInvalid) {
+	if err := (Snapshot{Observations: []Observation{o}, Packets: []ContextPacket{p}}).Validate(); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("forged packet accepted: %v", err)
 	}
 }
 
-func TestSnapshotAndCommandDoNotAliasOrSortCallerData(t *testing.T) {
+func TestSnapshotValidationAndCloneOwnCallerData(t *testing.T) {
 	o1, o2 := snapshotObservation("space", "one", 1), snapshotObservation("space", "one", 2)
+	sourceKey := o1.Key
+	o1.Source.Anchor.Knowledge = &sourceKey
+	o1.Source.Anchor.Cursor = &model.Cursor{Store: "store", Space: "space", Revision: model.RevisionID(dig('1'))}
+	o1.ID = ObservationID(o1)
 	observations := []Observation{o1, o2}
 	if observations[0].ID < observations[1].ID {
 		observations[0], observations[1] = observations[1], observations[0]
 	}
 	original := append([]Observation(nil), observations...)
-	s := Snapshot{Observations: observations}
-	if _, err := EncodeSnapshot(s); err != nil {
+	p := snapshotPacket(o1)
+	s := Snapshot{Observations: observations, Packets: []ContextPacket{p}}
+	if err := s.Validate(); err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(original, observations) {
-		t.Fatal("EncodeSnapshot reordered caller records")
+		t.Fatal("Validate reordered caller records")
 	}
-	p := snapshotPacket(o1)
-	next, err := ApplyCommand(s, Command{Packet: &p})
-	if err != nil {
-		t.Fatal(err)
+	next := s.Clone()
+	if !reflect.DeepEqual(next, s) {
+		t.Fatal("Clone changed snapshot values")
 	}
 	next.Packets[0].Key.Execution = "changed"
 	next.Packets[0].Source.Anchor.Knowledge.Execution = "changed"
 	next.Packets[0].Items[0].Label = "changed"
 	if p.Key.Execution != "one" || p.Source.Anchor.Knowledge.Execution != "one" || p.Items[0].Label != "evidence" {
-		t.Fatal("candidate aliases caller packet")
+		t.Fatal("clone aliases caller packet")
 	}
-	duplicate, err := ApplyCommand(s, Command{Observation: &o1})
-	if err != nil {
-		t.Fatal(err)
+	next.Packets[0].Source.Anchor.Cursor.Revision = model.RevisionID(dig('2'))
+	if p.Source.Anchor.Cursor.Revision != model.RevisionID(dig('1')) {
+		t.Fatal("clone aliases packet cursor")
 	}
-	duplicate.Observations[0].Source.Anchor.Cursor = &model.Cursor{Revision: model.RevisionID(dig('1'))}
-	if s.Observations[0].Source.Anchor.Cursor != nil {
-		t.Fatal("idempotent return aliases original snapshot")
+	for i := range next.Observations {
+		if next.Observations[i].ID == o1.ID {
+			next.Observations[i].Source.Anchor.Knowledge.Execution = "changed"
+			next.Observations[i].Source.Anchor.Cursor.Revision = model.RevisionID(dig('3'))
+		}
 	}
-	before, err := EncodeSnapshot(s)
-	if err != nil {
-		t.Fatal(err)
-	}
-	invalid := snapshotObservation("space", "one", 4)
-	if _, err = ApplyCommand(s, Command{Observation: &invalid}); !errors.Is(err, ErrObservationSequence) {
-		t.Fatal(err)
-	}
-	after, err := EncodeSnapshot(s)
-	if err != nil || !bytes.Equal(before, after) {
-		t.Fatal("rejected candidate changed source")
+	next.Observations[0].Label = "changed"
+	if o1.Source.Anchor.Knowledge.Execution != "one" || o1.Source.Anchor.Cursor.Revision != model.RevisionID(dig('1')) || !reflect.DeepEqual(original, observations) {
+		t.Fatal("clone aliases caller observations")
 	}
 }
 
@@ -160,9 +158,15 @@ func TestKnowledgeCommandClosedCanonicalRoundTrip(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		if raw[len(commandPrefix)] != 2 {
+			t.Fatal("command encoder did not emit v2")
+		}
 		got, err := DecodeCommand(raw)
 		if err != nil {
 			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(got, c) {
+			t.Fatal("command changed values on roundtrip")
 		}
 		canonical, err := EncodeCommand(got)
 		if err != nil || !bytes.Equal(raw, canonical) {
@@ -182,7 +186,7 @@ func TestKnowledgeCommandClosedCanonicalRoundTrip(t *testing.T) {
 			t.Fatal("open command union accepted")
 		}
 	}
-	for _, op := range []uint64{0, 3} {
+	for _, op := range []uint64{0, 4, ^uint64(0)} {
 		b := codec.AppendUint([]byte(commandPrefix), commandVersion)
 		b = codec.AppendUint(b, op)
 		b, _ = codec.AppendBytes(b, nil)
@@ -195,31 +199,63 @@ func TestKnowledgeCommandClosedCanonicalRoundTrip(t *testing.T) {
 	}
 }
 
-func TestKnowledgeSnapshotCanonicalAndBounded(t *testing.T) {
+func TestKnowledgeCommandRejectsUnsupportedVersions(t *testing.T) {
 	o := snapshotObservation("space", "one", 1)
 	p := snapshotPacket(o)
-	p.Items = []ContextItem{} // retain legacy JSON empty-array representation
-	p.ID = PacketID(p)
-	s := Snapshot{Observations: []Observation{o}, Packets: []ContextPacket{p}}
-	expectedJSON, err := json.Marshal(snapshotWire{Observations: s.Observations, Packets: s.Packets})
-	if err != nil {
-		t.Fatal(err)
+	source := o.Source.clone()
+	source.Anchor.Knowledge = &o.Key
+	source.Anchor.Cursor = &model.Cursor{Store: "store", Space: "space", Revision: model.RevisionID(dig('a'))}
+	importCommand := ImportCommand{Target: model.KnowledgeKey{Actor: "receiver", Execution: "target"}, Source: source, Observations: []model.ObjectID{o.ID}}
+	for name, command := range map[string]Command{"observation": {Observation: &o}, "packet": {Packet: &p}, "import": {Import: &importCommand}} {
+		t.Run(name, func(t *testing.T) {
+			raw, err := EncodeCommand(command)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, version := range []uint64{0, 1, 3, 127, 128, ^uint64(0)} {
+				t.Run(fmt.Sprint(version), func(t *testing.T) {
+					header := codec.AppendUint([]byte(commandPrefix), version)
+					unsupported := append(append([]byte(nil), header...), raw[len(commandPrefix)+1:]...)
+					for _, input := range [][]byte{header, unsupported} {
+						got, err := DecodeCommand(input)
+						if !errors.Is(err, ErrUnsupportedSchema) || !reflect.DeepEqual(got, Command{}) {
+							t.Fatalf("unsupported command returned %+v, %v", got, err)
+						}
+					}
+				})
+			}
+		})
 	}
-	raw, err := EncodeSnapshot(s)
-	if err != nil {
-		t.Fatal(err)
+	// Missing, truncated, and noncanonical version encodings are malformed,
+	// rather than successfully decoded unsupported schemas.
+	for _, versionBytes := range [][]byte{nil, {0x80}, {0x82, 0x00}} {
+		raw := append([]byte(commandPrefix), versionBytes...)
+		if _, err := DecodeCommand(raw); !errors.Is(err, ErrInvalid) {
+			t.Fatalf("malformed version returned %v", err)
+		}
 	}
-	if !bytes.Equal(raw, append([]byte(snapshotPrefix), expectedJSON...)) {
-		t.Fatal("snapshot byte compatibility changed")
+}
+
+func TestSnapshotDTOBoundsAndDuplicatePackets(t *testing.T) {
+	if err := (Snapshot{}).Validate(); err != nil {
+		t.Fatal("empty DTO rejected", err)
 	}
-	if _, err = DecodeSnapshot(raw); err != nil {
-		t.Fatal(err)
+	for _, s := range []Snapshot{
+		{Observations: make([]Observation, MaxSnapshotRecords+1)},
+		{Packets: make([]ContextPacket, MaxSnapshotRecords+1)},
+	} {
+		if err := s.Validate(); !errors.Is(err, ErrInvalid) {
+			t.Fatalf("oversized DTO returned %v", err)
+		}
 	}
-	if _, err = DecodeSnapshot(append(raw, ' ')); err == nil {
-		t.Fatal("noncanonical whitespace accepted")
+	o := snapshotObservation("space", "one", MaxSnapshotRecords+1)
+	if err := (Snapshot{Observations: []Observation{o}}).Validate(); !errors.Is(err, ErrObservationSequence) {
+		t.Fatalf("out-of-range sequence returned %v", err)
 	}
-	if _, err = DecodeSnapshot(make([]byte, MaxSnapshotBytes+1)); err == nil {
-		t.Fatal("oversize snapshot accepted")
+	o = snapshotObservation("space", "one", 1)
+	p := snapshotPacket(o)
+	if err := (Snapshot{Observations: []Observation{o}, Packets: []ContextPacket{p, p}}).Validate(); !errors.Is(err, ErrDuplicateItem) {
+		t.Fatalf("duplicate packet returned %v", err)
 	}
 }
 

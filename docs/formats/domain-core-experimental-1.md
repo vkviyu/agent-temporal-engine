@@ -6,11 +6,11 @@
 
 ## Method 与根归属
 
-| Method | Canonical body | 修改的领域根 |
-| --- | --- | --- |
-| graph.apply/v1 | graph.EncodeCommand(Space,Command) | BranchRefs |
-| memory.apply/v1 | memory.EncodeCommand(Command) | ExecutionKnowledge |
-| knowledge.apply/v1 | knowledge.EncodeCommand(Command) | ExecutionKnowledge |
+| Method             | Canonical body                     | 修改的领域根       |
+| ------------------ | ---------------------------------- | ------------------ |
+| graph.apply/v1     | graph.EncodeCommand(Space,Command) | BranchRefs         |
+| memory.apply/v1    | memory.EncodeCommand(Command)      | ExecutionKnowledge |
+| knowledge.apply/v1 | knowledge.EncodeCommand(Command)   | ExecutionKnowledge |
 
 每个根是系统 Space 中的 Space→领域 radix 目录。受保护的领域 key/value 由核心 reducer 计算，
 再调用 prepareTypedValue。StateOps 的 BeforeRoot/AfterRoot 和 receipt.StateRoot 指向该 Space 的

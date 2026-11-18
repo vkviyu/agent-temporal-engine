@@ -55,6 +55,7 @@ func absorbWorkPlan(ctx context.Context, v *Engine, b *objectBuilder, p *commitP
 }
 
 func (e *Engine) prepareWork(ctx context.Context, req api.CommitRequest, digest model.ObjectID, txID model.TxID, lsn uint64, recorded *operationsRecord) (*commitPlan, error) {
+	ctx = context.WithValue(ctx, workAgentImageKey{}, &workAgentImage{})
 	unit, view, builder, commandID, err := e.prepareWorkInput(ctx, req)
 	if err != nil {
 		return nil, err

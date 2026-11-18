@@ -28,7 +28,10 @@ var ErrInvalidGraphTransaction = errors.New("invalid graph transaction")
 var ErrUnsupportedAdapterSchema = errors.New("unsupported graphstore adapter schema")
 
 const principal = model.PrincipalID("graph-host")
-const AdapterSchema uint64 = 1
+
+// AdapterSchema separates the logical LSN from the physical receipt generation.
+// V1 metadata is rejected rather than reinterpreted or migrated during recovery.
+const AdapterSchema uint64 = 2
 const metadataDomain = "ATE-GRAPHSTORE\x00"
 const requestPrefix = "revision/v1/"
 const maxPublicationMetadataBytes = 128
@@ -95,11 +98,13 @@ func open(d storage.DurableIO, o storage.JournalOptions, reader graph.StateReade
 		if len(tx.Records) != 1 || len(tx.RecordLocations) != 1 || len(tx.RefUpdates) != 0 {
 			return ErrInvalidGraphTransaction
 		}
-		generation, err := decodePublicationMetadata(tx.ControlUpdates)
+		metadata, err := decodePublicationMetadata(tx.ControlUpdates)
 		if err != nil {
 			return err
 		}
-		if previousGeneration == ^uint64(0) || generation != previousGeneration+1 || generation != tx.LSN {
+		// Journal verifies contiguous LSNs. Layout-only publications can leave
+		// gaps in Generation, which is retained solely for the original receipt.
+		if metadata.lsn != tx.LSN || metadata.generation <= previousGeneration {
 			return ErrInvalidGraphTransaction
 		}
 		raw := tx.Records[0].Payload
@@ -150,10 +155,20 @@ func open(d storage.DurableIO, o storage.JournalOptions, reader graph.StateReade
 		default:
 			return ErrInvalidGraphTransaction
 		}
-		own := storage.Publication{Store: tx.Store, Generation: generation, Position: storage.Position{LSN: tx.LSN, Digest: tx.CommitDigest}, PostRootSet: tx.PostRootSet, PublishedEnd: uint64(tx.EndOffset), Profile: d.Profile()}
+		own := storage.Publication{
+			Store:      tx.Store,
+			Generation: metadata.generation,
+			Position: storage.Position{
+				LSN:    tx.LSN,
+				Digest: tx.CommitDigest,
+			},
+			PostRootSet:  tx.PostRootSet,
+			PublishedEnd: uint64(tx.EndOffset),
+			Profile:      d.Profile(),
+		}
 		proof := storage.PublishedTransaction{Publication: own, RecordLocations: append([]storage.RecordLocation(nil), tx.RecordLocations...)}
 		requests[tx.Request] = committedRequest{digest: tx.RequestDigest, publication: clonePublication(proof), branch: branch}
-		previousGeneration = generation
+		previousGeneration = metadata.generation
 		if tx.Records[0].Kind == storage.KindRevision {
 			r, decodeErr := graph.DecodeRevision(raw)
 			if decodeErr != nil {
@@ -178,37 +193,57 @@ func digestOf(id string) storage.Digest {
 	return d
 }
 func digestOfBytes(b []byte) storage.Digest { return storage.Digest(sha256.Sum256(b)) }
-func encodePublicationMetadata(generation uint64) []byte {
+
+type publicationMetadata struct {
+	lsn        uint64
+	generation uint64
+}
+
+func encodePublicationMetadata(lsn, generation uint64) []byte {
 	b := append([]byte(nil), metadataDomain...)
 	b = codec.AppendUint(b, AdapterSchema)
+	b = codec.AppendUint(b, lsn)
 	return codec.AppendUint(b, generation)
 }
-func decodePublicationMetadata(raw []byte) (uint64, error) {
+func decodePublicationMetadata(raw []byte) (publicationMetadata, error) {
 	if len(raw) > maxPublicationMetadataBytes {
-		return 0, storage.ErrLimit
+		return publicationMetadata{}, storage.ErrLimit
 	}
 	if !bytes.HasPrefix(raw, []byte(metadataDomain)) {
-		return 0, errors.Join(storage.ErrUnsupported, ErrUnsupportedAdapterSchema)
+		return publicationMetadata{}, errors.Join(storage.ErrUnsupported, ErrUnsupportedAdapterSchema)
 	}
 	d := codec.NewDecoder(raw[len(metadataDomain):])
 	schema, err := d.Uint()
 	if err != nil {
-		return 0, err
+		return publicationMetadata{}, err
 	}
 	if schema != AdapterSchema {
-		return 0, errors.Join(storage.ErrUnsupported, ErrUnsupportedAdapterSchema)
+		return publicationMetadata{}, errors.Join(storage.ErrUnsupported, ErrUnsupportedAdapterSchema)
+	}
+	lsn, err := d.Uint()
+	if err != nil {
+		return publicationMetadata{}, err
 	}
 	generation, err := d.Uint()
 	if err != nil {
-		return 0, err
+		return publicationMetadata{}, err
 	}
-	if generation == 0 {
-		return 0, ErrInvalidGraphTransaction
+	if lsn == 0 || generation < lsn {
+		return publicationMetadata{}, ErrInvalidGraphTransaction
 	}
 	if err = d.Done(); err != nil {
-		return 0, err
+		return publicationMetadata{}, err
 	}
-	return generation, nil
+	return publicationMetadata{lsn: lsn, generation: generation}, nil
+}
+
+func nextPublicationMetadata(p storage.Publication) ([]byte, error) {
+	// Each write consumes one logical LSN and one physical publication.
+	// Check both before addition; compaction can exhaust Generation first.
+	if p.Position.LSN == ^uint64(0) || p.Generation == ^uint64(0) {
+		return nil, storage.ErrLimit
+	}
+	return encodePublicationMetadata(p.Position.LSN+1, p.Generation+1), nil
 }
 func clonePublication(p storage.PublishedTransaction) storage.PublishedTransaction {
 	p.RecordLocations = append([]storage.RecordLocation(nil), p.RecordLocations...)
@@ -294,15 +329,33 @@ func (s *Store) publishRevisionLocked(ctx context.Context, r graph.Revision) (gr
 	if err != nil {
 		return graph.Revision{}, storage.PublishedTransaction{}, err
 	}
-	if p.Generation == ^uint64(0) {
-		return graph.Revision{}, storage.PublishedTransaction{}, storage.ErrLimit
+	metadata, err := nextPublicationMetadata(p)
+	if err != nil {
+		return graph.Revision{}, storage.PublishedTransaction{}, err
 	}
 	var txidBytes [16]byte
 	if _, err = rand.Read(txidBytes[:]); err != nil {
 		return graph.Revision{}, storage.PublishedTransaction{}, err
 	}
 	txid := model.TxID(hex.EncodeToString(txidBytes[:]))
-	tx := storage.Transaction{TxID: txid, Request: model.RequestKey{Space: r.Space, Principal: principal, RequestID: revisionRequestID(r.ID)}, RequestDigest: requestDigest, LSN: p.Position.LSN + 1, PreviousDigest: p.Position.Digest, Records: []storage.Record{{Kind: storage.KindRevision, Payload: raw}}, ControlUpdates: encodePublicationMetadata(p.Generation + 1), Receipt: digestOf(string(r.ID)), PostRootSet: digestOf(string(r.ID))}
+	tx := storage.Transaction{
+		TxID: txid,
+		Request: model.RequestKey{
+			Space:     r.Space,
+			Principal: principal,
+			RequestID: revisionRequestID(r.ID),
+		},
+		RequestDigest:  requestDigest,
+		LSN:            p.Position.LSN + 1,
+		PreviousDigest: p.Position.Digest,
+		Records: []storage.Record{{
+			Kind:    storage.KindRevision,
+			Payload: raw,
+		}},
+		ControlUpdates: metadata,
+		Receipt:        digestOf(string(r.ID)),
+		PostRootSet:    digestOf(string(r.ID)),
+	}
 	published, err := s.journal.PublishWithRecords(ctx, tx)
 	if err != nil {
 		return graph.Revision{}, storage.PublishedTransaction{}, err
@@ -394,14 +447,28 @@ func (s *Store) publishBranchLocked(ctx context.Context, command branchCommand) 
 	if err != nil {
 		return graph.Branch{}, storage.PublishedTransaction{}, err
 	}
-	if p.Generation == ^uint64(0) {
-		return graph.Branch{}, storage.PublishedTransaction{}, storage.ErrLimit
+	metadata, err := nextPublicationMetadata(p)
+	if err != nil {
+		return graph.Branch{}, storage.PublishedTransaction{}, err
 	}
 	var txidBytes [16]byte
 	if _, err = rand.Read(txidBytes[:]); err != nil {
 		return graph.Branch{}, storage.PublishedTransaction{}, err
 	}
-	tx := storage.Transaction{TxID: model.TxID(hex.EncodeToString(txidBytes[:])), Request: key, RequestDigest: digest, LSN: p.Position.LSN + 1, PreviousDigest: p.Position.Digest, Records: []storage.Record{{Kind: storage.KindEvent, Payload: raw}}, ControlUpdates: encodePublicationMetadata(p.Generation + 1), Receipt: digest, PostRootSet: digest}
+	tx := storage.Transaction{
+		TxID:           model.TxID(hex.EncodeToString(txidBytes[:])),
+		Request:        key,
+		RequestDigest:  digest,
+		LSN:            p.Position.LSN + 1,
+		PreviousDigest: p.Position.Digest,
+		Records: []storage.Record{{
+			Kind:    storage.KindEvent,
+			Payload: raw,
+		}},
+		ControlUpdates: metadata,
+		Receipt:        digest,
+		PostRootSet:    digest,
+	}
 	published, err := s.journal.PublishWithRecords(ctx, tx)
 	if err != nil {
 		return graph.Branch{}, storage.PublishedTransaction{}, err

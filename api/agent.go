@@ -39,3 +39,37 @@ type AgentCommands interface {
 	ApplyAgent(context.Context, ApplyAgentRequest) (CommitResult, error)
 	GetAgentState(context.Context, ReadAgentStateRequest) (AgentStateResult, error)
 }
+
+const (
+	MaxAgentStatePageBytes   = 8 << 20
+	MaxAgentStatePageRecords = 256
+)
+
+// ReadAgentStateRecordsRequest selects an output page from one fixed state.
+// Continuation is a consistency cursor, not an authorization credential.
+// Subsequent pages require Anchor. Limit=0 selects 256 records.
+type ReadAgentStateRecordsRequest struct {
+	Space        model.SpaceID
+	Principal    model.PrincipalID
+	Anchor       *model.SnapshotAnchor
+	Limit        int
+	Continuation string
+}
+
+type AgentStateRecordsPage struct {
+	Found           bool
+	Anchor          model.SnapshotAnchor
+	Fence           model.CommitFence
+	RootSet         model.ObjectID
+	LiveControlRoot model.ObjectID
+	Catalog         model.ObjectID // LiveControl partition envelope, not its radix root.
+	RecordCount     uint32
+	RecordBytes     uint64 // Total canonical raw bytes across the complete catalog.
+	Records         []agentprofile.StateRecord
+	Continuation    string
+}
+
+// AgentRecordReader is independent of the complete-snapshot AgentCommands API.
+type AgentRecordReader interface {
+	GetAgentStateRecords(context.Context, ReadAgentStateRecordsRequest) (AgentStateRecordsPage, error)
+}

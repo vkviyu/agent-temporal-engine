@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"reflect"
 	"testing"
 
 	"github.com/vkviyu/agent-temporal-engine/knowledge"
@@ -164,13 +165,28 @@ func TestEarlyEvidenceRecallUsesExactKnowledgePosition(t *testing.T) {
 		t.Fatalf("recall counts: recent-window=%d exact-ID=%d", latestWindow, recalled)
 	}
 	for round := 0; round < 3; round++ {
-		raw, err := knowledge.EncodeSnapshot(selected)
-		if err != nil {
+		restored := knowledge.Snapshot{}
+		for _, observation := range selected.Observations {
+			raw, err := observation.Canonical()
+			if err != nil {
+				t.Fatal(err)
+			}
+			decoded, err := knowledge.DecodeObservation(raw)
+			if err != nil {
+				t.Fatal("reconstruction lost the early evidence", err)
+			}
+			restored.Observations = append(restored.Observations, decoded)
+		}
+		if err := restored.Validate(); err != nil {
 			t.Fatal(err)
 		}
-		selected, err = knowledge.DecodeSnapshot(raw)
-		if err != nil {
-			t.Fatal("reconstruction lost the early evidence", err)
+		if !reflect.DeepEqual(restored, selected) {
+			t.Fatal("canonical record roundtrip changed the historical observations")
+		}
+		selected = restored
+		_, preservedRevision, err := knowledge.SelectRevision(selected, "project-a", key, revision.ID)
+		if err != nil || preservedRevision != revision {
+			t.Fatalf("reconstruction changed the historical revision: %+v %v", preservedRevision, err)
 		}
 		preserved := 0
 		for _, o := range selected.Observations {
@@ -179,8 +195,8 @@ func TestEarlyEvidenceRecallUsesExactKnowledgePosition(t *testing.T) {
 			}
 		}
 		if preserved != len(wanted) {
-			t.Fatal("canonical sorting lost the early evidence identities")
+			t.Fatal("canonical record roundtrip lost the early evidence identities")
 		}
 	}
-	t.Log("exact cut 64/128 observations; latest-eight recall 0/2; explicit recorded-ID recall 2/2; future leakage 0; three canonical reconstructions unchanged; this does not measure model recall or fixed-token prompt selection")
+	t.Log("exact cut 64/128 observations; latest-eight recall 0/2; explicit recorded-ID recall 2/2; future leakage 0; three canonical record reconstructions unchanged; this does not measure model recall or fixed-token prompt selection")
 }

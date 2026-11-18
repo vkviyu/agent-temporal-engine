@@ -3,16 +3,8 @@ package agentprofile
 import (
 	"bytes"
 	"fmt"
-	"sort"
 
-	"github.com/vkviyu/agent-temporal-engine/codec"
 	"github.com/vkviyu/agent-temporal-engine/model"
-)
-
-const (
-	SnapshotVersion    uint64 = 1
-	MaxSnapshotRecords        = 65536
-	MaxSnapshotBytes          = 32 << 20
 )
 
 // Snapshot is an owned, deterministic view of all profile state. It contains
@@ -43,8 +35,8 @@ func cloneSnapshot(s Snapshot) Snapshot {
 	return out
 }
 
-// Snapshot returns an owned copy. Sorting is performed by EncodeSnapshot, so
-// callers can use this method for diagnostics without depending on map order.
+// Snapshot returns an owned copy. Record encoding establishes canonical order,
+// so callers can use this method for diagnostics without depending on map order.
 func (l *Ledger) Snapshot() Snapshot {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
@@ -114,10 +106,14 @@ func validActionStatus(s ActionStatus) bool {
 // It intentionally does not infer a transition history: a recovered snapshot
 // is a state image, while the durable command log remains the audit history.
 func (s Snapshot) Validate() error {
-	if len(s.Tasks) > MaxSnapshotRecords || len(s.Executions) > MaxSnapshotRecords || len(s.Steps) > MaxSnapshotRecords || len(s.Invocations) > MaxSnapshotRecords || len(s.Actions) > MaxSnapshotRecords {
+	return s.validate(false)
+}
+
+func (s Snapshot) validate(records bool) error {
+	if len(s.Tasks) > MaxStateRecords || len(s.Executions) > MaxStateRecords || len(s.Steps) > MaxStateRecords || len(s.Invocations) > MaxStateRecords || len(s.Actions) > MaxStateRecords {
 		return ErrInvalid
 	}
-	if err := validateLifecycleSnapshot(s.Lifecycle); err != nil {
+	if err := validateLifecycleState(s.Lifecycle, records); err != nil {
 		return err
 	}
 	tasks := make(map[model.EntityID]Task, len(s.Tasks))
@@ -239,217 +235,12 @@ func (s Snapshot) Validate() error {
 			return err
 		}
 	}
-	return validateRecoveryState(s)
+	return validateRecoveryStateMode(s, records)
 }
 
-func appendRecord(b []byte, raw []byte) ([]byte, error) { return codec.AppendBytes(b, raw) }
-
-// EncodeSnapshot uses sorted records and exact canonical child encodings. It
-// never serializes Go map iteration order or the derived slots index.
-func EncodeSnapshot(s Snapshot) ([]byte, error) {
-	if err := s.Validate(); err != nil {
-		return nil, err
-	}
-	s = cloneSnapshot(s)
-	sort.Slice(s.Tasks, func(i, j int) bool { return s.Tasks[i].ID < s.Tasks[j].ID })
-	sort.Slice(s.Executions, func(i, j int) bool { return s.Executions[i].ID < s.Executions[j].ID })
-	sort.Slice(s.Steps, func(i, j int) bool {
-		if s.Steps[i].Execution != s.Steps[j].Execution {
-			return s.Steps[i].Execution < s.Steps[j].Execution
-		}
-		return s.Steps[i].Sequence < s.Steps[j].Sequence
-	})
-	sort.Slice(s.Invocations, func(i, j int) bool { return s.Invocations[i].ID < s.Invocations[j].ID })
-	sort.Slice(s.Actions, func(i, j int) bool { return s.Actions[i].Key < s.Actions[j].Key })
-	b := []byte("ATE-AGENT-SNAPSHOT\x00")
-	version := SnapshotVersion
-	if !s.Lifecycle.empty() {
-		version = SnapshotVersion + 1
-	}
-	b = codec.AppendUint(b, version)
-	encode := func(n int, f func(int) ([]byte, error)) error {
-		b = codec.AppendUint(b, uint64(n))
-		for i := 0; i < n; i++ {
-			raw, err := f(i)
-			if err != nil {
-				return err
-			}
-			b, err = appendRecord(b, raw)
-			if err != nil {
-				return err
-			}
-			if len(b) > MaxSnapshotBytes {
-				return ErrInvalid
-			}
-		}
-		return nil
-	}
-	if err := encode(len(s.Tasks), func(i int) ([]byte, error) { return EncodeTask(s.Tasks[i]) }); err != nil {
-		return nil, err
-	}
-	if err := encode(len(s.Executions), func(i int) ([]byte, error) { return EncodeExecution(s.Executions[i]) }); err != nil {
-		return nil, err
-	}
-	if err := encode(len(s.Steps), func(i int) ([]byte, error) { return EncodeStep(s.Steps[i]) }); err != nil {
-		return nil, err
-	}
-	if err := encode(len(s.Invocations), func(i int) ([]byte, error) { return EncodeInvocation(s.Invocations[i]) }); err != nil {
-		return nil, err
-	}
-	if err := encode(len(s.Actions), func(i int) ([]byte, error) { return EncodePendingAction(s.Actions[i]) }); err != nil {
-		return nil, err
-	}
-	if version >= SnapshotVersion+1 {
-		raw, err := encodeLifecycleSnapshot(s.Lifecycle)
-		if err != nil {
-			return nil, err
-		}
-		b, err = appendRecord(b, raw)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return b, nil
-}
-
-func readRecords(d *codec.Decoder, n int, decode func([]byte) error) error {
-	for i := 0; i < n; i++ {
-		// Invocation arguments/results are allowed up to codec's bounded byte
-		// string size; the enclosing snapshot still has a 32 MiB total cap.
-		raw, err := d.Bytes(codec.MaxByteString)
-		if err != nil {
-			return err
-		}
-		if err = decode(bytes.Clone(raw)); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// DecodeSnapshot rejects unknown versions, duplicate records, noncanonical
-// child encodings, trailing data and any cross-record reference violation.
-func DecodeSnapshot(raw []byte) (Snapshot, error) {
-	if len(raw) > MaxSnapshotBytes || len(raw) < len("ATE-AGENT-SNAPSHOT\x00") {
-		return Snapshot{}, ErrInvalid
-	}
-	prefix := "ATE-AGENT-SNAPSHOT\x00"
-	if string(raw[:len(prefix)]) != prefix {
-		return Snapshot{}, ErrInvalid
-	}
-	d := codec.NewDecoder(raw[len(prefix):])
-	version, err := d.Uint()
-	if err != nil || (version != SnapshotVersion && version != SnapshotVersion+1) {
-		return Snapshot{}, ErrInvalid
-	}
-	readCount := func() (int, error) {
-		n, err := d.Uint()
-		if err != nil || n > MaxSnapshotRecords {
-			return 0, ErrInvalid
-		}
-		return int(n), nil
-	}
-	out := Snapshot{}
-	n, err := readCount()
-	if err != nil {
-		return Snapshot{}, err
-	}
-	out.Tasks = make([]Task, 0, n)
-	if err = readRecords(d, n, func(raw []byte) error {
-		v, e := DecodeTask(raw)
-		if e == nil {
-			out.Tasks = append(out.Tasks, v)
-		}
-		return e
-	}); err != nil {
-		return Snapshot{}, err
-	}
-	n, err = readCount()
-	if err != nil {
-		return Snapshot{}, err
-	}
-	out.Executions = make([]Execution, 0, n)
-	if err = readRecords(d, n, func(raw []byte) error {
-		v, e := DecodeExecution(raw)
-		if e == nil {
-			out.Executions = append(out.Executions, v)
-		}
-		return e
-	}); err != nil {
-		return Snapshot{}, err
-	}
-	n, err = readCount()
-	if err != nil {
-		return Snapshot{}, err
-	}
-	out.Steps = make([]Step, 0, n)
-	if err = readRecords(d, n, func(raw []byte) error {
-		v, e := DecodeStep(raw)
-		if e == nil {
-			out.Steps = append(out.Steps, v)
-		}
-		return e
-	}); err != nil {
-		return Snapshot{}, err
-	}
-	n, err = readCount()
-	if err != nil {
-		return Snapshot{}, err
-	}
-	out.Invocations = make([]Invocation, 0, n)
-	if err = readRecords(d, n, func(raw []byte) error {
-		v, e := DecodeInvocation(raw)
-		if e == nil {
-			out.Invocations = append(out.Invocations, v)
-		}
-		return e
-	}); err != nil {
-		return Snapshot{}, err
-	}
-	n, err = readCount()
-	if err != nil {
-		return Snapshot{}, err
-	}
-	out.Actions = make([]PendingAction, 0, n)
-	if err = readRecords(d, n, func(raw []byte) error {
-		v, e := DecodePendingAction(raw)
-		if e == nil {
-			out.Actions = append(out.Actions, v)
-		}
-		return e
-	}); err != nil {
-		return Snapshot{}, err
-	}
-	if version >= SnapshotVersion+1 {
-		lifecycleRaw, e := d.Bytes(codec.MaxByteString)
-		if e != nil {
-			return Snapshot{}, e
-		}
-		out.Lifecycle, e = decodeLifecycleSnapshot(lifecycleRaw)
-		if e != nil {
-			return Snapshot{}, e
-		}
-	}
-	if err = d.Done(); err != nil {
-		return Snapshot{}, err
-	}
-	if err = out.Validate(); err != nil {
-		return Snapshot{}, err
-	}
-	canonical, err := EncodeSnapshot(out)
-	if err != nil || !bytes.Equal(canonical, raw) {
-		return Snapshot{}, ErrInvalid
-	}
-	return out, nil
-}
-
-// RestoreSnapshot creates a new Ledger whose indexes are derived solely from
-// the authenticated snapshot records.
-func RestoreSnapshot(raw []byte) (*Ledger, error) {
-	s, err := DecodeSnapshot(raw)
-	if err != nil {
-		return nil, err
-	}
+// restoreValidatedSnapshot rebuilds all derived indexes and owns every mutable
+// field. Its input must already have passed snapshot decoding and validation.
+func restoreValidatedSnapshot(s Snapshot) *Ledger {
 	l := New()
 	for _, v := range s.Tasks {
 		l.tasks[v.ID] = v
@@ -471,5 +262,5 @@ func RestoreSnapshot(raw []byte) (*Ledger, error) {
 		l.actions[v.Key] = v
 	}
 	l.lifecycle = cloneLifecycle(s.Lifecycle)
-	return l, nil
+	return l
 }

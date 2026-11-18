@@ -22,6 +22,10 @@ type lifecycleSnapshotWire struct {
 }
 
 func validateLifecycleSnapshot(s LifecycleSnapshot) error {
+	return validateLifecycleState(s, false)
+}
+
+func validateLifecycleState(s LifecycleSnapshot, records bool) error {
 	if len(s.Queries) > MaxLifecycleRecords || len(s.Activities) > MaxLifecycleRecords || len(s.Attempts) > MaxLifecycleRecords || len(s.Results) > MaxLifecycleRecords || len(s.Messages) > MaxLifecycleRecords || len(s.Consumptions) > MaxLifecycleRecords || len(s.Continuations) > MaxLifecycleRecords {
 		return ErrInvalid
 	}
@@ -80,7 +84,7 @@ func validateLifecycleSnapshot(s LifecycleSnapshot) error {
 		}
 		seen[string(v.Execution)] = true
 	}
-	return validateRecoveryShape(s.Recovery)
+	return validateRecoveryShapeMode(s.Recovery, records)
 }
 
 func encodeLifecycleSnapshot(s LifecycleSnapshot) ([]byte, error) {

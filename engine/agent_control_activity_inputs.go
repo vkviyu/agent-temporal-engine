@@ -106,12 +106,6 @@ func (e *Engine) checkAgentActivityInputs(
 			}
 			packet := record.packet
 			if modelActivity {
-				// Old activities already checked eligibility at creation.
-				if e.replayingEvents && !record.indexed {
-					if err := e.validateCurrentTypedPacket(ctx, packet, record.selected, req.Space, req.Principal, true); err != nil {
-						return err
-					}
-				}
 				input := packet.Input
 				if input == nil || input.Object != a.Request || input.Anchor.Fence.Store != a.InputFence.Store || input.Anchor.Fence.LSN > a.InputFence.LSN {
 					return agentprofile.ErrConflict

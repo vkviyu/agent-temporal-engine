@@ -11,13 +11,18 @@ M1f 本地服务/SDK 的传输格式。它不改变 canonical object、RequestDi
 Request:
 
 ```json
-{"version":1,"correlation_id":"opaque","method":"mutate","body":{}}
+{ "version": 1, "correlation_id": "opaque", "method": "mutate", "body": {} }
 ```
 
 Response:
 
 ```json
-{"version":1,"correlation_id":"opaque","body":{},"error":{"code":"...","message":"..."}}
+{
+  "version": 1,
+  "correlation_id": "opaque",
+  "body": {},
+  "error": { "code": "...", "message": "..." }
+}
 ```
 
 字段未知、对象键重复、UTF-8 无效、嵌套超过 32、尾随 JSON、未知错误 code 必须拒绝。`body` 是方法的 typed DTO；身份和业务 bytes 使用 JSON base64。uint64 按十进制整数解析，不经过浮点。
@@ -26,7 +31,7 @@ Response:
 
 首个方法是 hello，body 只有 token。服务端将 token 映射稳定 Principal 和允许 Space，并把结果 capabilities 返回；其他 body 不允许自报 Principal。Core 方法为 commit、mutate、lookup_request、get_state、snapshot、open_view、close_view、get_view_state、get_view_entries；全局 snapshot 还要求 operator grant。
 
-显式启用 Agent Profile 时增加 capability `agent/v1` 及 `apply_agent`、`get_agent_state`。启用相应后端时还增加 `graph/v1`（`apply_graph`、`get_graph_revision`、`get_graph_branch`）、`memory/v1`（`apply_memory`、`get_memory`）和 `knowledge/v1`（`apply_knowledge`、`get_knowledge`）。四类 apply 的 Command 都是对应 package `EncodeCommand` 产生的 canonical 二进制 bytes，再以 JSON base64 传输；Graph command 额外绑定 Space，服务端核对其与外层 Space 相同。传输 JSON 不作为领域 command 身份或替换 snapshot。此前三个 domain method 接受 StateBatch 的实验表示不再被接受，兼容边界见 [core registry](agent-core-experimental-1.md)。
+显式启用 Agent Profile 时增加 capability `agent/v1` 及 `apply_agent`、`get_agent_state`。同时实现 `AgentRecordReader` 和 `ReadDeliveryPreparer` 时增加 `agent/record-read-v1` 及 `get_agent_state_records`；该请求不传 Principal，服务端使用认证身份和 allowed Space。记录读取支持固定 Anchor 下的 256 条/8 MiB 页，Continuation 是一致性 cursor，不是签名授权。每页完整认证 record catalog 和 Snapshot 披露依赖；客户端可用 `ReadFullAgentState` 聚合并最终校验完整 RecordImage。启用相应后端时还增加 `graph/v1`（`apply_graph`、`get_graph_revision`、`get_graph_branch`）、`memory/v1`（`apply_memory`、`get_memory`）和 `knowledge/v1`（`apply_knowledge`、`get_knowledge`）。四类 apply 的 Command 都是对应 package `EncodeCommand` 产生的 canonical 二进制 bytes，再以 JSON base64 传输；Graph command 额外绑定 Space，服务端核对其与外层 Space 相同。传输 JSON 不作为领域 command 身份或替换 snapshot。此前三个 domain method 接受 StateBatch 的实验表示不再被接受，兼容边界见 [core registry](agent-core-experimental-1.md)。
 
 `get_knowledge` 可带 Anchor 和 KnowledgeKey；服务端绑定 Principal，并且只读取该主体的分区。Key 由 Anchor 和请求重复给出时必须一致，按历史和当前控制面认证 Actor/Execution 所属，不回退 latest。省略 Key 也只返回该主体的分区。`execution_knowledge` View 固定同一个选择，只展开已采用的载荷、Observation 和 ContextPacket。领域 Cursor 从选定 Fence 的历史 BranchRefs 中解析 Revision；Knowledge Cursor 从同一 Key 的 Observation 链解析知识 Revision，二者命名空间独立。
 

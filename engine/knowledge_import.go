@@ -12,7 +12,7 @@ import (
 // both executions under the authenticated owner, then selects the exact source
 // position before creating new target observations. It does not clone current
 // global state, share authority, advance the source or erase either history.
-func (e *Engine) prepareKnowledgeImport(ctx context.Context, req api.CommitRequest, digest model.ObjectID, txID model.TxID, lsn uint64, recorded *operationsRecord, index knowledgeIndex, legacy bool, command knowledge.ImportCommand) (*commitPlan, error) {
+func (e *Engine) prepareKnowledgeImport(ctx context.Context, req api.CommitRequest, digest model.ObjectID, txID model.TxID, lsn uint64, recorded *operationsRecord, index knowledgeIndex, command knowledge.ImportCommand) (*commitPlan, error) {
 	if command.Source.Anchor.Space != req.Space {
 		return nil, knowledge.ErrKnowledgeMismatch
 	}
@@ -63,30 +63,16 @@ func (e *Engine) prepareKnowledgeImport(ctx context.Context, req api.CommitReque
 			}
 		}
 	}
-	if !legacy {
-		sequence, err := index.sequence(ctx, command.Target)
-		if err != nil {
-			return nil, err
-		}
-		if sequence != command.ExpectedSequence {
-			return nil, knowledge.ErrObservationSequence
-		}
-		imported, err := knowledge.ImportedObservations(command, adopted)
-		if err != nil {
-			return nil, err
-		}
-		return e.prepareKnowledgeRecords(ctx, req, digest, txID, lsn, recorded, index, imported, nil, knowledge.Snapshot{})
-	}
-	next, err := knowledge.ApplyCommand(index.legacy, knowledge.Command{Import: &command})
+	sequence, err := index.sequence(ctx, command.Target)
 	if err != nil {
 		return nil, err
 	}
-	if err = verifyContentClosure(ctx, e.index, knowledge.ContentReferences(next)); err != nil {
-		return nil, err
+	if sequence != command.ExpectedSequence {
+		return nil, knowledge.ErrObservationSequence
 	}
-	raw, err := knowledge.EncodeSnapshot(next)
+	imported, err := knowledge.ImportedObservations(command, adopted)
 	if err != nil {
 		return nil, err
 	}
-	return e.prepareTypedValue(ctx, req, digest, txID, lsn, recorded, knowledgeStateKey(req.Space, req.Principal), raw)
+	return e.prepareKnowledgeRecords(ctx, req, digest, txID, lsn, recorded, index, imported, nil, knowledge.Snapshot{})
 }

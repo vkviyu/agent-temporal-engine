@@ -15,6 +15,27 @@ type agentBackend interface {
 	AgentProfileEnabled() bool
 }
 
+type agentRecordBackend interface {
+	api.AgentRecordReader
+	api.ReadDeliveryPreparer
+	AgentProfileEnabled() bool
+}
+
+func (ss *session) getAgentStateRecords(ctx context.Context, raw []byte) (api.AgentStateRecordsPage, error) {
+	var w protocol.ReadAgentStateRecordsRequest
+	if err := protocol.DecodeStrict(raw, &w); err != nil {
+		return api.AgentStateRecordsPage{}, err
+	}
+	if !ss.allowed(w.Space) {
+		return api.AgentStateRecordsPage{}, ErrSpaceDenied
+	}
+	backend, ok := ss.server.backend.(agentRecordBackend)
+	if !ok || !backend.AgentProfileEnabled() {
+		return api.AgentStateRecordsPage{}, apiError(api.ErrorUnsupported)
+	}
+	return backend.GetAgentStateRecords(ctx, api.ReadAgentStateRecordsRequest{Space: w.Space, Principal: ss.principal, Anchor: w.Anchor, Limit: w.Limit, Continuation: w.Continuation})
+}
+
 func (s *Server) agentBackend() (agentBackend, bool) {
 	backend, ok := s.backend.(agentBackend)
 	return backend, ok && backend.AgentProfileEnabled()

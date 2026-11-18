@@ -138,10 +138,13 @@ func (e *Engine) investigationCitationDependencies(ctx context.Context, space mo
 	if err != nil {
 		return nil, err
 	}
-	dependencies = append(dependencies, nodeDisclosureIDs(node)...)
-	if id := nodeReadRefID(citation.Ref); id != "" {
-		dependencies = append(dependencies, id)
+	// Projection above resolves and authorizes the citation before identity
+	// conversion. The selected-read dependencies are already policy identities.
+	nodeDependencies := nodeDisclosureDependencies(node)
+	if dependency := nodePolicyDependency(citation.Ref); dependency.id != "" {
+		nodeDependencies = append(nodeDependencies, dependency)
 	}
+	dependencies = append(dependencies, policyIdentities(nodeDependencies)...)
 	if node.detail.Encoding == "annotation/Record/v1+json" {
 		var record annotation.Record
 		if err := json.Unmarshal(node.detail.Data, &record); err != nil {
@@ -196,7 +199,9 @@ func (e *Engine) GetInvestigation(ctx context.Context, req api.GetInvestigationR
 		if err != nil {
 			return api.InvestigationResult{}, e.investigationReadFailure(ctx, err)
 		}
-		dependencies = append(dependencies, object)
+		// loadInvestigation resolved this physical checkpoint in the owner's
+		// partition; citation dependencies are already policy identities.
+		dependencies = append(dependencies, policyIdentities(objectPolicyDependencies(object))...)
 		out.Checkpoint = *checkpoint
 	}
 	if err := e.viewOutputGate(); err != nil {

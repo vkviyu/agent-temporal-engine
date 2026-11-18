@@ -62,14 +62,7 @@ func TestOutputChunksKeepOneResponseAndRequireExactTerminalManifest(t *testing.T
 	third.ID = OutputChunkID(third)
 	assertRecoveryRejected(t, l, Command{Control: &ControlCommand{CaptureOutputChunk: &CaptureOutputChunkCommand{Chunk: third}}}, ErrUniqueSlot)
 	recoveryControl(t, l, "accept", ControlCommand{AcceptActivity: &AcceptActivityCommand{Activity: spec.Activity, Result: result.ID, ExpectedVersion: 1, Authority: auth, Evidence: digest('f')}})
-	raw, err := EncodeSnapshot(l.Snapshot())
-	if err != nil {
-		t.Fatal(err)
-	}
-	restored, err := RestoreSnapshot(raw)
-	if err != nil {
-		t.Fatal(err)
-	}
+	restored := restoreRecord(t, l.Snapshot())
 	if !reflect.DeepEqual(l.Snapshot(), restored.Snapshot()) {
 		t.Fatal("restore changed the output manifest")
 	}

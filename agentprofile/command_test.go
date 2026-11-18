@@ -96,17 +96,14 @@ func TestApplyCommandScopePrivateCandidateAndOwnership(t *testing.T) {
 	}
 	authority := grantPrimaryAuthority(t, l, execution.ID)
 	acceptPrimaryResult(t, l, authority, execution.ID, 1, "model-result")
-	before, err := EncodeSnapshot(l.Snapshot())
-	if err != nil {
-		t.Fatal(err)
-	}
+	before := recordCanonical(t, l.Snapshot())
 	i := commandInvocation()
 	badKey := commandKey("bad")
 	badKey.Principal = "other"
-	if _, err = l.ApplyCommand(badKey, Command{Control: &ControlCommand{RecordInvocation: &RecordInvocationCommand{Invocation: i, Authority: authority}}}); !errors.Is(err, ErrCommandScope) {
+	if _, err := l.ApplyCommand(badKey, Command{Control: &ControlCommand{RecordInvocation: &RecordInvocationCommand{Invocation: i, Authority: authority}}}); !errors.Is(err, ErrCommandScope) {
 		t.Fatal(err)
 	}
-	after, _ := EncodeSnapshot(l.Snapshot())
+	after := recordCanonical(t, l.Snapshot())
 	if !bytes.Equal(before, after) {
 		t.Fatal("rejected scope changed state")
 	}
@@ -122,11 +119,11 @@ func TestApplyCommandScopePrivateCandidateAndOwnership(t *testing.T) {
 	}
 	changed := commandInvocation()
 	changed.Args = []byte("new args")
-	before, _ = EncodeSnapshot(l.Snapshot())
+	before = recordCanonical(t, l.Snapshot())
 	if _, err := l.ApplyCommand(commandKey("changed-slot"), Command{Control: &ControlCommand{RecordInvocation: &RecordInvocationCommand{Invocation: changed, Authority: authority}}}); !errors.Is(err, ErrConflict) {
 		t.Fatal(err)
 	}
-	after, _ = EncodeSnapshot(l.Snapshot())
+	after = recordCanonical(t, l.Snapshot())
 	if !bytes.Equal(before, after) {
 		t.Fatal("rejected unique slot changed state")
 	}
@@ -233,14 +230,7 @@ func TestLifecycleCommandsRoundTripAndRestore(t *testing.T) {
 	if _, err := EncodeCommand(legacyContinuation); !errors.Is(err, ErrCommandShape) {
 		t.Fatalf("untyped continuation admitted: %v", err)
 	}
-	raw, err := EncodeSnapshot(l.Snapshot())
-	if err != nil {
-		t.Fatal(err)
-	}
-	restored, err := RestoreSnapshot(raw)
-	if err != nil {
-		t.Fatal(err)
-	}
+	restored := restoreRecord(t, l.Snapshot())
 	if _, err := restored.GetQuery("q1"); err != nil {
 		t.Fatal(err)
 	}

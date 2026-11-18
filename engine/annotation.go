@@ -112,24 +112,25 @@ func (e *Engine) checkAnnotationReferences(ctx context.Context, space model.Spac
 	if err != nil {
 		return nil, nil, err
 	}
-	ids := []model.ObjectID{r.ID, r.Retracts}
+	dependencies := []policyDependency{
+		{kind: policyAnnotation, id: r.ID},
+		{kind: policyAnnotation, id: r.Retracts},
+	}
 	refs := append([]model.NodeRef{r.Target}, r.Evidence...)
 	for _, ref := range refs {
 		node, _, err := e.projectedNode(ctx, entry, ref)
 		if err != nil {
 			return nil, nil, err
 		}
-		ids = append(ids, nodeDisclosureIDs(node)...)
-		if ref.Kind == model.NodeObject {
-			ids = append(ids, ref.Object)
-		}
-		if ref.Kind == model.NodeRevision {
-			ids = append(ids, model.ObjectID(ref.Revision))
-		}
-		if ref.Kind == model.NodeEvent {
-			ids = append(ids, model.ObjectID(ref.Event))
+		// Resolve and authorize against the historical catalog before
+		// collecting policy identities; NodeObject can name a logical record.
+		dependencies = append(dependencies, nodeDisclosureDependencies(node)...)
+		switch ref.Kind {
+		case model.NodeObject, model.NodeRevision, model.NodeEvent:
+			dependencies = append(dependencies, nodePolicyDependency(ref))
 		}
 	}
+	ids := policyIdentities(dependencies)
 	if err := e.checkDisclosureIDs(ctx, space, ids); err != nil {
 		return nil, nil, err
 	}

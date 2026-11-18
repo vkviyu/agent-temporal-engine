@@ -12,32 +12,65 @@ import (
 )
 
 func packetPolicyIDs(packet knowledge.ContextPacket, snapshot knowledge.Snapshot) []model.ObjectID {
-	ids := []model.ObjectID{packet.ID, packet.GoalRef}
-	if packet.Input != nil {
-		ids = append(ids, packet.Input.Object)
+	return policyIdentities(packetPolicyDependencies(packet, snapshot))
+}
+
+func observationPolicyDependencies(observation knowledge.Observation) []policyDependency {
+	return []policyDependency{
+		{kind: policyObservation, id: observation.ID},
+		payloadPolicyDependency(observation.Payload, observation.PayloadKind),
+		{kind: policyObservation, id: observation.ImportedFrom},
 	}
+}
+
+func packetPolicyDependencies(packet knowledge.ContextPacket, snapshot knowledge.Snapshot) []policyDependency {
 	adopted := make(map[model.ObjectID]knowledge.Observation, len(snapshot.Observations))
+	goal := policyDependency{kind: policyNode, id: packet.GoalRef}
+	goalFound := false
 	for _, observation := range snapshot.Observations {
 		adopted[observation.ID] = observation
-	}
-	for _, item := range packet.Items {
-		ids = append(ids, item.Observation, item.Content)
-		if observation, ok := adopted[item.Observation]; ok {
-			ids = append(ids, observation.Payload, observation.ImportedFrom)
+		if packet.GoalRef != "" && observation.Payload == packet.GoalRef {
+			candidate := payloadPolicyDependency(observation.Payload, observation.PayloadKind)
+			if !goalFound {
+				goal = candidate
+				goalFound = true
+			} else if goal.kind != candidate.kind {
+				// A digest alone cannot choose between payload namespaces.
+				goal.kind = policyNode
+			}
 		}
 	}
-	return ids
+	dependencies := []policyDependency{{kind: policyPacket, id: packet.ID}, goal}
+	if packet.Input != nil {
+		dependencies = append(dependencies, policyDependency{kind: policyObject, id: packet.Input.Object})
+	}
+	for _, item := range packet.Items {
+		content := policyDependency{kind: policyNode, id: item.Content}
+		observation, ok := adopted[item.Observation]
+		if ok && item.Content != "" && observation.Payload == item.Content {
+			content = payloadPolicyDependency(item.Content, observation.PayloadKind)
+		}
+		dependencies = append(dependencies, policyDependency{kind: policyObservation, id: item.Observation}, content)
+		if ok {
+			dependencies = append(dependencies, observationPolicyDependencies(observation)[1:]...)
+		}
+	}
+	return dependencies
 }
 
 func knowledgePolicyIDs(snapshot knowledge.Snapshot) []model.ObjectID {
-	ids := make([]model.ObjectID, 0, len(snapshot.Observations)*3)
+	return policyIdentities(knowledgePolicyDependencies(snapshot))
+}
+
+func knowledgePolicyDependencies(snapshot knowledge.Snapshot) []policyDependency {
+	dependencies := make([]policyDependency, 0, len(snapshot.Observations)*3)
 	for _, observation := range snapshot.Observations {
-		ids = append(ids, observation.ID, observation.Payload, observation.ImportedFrom)
+		dependencies = append(dependencies, observationPolicyDependencies(observation)...)
 	}
 	for _, packet := range snapshot.Packets {
-		ids = append(ids, packetPolicyIDs(packet, snapshot)...)
+		dependencies = append(dependencies, packetPolicyDependencies(packet, snapshot)...)
 	}
-	return ids
+	return dependencies
 }
 
 // summaryDependencyIDs follows only explicit immutable Summary provenance.
@@ -219,10 +252,8 @@ func (e *Engine) checkCurrentActivityUse(ctx context.Context, req api.CommitRequ
 	if err = e.checkPolicyIDs(ctx, req.Space, dependencies, memory.AccessReuse); err != nil {
 		return err
 	}
-	// Historical dispatches using a v1 packet predate the eligibility gate.
-	// New dispatches always enforce it, including those using a legacy packet.
-	if isModelActivityRole(spec.Role) && (!e.replayingEvents || record.indexed) {
-		return e.validateCurrentTypedPacket(ctx, record.packet, record.selected, req.Space, req.Principal, false)
+	if isModelActivityRole(spec.Role) {
+		return e.validateCurrentTypedPacket(ctx, record.packet, record.selected, req.Space, req.Principal)
 	}
 	return nil
 }

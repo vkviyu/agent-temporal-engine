@@ -260,3 +260,100 @@ func TestWorkChildSeedPublicationUnknownNeverRecoversPartialFacts(t *testing.T) 
 		})
 	}
 }
+
+func TestWorkChildAuthorityAndAcceptedResultRecoverAsOnePublication(t *testing.T) {
+	for _, after := range []bool{false, true} {
+		t.Run(map[bool]string{false: "before-current", true: "after-current"}[after], func(t *testing.T) {
+			s, request, child, parentObservation := workChildFixture(t)
+			authority := agentprofile.AuthorityBinding{Deployment: "host", OwnerEpoch: 1, Incarnation: 1, Holder: "worker"}
+			proof := model.ObjectID(integrationID('a'))
+			activity := agentprofile.ActivitySpec{
+				Activity:      "parent-prepared-result",
+				Execution:     "one",
+				Step:          1,
+				Role:          "resource_prepare",
+				GoalEpoch:     1,
+				InputFence:    parentObservation.Source.Anchor.Fence,
+				Request:       parentObservation.Payload,
+				RequestDigest: agentprofile.ExactRequestDigest([]byte{'a'}),
+				Recipient:     "test-result-acceptor",
+				Effect:        "pure",
+				ResourceScope: "workspace",
+			}
+			recoveryCoreControl(t, s, "parent-result-create", agentprofile.ControlCommand{CreateActivity: &agentprofile.CreateActivityCommand{Spec: activity, Authority: authority}})
+			recoveryCoreControl(t, s, "parent-result-claim", agentprofile.ControlCommand{ClaimAttempt: &agentprofile.ClaimAttemptCommand{Attempt: "parent-result-attempt", Activity: activity.Activity, Sequence: 1, Authority: authority}})
+			recoveryCoreControl(t, s, "parent-result-dispatch", agentprofile.ControlCommand{DispatchAttempt: &agentprofile.DispatchAttemptCommand{Attempt: "parent-result-attempt", Authority: authority, Evidence: proof}})
+			result := agentprofile.ActivityResult{
+				Capture:       "full",
+				ID:            "parent-result-response",
+				Activity:      activity.Activity,
+				Attempt:       "parent-result-attempt",
+				RequestDigest: activity.RequestDigest,
+				Incarnation:   1,
+				Outcome:       "success",
+				Payload:       []byte("accepted with child spawn"),
+			}
+			recoveryCoreControl(t, s, "parent-result-capture", agentprofile.ControlCommand{CaptureResult: &agentprofile.CaptureResultCommand{Result: result}})
+			request.Unit.Steps = append(request.Unit.Steps, workControl(t, agentprofile.ControlCommand{AcceptActivity: &agentprofile.AcceptActivityCommand{
+				Activity:        activity.Activity,
+				Result:          result.ID,
+				ExpectedVersion: 1,
+				Authority:       authority,
+				Evidence:        proof,
+			}}))
+
+			if err := s.e.Close(); err != nil {
+				t.Fatal(err)
+			}
+			fault := &workCurrentFaultIO{DurableIO: s.d, after: after}
+			var err error
+			s.e, _, err = engine.OpenExisting(fault, s.options)
+			if err != nil {
+				t.Fatal(err)
+			}
+			fault.armed = true
+			out, err := s.e.ApplyWork(context.Background(), request)
+			if out.Code != api.CodeCommitUnknown || !errors.Is(err, errWorkCurrent) {
+				t.Fatalf("unknown child/acceptance Work: %+v %v", out, err)
+			}
+			s.options.Journal.TailPolicy = storage.TailQuarantine
+			s.reopen()
+
+			state, err := s.e.GetAgentState(context.Background(), api.ReadAgentStateRequest{Space: "host-space", Principal: "host-principal"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			childExists, continuationExists, accepted := false, false, false
+			for _, execution := range state.Snapshot.Executions {
+				childExists = childExists || execution.ID == child.ID
+			}
+			for _, continuation := range state.Snapshot.Lifecycle.Continuations {
+				continuationExists = continuationExists || continuation.Execution == child.ID
+			}
+			for _, control := range state.Snapshot.Lifecycle.Recovery.ActivityControls {
+				if control.Activity == activity.Activity {
+					accepted = control.AcceptedResult == result.ID
+				}
+			}
+			if childExists != after || continuationExists != after || accepted != after {
+				t.Fatalf("mixed child/acceptance recovery child=%v continuation=%v accepted=%v", childExists, continuationExists, accepted)
+			}
+			lookup, err := s.e.LookupRequest(context.Background(), api.LookupRequestRequest{Space: request.Key.Space, Principal: request.Key.Principal, RequestID: request.Key.RequestID})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if after {
+				if lookup.Code != api.CodeDurableAck {
+					t.Fatalf("published child/acceptance Work lost receipt: %+v", lookup)
+				}
+			} else if lookup.Code != api.CodeNotFoundAtFence {
+				t.Fatalf("unpublished child/acceptance Work was promoted: %+v", lookup)
+			}
+			ack := workApply(t, s, request)
+			if after && lookup.Result != ack {
+				t.Fatalf("published child/acceptance receipt changed: %+v -> %+v", lookup.Result, ack)
+			}
+			assertWorkSeedCut(t, s, ack, child.ID, 2)
+		})
+	}
+}

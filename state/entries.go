@@ -3,8 +3,11 @@ package state
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
+
 	"github.com/vkviyu/agent-temporal-engine/model"
+	"github.com/vkviyu/agent-temporal-engine/observation"
 )
 
 // Entry is an owned absolute key and its immutable value identity.
@@ -16,6 +19,8 @@ type Entry struct {
 // ScanLimits bound traversal work, retained node bytes, and returned entries.
 // Zero fields select defaults; exceeding a limit returns no partial snapshot.
 type ScanLimits struct {
+	// Observation optionally reports one aggregate scan, without keys or IDs.
+	Observation  *observation.Collector
 	MaxNodes     int
 	MaxEntries   int
 	MaxBytes     int
@@ -44,6 +49,7 @@ func (l ScanLimits) checked() (ScanLimits, error) {
 type scanReader struct {
 	source     ObjectReader
 	bytes, max int
+	objects    uint64
 }
 
 func (r *scanReader) ReadObject(ctx context.Context, id model.ObjectID) ([]byte, error) {
@@ -57,10 +63,12 @@ func (r *scanReader) ReadObject(ctx context.Context, id model.ObjectID) ([]byte,
 	if err != nil {
 		return nil, err
 	}
-	if len(b) > r.max-r.bytes {
+	r.objects++
+	remaining := r.max - r.bytes
+	r.bytes += len(b)
+	if len(b) > remaining {
 		return nil, ErrLimit
 	}
-	r.bytes += len(b)
 	return b, nil
 }
 
@@ -83,7 +91,24 @@ func Entries(ctx context.Context, reader ObjectReader, space model.SpaceID, root
 // EntriesWithPrefix reads only matching paths in a fixed radix snapshot.
 // Limits include the nodes needed to find the prefix; unrelated siblings are
 // never loaded. As with Entries, a bounded failure returns no partial result.
-func EntriesWithPrefix(ctx context.Context, reader ObjectReader, space model.SpaceID, root model.ObjectID, prefix []byte, limits ScanLimits) ([]Entry, error) {
+func EntriesWithPrefix(ctx context.Context, reader ObjectReader, space model.SpaceID, root model.ObjectID, prefix []byte, limits ScanLimits) (_ []Entry, err error) {
+	start := limits.Observation.Start()
+	bounded := &scanReader{source: reader}
+	defer func() {
+		outcome := observation.Success
+		switch {
+		case err == nil:
+		case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+			outcome = observation.Canceled
+		case errors.Is(err, ErrLimit):
+			outcome = observation.Limit
+		case errors.Is(err, ErrInvalidNode):
+			outcome = observation.Corruption
+		default:
+			outcome = observation.Failure
+		}
+		limits.Observation.Finish(start, observation.Event{Kind: observation.Scan, Outcome: outcome, Count: bounded.objects, Bytes: uint64(bounded.bytes)})
+	}()
 	if len(prefix) > MaxKeyBytes {
 		return nil, ErrLimit
 	}
@@ -91,7 +116,7 @@ func EntriesWithPrefix(ctx context.Context, reader ObjectReader, space model.Spa
 	if err != nil {
 		return nil, err
 	}
-	bounded := &scanReader{source: reader, max: l.MaxReadBytes}
+	bounded.max = l.MaxReadBytes
 	tree, err := newTree(ctx, bounded, space, root)
 	if err != nil {
 		return nil, err

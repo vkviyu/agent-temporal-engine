@@ -49,14 +49,7 @@ func TestContinuationPositionRoundTripRestoreAndOwnership(t *testing.T) {
 	}
 	got.Position.AdapterVersion = "read-mutated"
 	got.Position.NextActions[0].Generation = 10
-	image, err := EncodeSnapshot(l.Snapshot())
-	if err != nil {
-		t.Fatal(err)
-	}
-	restored, err := RestoreSnapshot(image)
-	if err != nil {
-		t.Fatal(err)
-	}
+	restored := restoreRecord(t, l.Snapshot())
 	got, err = restored.GetContinuation("exec")
 	if err != nil || got.Position.AdapterVersion != "host/v1" || got.Position.Step != 1 || got.Position.NextActions[0].Generation != 1 {
 		t.Fatalf("restore lost exact recovery position: %+v %v", got, err)
@@ -85,7 +78,7 @@ func TestContinuationPositionRoundTripRestoreAndOwnership(t *testing.T) {
 	} {
 		corrupt := restored.Snapshot()
 		mutate(&corrupt)
-		if _, err := EncodeSnapshot(corrupt); err == nil {
+		if _, err := EncodeRecordImage(corrupt); err == nil {
 			t.Fatal("accepted structurally valid but unrelated recovery location")
 		}
 	}

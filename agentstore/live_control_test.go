@@ -4,14 +4,81 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"reflect"
+	"fmt"
+	"strings"
 	"testing"
 
-	ate "github.com/vkviyu/agent-temporal-engine"
 	"github.com/vkviyu/agent-temporal-engine/agentprofile"
 	"github.com/vkviyu/agent-temporal-engine/api"
 	"github.com/vkviyu/agent-temporal-engine/engine"
+	"github.com/vkviyu/agent-temporal-engine/model"
 )
+
+type snapshotCore struct {
+	api.AgentCommands
+	state   api.AgentStateResult
+	request api.ReadAgentStateRequest
+}
+
+func (c *snapshotCore) GetAgentState(_ context.Context, request api.ReadAgentStateRequest) (api.AgentStateResult, error) {
+	c.request = request
+	return c.state, nil
+}
+
+func TestFacadeRestoresLargeRecordState(t *testing.T) {
+	task := agentprofile.Task{ID: "task", Space: "agent", Owner: "agent-host", Goal: "goal", GoalEpoch: 1, Status: agentprofile.TaskOpen}
+	snapshot := agentprofile.Snapshot{Tasks: []agentprofile.Task{task}}
+	for i := 0; i < 50; i++ {
+		snapshot.Lifecycle.Queries = append(snapshot.Lifecycle.Queries, agentprofile.Query{
+			ID: fmt.Sprintf("q-%03d", i), Space: task.Space, Owner: task.Owner,
+			Status: "open", Version: 1, Input: bytes.Repeat([]byte("x"), 512<<10),
+		})
+	}
+	// Avoid quadratic durable fixture construction for a large record image.
+	image, err := agentprofile.EncodeRecordImage(snapshot)
+	if err != nil || image.Size() == 0 {
+		t.Fatalf("record fixture size=%d err=%v", image.Size(), err)
+	}
+	result, err := resultAt(snapshot, agentprofile.Command{CreateTask: &task})
+	if err != nil || result.Task == nil || *result.Task != task {
+		t.Fatalf("typed ACK result unavailable: %+v %v", result.Task, err)
+	}
+	fence := model.CommitFence{Store: "store", LSN: 1, CommitDigest: model.CommitDigest(strings.Repeat("a", 64))}
+	core := &snapshotCore{state: api.AgentStateResult{Found: true, Snapshot: snapshot, Fence: fence}}
+	request := api.ReadAgentStateRequest{Space: task.Space, Principal: task.Owner}
+	ledger, gotFence, err := readCurrentLedger(core, request)
+	if err != nil || gotFence != fence || core.request != request {
+		t.Fatalf("current ledger fence=%+v request=%+v err=%v", gotFence, core.request, err)
+	}
+	if got, err := ledger.GetTask(task.ID); err != nil || got != task {
+		t.Fatalf("current task=%+v err=%v", got, err)
+	}
+	// Restoring must preserve all records and own its data, not borrow the core
+	// result or merely project the requested task while skipping validation.
+	snapshot.Lifecycle.Queries[0].Input[0] = 'z'
+	got := ledger.Snapshot()
+	if len(got.Lifecycle.Queries) != 50 || got.Lifecycle.Queries[0].Input[0] != 'x' {
+		t.Fatal("current ledger lost records or borrowed core state")
+	}
+}
+
+func TestFacadeRecordRestoreRejectsBrokenRelations(t *testing.T) {
+	task := agentprofile.Task{ID: "task", Space: "agent", Owner: "agent-host", Goal: "goal", GoalEpoch: 1, Status: agentprofile.TaskOpen}
+	snapshot := agentprofile.Snapshot{
+		Tasks: []agentprofile.Task{task},
+		Executions: []agentprofile.Execution{{
+			ID: "orphan", Task: "missing", Actor: "worker", Incarnation: 1,
+			AcceptedGoalEpoch: 1, Status: agentprofile.ExecutionReady,
+		}},
+	}
+	if _, err := resultAt(snapshot, agentprofile.Command{CreateTask: &task}); err == nil {
+		t.Fatal("typed result bypassed cross-record validation")
+	}
+	core := &snapshotCore{state: api.AgentStateResult{Found: true, Snapshot: snapshot}}
+	if ledger, _, err := readCurrentLedger(core, api.ReadAgentStateRequest{Space: task.Space, Principal: task.Owner}); ledger != nil || !errors.Is(err, ErrProfileState) {
+		t.Fatalf("malformed current ledger=%v err=%v", ledger != nil, err)
+	}
+}
 
 func TestTypedRetriesResolveOriginalLiveControlFenceAfterReopen(t *testing.T) {
 	dir := t.TempDir()
@@ -51,10 +118,6 @@ func TestTypedRetriesResolveOriginalLiveControlFenceAfterReopen(t *testing.T) {
 	publication, err := s.Core().Snapshot(ctx)
 	if err != nil || publication.Roots.LiveControl == "" || publication.Roots.DomainStates != "" {
 		t.Fatalf("facade retained domain snapshot authority: %+v err=%v", publication, err)
-	}
-	legacy, err := s.Core().GetState(ctx, api.ReadStateRequest{Space: "agent", Key: SnapshotKey()})
-	if err != nil || legacy.Found {
-		t.Fatalf("facade wrote legacy profile key: %+v err=%v", legacy, err)
 	}
 	if err := s.Close(); err != nil {
 		t.Fatal(err)
@@ -152,50 +215,5 @@ func TestCommandErrorKeepsOriginalKeyAndCoreOutcome(t *testing.T) {
 		if !errors.As(failure, &typed) || typed.Key != key || typed.Result.Code != code || !errors.Is(failure, ErrUncertain) || !errors.Is(failure, context.Canceled) {
 			t.Fatalf("lost unknown outcome evidence: %v", failure)
 		}
-	}
-}
-
-func TestLegacyProfileSnapshotRequiresExplicitMigration(t *testing.T) {
-	for _, value := range []api.Value{{Kind: api.ValueNull}, {Kind: api.ValueBytes, Data: []byte("legacy snapshot bytes")}} {
-		t.Run(string(value.Kind), func(t *testing.T) {
-			path := t.TempDir()
-			core, err := ate.Create(path, ate.Options{})
-			if err != nil {
-				t.Fatal(err)
-			}
-			_, err = core.Mutate(context.Background(), api.MutateRequest{Key: profileRequest("legacy"), Batch: api.StateBatch{Operations: []api.StateMutation{{Key: SnapshotKey(), Kind: api.MutationPut, Value: value}}}})
-			if err != nil {
-				t.Fatal(err)
-			}
-			before, err := core.Snapshot(context.Background())
-			if err != nil {
-				t.Fatal(err)
-			}
-			if err := core.Close(); err != nil {
-				t.Fatal(err)
-			}
-			facade, _, err := OpenExisting(path, Options{})
-			if facade != nil || !errors.Is(err, ErrLegacyProfileState) {
-				if facade != nil {
-					_ = facade.Close()
-				}
-				t.Fatalf("legacy state silently ignored/migrated: facade=%v err=%v", facade, err)
-			}
-			// Constructor rejection must retire the owner so the host can export
-			// the unchanged legacy bytes through its original core API.
-			core, _, err = ate.OpenExisting(path, ate.Options{})
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer core.Close()
-			after, err := core.Snapshot(context.Background())
-			if err != nil || !reflect.DeepEqual(after, before) {
-				t.Fatalf("legacy rejection modified roots/fence: %+v err=%v", after, err)
-			}
-			legacy, err := core.GetState(context.Background(), api.ReadStateRequest{Space: "agent", Key: SnapshotKey()})
-			if err != nil || !legacy.Found || legacy.Value.Kind != value.Kind || !bytes.Equal(legacy.Value.Data, value.Data) {
-				t.Fatalf("legacy bytes changed: %+v err=%v", legacy, err)
-			}
-		})
 	}
 }

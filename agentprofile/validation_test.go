@@ -94,11 +94,11 @@ func TestValidationRequirementUpdatesAreCASAndOldEnvelopeCannotPass(t *testing.T
 	if err != nil || latest != second || old.Satisfies(latest) == nil {
 		t.Fatal("old environment validation remained current", err)
 	}
-	image, err := EncodeSnapshot(l.Snapshot())
+	image, err := EncodeRecordImage(l.Snapshot())
 	if err != nil {
 		t.Fatal(err)
 	}
-	l, err = RestoreSnapshot(image)
+	l, err = image.Restore()
 	if err != nil {
 		t.Fatal(err)
 	}

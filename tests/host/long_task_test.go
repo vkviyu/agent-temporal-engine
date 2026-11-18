@@ -58,6 +58,24 @@ type host struct {
 	options ate.Options
 }
 
+func agentStateBytes(t testing.TB, snapshot agentprofile.Snapshot) ([]byte, error) {
+	t.Helper()
+	image, err := agentprofile.EncodeRecordImage(snapshot)
+	if err != nil {
+		return nil, err
+	}
+	records, err := image.Records()
+	if err != nil {
+		return nil, err
+	}
+	var raw []byte
+	for _, record := range records {
+		raw = append(raw, record.Key...)
+		raw = append(raw, record.Raw...)
+	}
+	return raw, nil
+}
+
 func newHost(t *testing.T, wire bool) *host {
 	t.Helper()
 	run, err := os.MkdirTemp("/tmp", "ate-host-")
@@ -684,8 +702,8 @@ func TestLongTaskPublicHostAcceptance(t *testing.T) {
 			}
 			h.reopen()
 			after, err := h.peer.GetAgentState(ctx, api.ReadAgentStateRequest{Space: "project", Principal: "owner"})
-			beforeBytes, beforeErr := agentprofile.EncodeSnapshot(before.Snapshot)
-			afterBytes, afterErr := agentprofile.EncodeSnapshot(after.Snapshot)
+			beforeBytes, beforeErr := agentStateBytes(t, before.Snapshot)
+			afterBytes, afterErr := agentStateBytes(t, after.Snapshot)
 			if err != nil || beforeErr != nil || afterErr != nil || !bytes.Equal(beforeBytes, afterBytes) {
 				t.Fatal("host restart changed committed facts", err)
 			}

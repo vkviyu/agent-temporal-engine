@@ -32,7 +32,7 @@ func (ss *session) serveReadRequest(ctx context.Context, req protocol.Request) (
 	case "trace_nodes":
 		read = ss.traceNodes
 	case "get_state", "get_view_state", "get_view_entries", "resolve_publication", "snapshot", "export_transfer", "get_transfer",
-		"get_agent_state", "get_query_intake", "get_query_progress", "get_knowledge", "get_summary", "get_memory", "get_annotations", "get_investigation", "get_emission",
+		"get_agent_state", "get_agent_state_records", "get_query_intake", "get_query_progress", "get_knowledge", "get_summary", "get_memory", "get_annotations", "get_investigation", "get_emission",
 		"get_task_trace", "get_task_trace_evidence",
 		"get_graph_revision", "get_graph_branch", "diff_graph", "plan_graph_join", "trace_graph":
 		return true, ss.replyDispatchedRead(ctx, req)
@@ -75,6 +75,10 @@ func (ss *session) replyReadDelivery(ctx context.Context, request protocol.Reque
 	if err != nil {
 		return ss.reply(ss.errResponse(request.CorrelationID, err))
 	}
+	// Consume releases authorized bytes once; it does not acknowledge network
+	// delivery or commit an emission. reply checks the complete frame before
+	// writing anything, and discards an oversized body in favor of ResourceLimit.
+	// The grant API has no preview: size rejection happens after consumption.
 	return ss.reply(protocol.Response{Version: protocol.Version, CorrelationID: request.CorrelationID, Body: json.RawMessage(body)})
 }
 

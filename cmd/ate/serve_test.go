@@ -3,9 +3,11 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"testing"
@@ -43,11 +45,13 @@ func (w serveReady) Write(b []byte) (int, error) {
 	return len(b), nil
 }
 func TestServeCLIRealSocketOwnsStoreAndDrains(t *testing.T) {
-	t.Run("core-only", func(t *testing.T) { serveCLIRealSocket(t, false) })
-	t.Run("agent-profile", func(t *testing.T) { serveCLIRealSocket(t, true) })
+	t.Run("core-only", func(t *testing.T) { serveCLIRealSocket(t, false, false) })
+	t.Run("agent-profile", func(t *testing.T) { serveCLIRealSocket(t, true, false) })
+	t.Run("event-profile", func(t *testing.T) { serveCLIRealSocket(t, false, true) })
+	t.Run("both-profiles", func(t *testing.T) { serveCLIRealSocket(t, true, true) })
 }
 
-func serveCLIRealSocket(t *testing.T, profile bool) {
+func serveCLIRealSocket(t *testing.T, profile, eventProfile bool) {
 	requireNativeJournal(t)
 	dir, err := os.MkdirTemp("/tmp", "ate-cli-")
 	if err != nil {
@@ -84,17 +88,26 @@ func serveCLIRealSocket(t *testing.T, profile bool) {
 	if profile {
 		args = append(args, "--agent-profile")
 	}
+	if eventProfile {
+		args = append(args, "--event-profile")
+	}
 	args = append(args, path)
 	go func() {
 		done <- serve(ctx, args, serveReady{ready}, &errs)
 	}()
+	var startup struct {
+		Capabilities []string `json:"capabilities"`
+	}
 	select {
 	case code := <-done:
 		if strings.Contains(errs.String(), "operation not permitted") {
 			t.Skip("sandbox disallows Unix socket bind")
 		}
 		t.Fatalf("serve stopped: %d %s", code, errs.String())
-	case <-ready:
+	case data := <-ready:
+		if err := json.Unmarshal(data, &startup); err != nil {
+			t.Fatal(err)
+		}
 	case <-time.After(10 * time.Second):
 		t.Fatal("serve did not start")
 	}
@@ -102,22 +115,58 @@ func serveCLIRealSocket(t *testing.T, profile bool) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	hasProfile := false
-	for _, capability := range c.Identity().Capabilities {
-		hasProfile = hasProfile || capability == "agent/v1"
+	capabilities := c.Identity().Capabilities
+	if !slices.Equal(startup.Capabilities, capabilities) {
+		t.Errorf("startup capabilities %v differ from client identity %v", startup.Capabilities, capabilities)
 	}
-	if hasProfile != profile {
-		t.Fatal("CLI and service disagreed on profile capability")
+	for capability, enabled := range map[string]bool{
+		"agent/v1":            profile,
+		"event/v1":            eventProfile,
+		"agent/task-trace-v1": profile && eventProfile,
+	} {
+		if slices.Contains(capabilities, capability) != enabled {
+			t.Errorf("capability %s does not match profile configuration: %v", capability, capabilities)
+		}
 	}
 	if profile {
-		ack, err := c.ApplyAgent(context.Background(), api.ApplyAgentRequest{Key: model.RequestKey{Space: "s", RequestID: "cli-task"}, Command: agentprofile.Command{CreateTask: &agentprofile.Task{
-			ID: "task", Space: "s", Owner: "local-host", Goal: "survive service restart", GoalEpoch: 1, Status: agentprofile.TaskOpen,
-		}}})
+		task := &agentprofile.Task{
+			ID:        "task",
+			Space:     "s",
+			Owner:     "local-host",
+			Goal:      "survive service restart",
+			GoalEpoch: 1,
+			Status:    agentprofile.TaskOpen,
+		}
+		ack, err := c.ApplyAgent(context.Background(), api.ApplyAgentRequest{
+			Key: model.RequestKey{
+				Space:     "s",
+				RequestID: "cli-task",
+			},
+			Command: agentprofile.Command{
+				CreateTask: task,
+			},
+		})
 		if err != nil || ack.Code != api.CodeDurableAck {
 			t.Fatalf("CLI profile command: %+v %v", ack, err)
 		}
 	}
-	ack, err := c.Mutate(context.Background(), api.MutateRequest{Key: model.RequestKey{Space: "s", RequestID: "cli-write"}, Batch: api.StateBatch{Operations: []api.StateMutation{{Key: []byte("k"), Kind: api.MutationPut, Value: api.Value{Kind: api.ValueBytes, Data: []byte("v")}}}}})
+	mutation := api.StateMutation{
+		Key:  []byte("k"),
+		Kind: api.MutationPut,
+		Value: api.Value{
+			Kind: api.ValueBytes,
+			Data: []byte("v"),
+		},
+	}
+	ack, err := c.Mutate(context.Background(), api.MutateRequest{
+		Key: model.RequestKey{
+			Space:     "s",
+			RequestID: "cli-write",
+		},
+		Batch: api.StateBatch{
+			Operations: []api.StateMutation{mutation},
+		},
+	})
 	if err != nil || ack.Code != api.CodeDurableAck {
 		t.Fatal(ack, err)
 	}
@@ -136,7 +185,7 @@ func serveCLIRealSocket(t *testing.T, profile bool) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("serve did not retire")
 	}
-	reopened, _, err := ate.OpenExisting(path, ate.Options{AgentProfile: profile})
+	reopened, _, err := ate.OpenExisting(path, ate.Options{AgentProfile: profile, EventProfile: eventProfile})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -55,65 +55,72 @@ func graphCoordinatorJoinFixture(t *testing.T, e *Engine) (api.CommitRequest, mo
 }
 
 func TestGraphJoinUnknownPublicationKeepsDomainAndBranchAtomic(t *testing.T) {
-	for _, after := range []bool{false, true} {
-		t.Run(fmt.Sprint(after), func(t *testing.T) {
-			o := Options{Batch: BatchOptions{MaxCount: 1}}
-			e, disk := coordinatorStore(t, o)
-			req, left := graphCoordinatorJoinFixture(t, e)
-			before, err := e.Snapshot(context.Background())
-			if err != nil {
-				t.Fatal(err)
-			}
-			objects := e.index.count()
-			gate := newCoordinatorGate()
-			gate.err = errors.New("join CURRENT response unavailable")
-			gate.after = after
-			disk.arm("current", gate)
-			pending := coordinatorCommit(e, context.Background(), req)
-			coordinatorWait(t, gate.entered)
-			gate.unblock()
-			unknown := coordinatorWait(t, pending)
-			if unknown.result.Code != api.CodeCommitUnknown || !errors.Is(unknown.err, storage.ErrCommitUnknown) {
-				t.Fatalf("not unknown: %+v %v", unknown.result, unknown.err)
-			}
-			e.mu.Lock()
-			unchanged := e.roots == before.Roots && e.rootSet == before.RootSet && e.index.count() == objects
-			e.mu.Unlock()
-			if !unchanged {
-				t.Fatal("uncertain Join installed partial roots")
-			}
-			if err = e.Close(); err != nil {
-				t.Fatal(err)
-			}
-			o.Journal.TailPolicy = storage.TailQuarantine
-			opened, _, err := OpenExisting(disk, o)
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer opened.Close()
-			branch, err := opened.GetGraphBranch(context.Background(), api.ReadGraphBranchRequest{Space: "coordinator-space", ID: "main"})
-			if err != nil {
-				t.Fatal(err)
-			}
-			value, err := opened.GetState(context.Background(), api.ReadStateRequest{Space: "coordinator-space", Key: []byte("a")})
-			if err != nil {
-				t.Fatal(err)
-			}
-			lookup := coordinatorLookup(t, opened, req)
-			if after {
-				if branch.Value.Head == left || branch.Value.Version != 2 || string(value.Value.Data) != "left" || lookup.Code != api.CodeDurableAck {
-					t.Fatalf("torn committed join: branch=%+v value=%+v lookup=%+v", branch, value, lookup)
+	for _, compacted := range []bool{false, true} {
+		for _, after := range []bool{false, true} {
+			t.Run(fmt.Sprintf("compacted=%t/after-current=%t", compacted, after), func(t *testing.T) {
+				o := Options{Batch: BatchOptions{MaxCount: 1}}
+				e, disk := coordinatorStore(t, o)
+				req, left := graphCoordinatorJoinFixture(t, e)
+				if compacted {
+					if _, err := e.CompactAuditFull(context.Background()); err != nil {
+						t.Fatal(err)
+					}
 				}
-				again := coordinatorAck(t, coordinatorWait(t, coordinatorCommit(opened, context.Background(), req)))
-				if again != lookup.Result {
-					t.Fatal("recovered Join receipt changed")
+				before, err := e.Snapshot(context.Background())
+				if err != nil {
+					t.Fatal(err)
 				}
-			} else {
-				if branch.Value.Head != left || branch.Value.Version != 1 || string(value.Value.Data) != "right" || lookup.Code != api.CodeNotFoundAtFence {
-					t.Fatalf("promoted uncommitted join: branch=%+v value=%+v lookup=%+v", branch, value, lookup)
+				objects := e.index.count()
+				gate := newCoordinatorGate()
+				gate.err = errors.New("join CURRENT response unavailable")
+				gate.after = after
+				disk.arm("current", gate)
+				pending := coordinatorCommit(e, context.Background(), req)
+				coordinatorWait(t, gate.entered)
+				gate.unblock()
+				unknown := coordinatorWait(t, pending)
+				if unknown.result.Code != api.CodeCommitUnknown || !errors.Is(unknown.err, storage.ErrCommitUnknown) {
+					t.Fatalf("not unknown: %+v %v", unknown.result, unknown.err)
 				}
-			}
-		})
+				e.mu.Lock()
+				unchanged := e.roots == before.Roots && e.rootSet == before.RootSet && e.index.count() == objects
+				e.mu.Unlock()
+				if !unchanged {
+					t.Fatal("uncertain Join installed partial roots")
+				}
+				if err = e.Close(); err != nil {
+					t.Fatal(err)
+				}
+				o.Journal.TailPolicy = storage.TailQuarantine
+				opened, _, err := OpenExisting(disk, o)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer opened.Close()
+				branch, err := opened.GetGraphBranch(context.Background(), api.ReadGraphBranchRequest{Space: "coordinator-space", ID: "main"})
+				if err != nil {
+					t.Fatal(err)
+				}
+				value, err := opened.GetState(context.Background(), api.ReadStateRequest{Space: "coordinator-space", Key: []byte("a")})
+				if err != nil {
+					t.Fatal(err)
+				}
+				lookup := coordinatorLookup(t, opened, req)
+				if after {
+					if branch.Value.Head == left || branch.Value.Version != 2 || string(value.Value.Data) != "left" || lookup.Code != api.CodeDurableAck {
+						t.Fatalf("torn committed join: branch=%+v value=%+v lookup=%+v", branch, value, lookup)
+					}
+					again := coordinatorAck(t, coordinatorWait(t, coordinatorCommit(opened, context.Background(), req)))
+					if again != lookup.Result {
+						t.Fatal("recovered Join receipt changed")
+					}
+				} else {
+					if branch.Value.Head != left || branch.Value.Version != 1 || string(value.Value.Data) != "right" || lookup.Code != api.CodeNotFoundAtFence {
+						t.Fatalf("promoted uncommitted join: branch=%+v value=%+v lookup=%+v", branch, value, lookup)
+					}
+				}
+			})
+		}
 	}
 }
 

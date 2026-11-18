@@ -16,7 +16,8 @@ import (
 	"github.com/vkviyu/agent-temporal-engine/state"
 )
 
-func knowledgeStateKey(space model.SpaceID, principal model.PrincipalID) []byte {
+// legacyKnowledgeStateKey is used only to reject unsupported owner snapshots.
+func legacyKnowledgeStateKey(space model.SpaceID, principal model.PrincipalID) []byte {
 	return []byte("ate/knowledge/v1/" + knowledgeOwnerDigest(space, principal))
 }
 
@@ -35,36 +36,6 @@ func (e *Engine) loadKnowledge(ctx context.Context, roots model.RootSet, space m
 	}
 	snapshot, err := index.snapshot(ctx, nil, false, true)
 	return snapshot, root, len(snapshot.Observations)+len(snapshot.Packets) > 0, err
-}
-
-func readLegacyKnowledge(ctx context.Context, reader state.ObjectReader, root model.ObjectID, space model.SpaceID, principal model.PrincipalID) (knowledge.Snapshot, bool, error) {
-	id, found, err := state.Get(ctx, reader, space, root, knowledgeStateKey(space, principal))
-	if err != nil || !found {
-		return knowledge.Snapshot{}, found, err
-	}
-	obj, err := readObject(ctx, reader, id)
-	if err != nil {
-		return knowledge.Snapshot{}, false, err
-	}
-	value, err := readValue(obj)
-	if err != nil || obj.Space != space || value.Kind != api.ValueBytes {
-		return knowledge.Snapshot{}, false, fmt.Errorf("%w: knowledge snapshot", ErrStoredObject)
-	}
-	snap, err := knowledge.DecodeSnapshot(value.Data)
-	if err != nil {
-		return knowledge.Snapshot{}, false, fmt.Errorf("%w: %w", ErrStoredObject, err)
-	}
-	for _, o := range snap.Observations {
-		if o.Source.Anchor.Space != space {
-			return knowledge.Snapshot{}, false, ErrInvalidStateData
-		}
-	}
-	for _, p := range snap.Packets {
-		if p.Space != space {
-			return knowledge.Snapshot{}, false, ErrInvalidStateData
-		}
-	}
-	return snap, true, nil
 }
 
 // An Execution selector is an authority check, not merely a string filter.
@@ -113,12 +84,8 @@ func (e *Engine) prepareKnowledge(ctx context.Context, req api.CommitRequest, di
 	if err != nil {
 		return nil, err
 	}
-	legacy := c.UsesLegacySnapshot()
-	if legacy && index.root != state.EmptyRoot {
-		return nil, knowledge.ErrUnsupportedSchema
-	}
 	if c.Import != nil {
-		return e.prepareKnowledgeImport(ctx, req, digest, txID, lsn, recorded, index, legacy, *c.Import)
+		return e.prepareKnowledgeImport(ctx, req, digest, txID, lsn, recorded, index, *c.Import)
 	}
 	var source knowledge.SourceAnchor
 	var key *model.KnowledgeKey
@@ -276,28 +243,11 @@ func (e *Engine) prepareKnowledge(ctx context.Context, req api.CommitRequest, di
 			return nil, err
 		}
 	}
-	if !legacy {
-		var observations []knowledge.Observation
-		if c.Observation != nil {
-			observations = append(observations, *c.Observation)
-		}
-		return e.prepareKnowledgeRecords(ctx, req, digest, txID, lsn, recorded, index, observations, c.Packet, sourceSnap)
+	var observations []knowledge.Observation
+	if c.Observation != nil {
+		observations = append(observations, *c.Observation)
 	}
-	next, err := knowledge.ApplyCommand(index.legacy, c)
-	if err != nil {
-		return nil, fmt.Errorf("knowledge candidate: %w", err)
-	}
-	if err = verifyContentClosure(ctx, e.index, knowledge.ContentReferences(next)); err != nil {
-		return nil, err
-	}
-	raw, err := knowledge.EncodeSnapshot(next)
-	if err != nil {
-		return nil, err
-	}
-	if c.Packet != nil {
-		return e.prepareDerivedValue(ctx, req, digest, txID, lsn, recorded, knowledgeStateKey(req.Space, req.Principal), raw, packetDerivations(*c.Packet, next))
-	}
-	return e.prepareTypedValue(ctx, req, digest, txID, lsn, recorded, knowledgeStateKey(req.Space, req.Principal), raw)
+	return e.prepareKnowledgeRecords(ctx, req, digest, txID, lsn, recorded, index, observations, c.Packet, sourceSnap)
 }
 
 func (e *Engine) visibleSourceObject(ctx context.Context, roots model.RootSet, anchor model.SnapshotAnchor, principal model.PrincipalID, id model.ObjectID) error {

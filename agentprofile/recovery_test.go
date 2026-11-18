@@ -12,7 +12,7 @@ func recoveryFence() model.CommitFence {
 	return model.CommitFence{Store: "store", LSN: 1, CommitDigest: model.CommitDigest(digest('f'))}
 }
 
-func recoveryApply(t *testing.T, l *Ledger, id string, c Command) Result {
+func recoveryApply(t testing.TB, l *Ledger, id string, c Command) Result {
 	t.Helper()
 	v, err := l.ApplyCommand(commandKey(id), c)
 	if err != nil {
@@ -21,7 +21,7 @@ func recoveryApply(t *testing.T, l *Ledger, id string, c Command) Result {
 	return v
 }
 
-func recoveryControl(t *testing.T, l *Ledger, id string, c ControlCommand) Result {
+func recoveryControl(t testing.TB, l *Ledger, id string, c ControlCommand) Result {
 	t.Helper()
 	return recoveryApply(t, l, id, Command{Control: &c})
 }
@@ -58,14 +58,11 @@ func recoveryTakeover(t *testing.T, l *Ledger, old AuthorityBinding) AuthorityBi
 
 func assertRecoveryRejected(t *testing.T, l *Ledger, c Command, want error) {
 	t.Helper()
-	before, err := EncodeSnapshot(l.Snapshot())
-	if err != nil {
-		t.Fatal(err)
-	}
+	before := recordCanonical(t, l.Snapshot())
 	if _, err := l.ApplyCommand(commandKey("rejected"), c); !errors.Is(err, want) {
 		t.Fatalf("got %v; want %v", err, want)
 	}
-	after, _ := EncodeSnapshot(l.Snapshot())
+	after := recordCanonical(t, l.Snapshot())
 	if !bytes.Equal(before, after) {
 		t.Fatal("rejected recovery command changed state")
 	}
@@ -139,14 +136,7 @@ func TestRecoveryUnknownEffectsQuarantineAndNoEffectRetry(t *testing.T) {
 	duplicate.ID = "second-result"
 	assertRecoveryRejected(t, l, Command{Control: &ControlCommand{CaptureResult: &CaptureResultCommand{Result: duplicate}}}, ErrUniqueSlot)
 	recoveryControl(t, l, "accept-2", ControlCommand{AcceptActivity: &AcceptActivityCommand{Activity: a.Activity, Result: result.ID, ExpectedVersion: 2, Authority: next, Evidence: digest('e')}})
-	raw, err := EncodeSnapshot(l.Snapshot())
-	if err != nil {
-		t.Fatal(err)
-	}
-	restored, err := RestoreSnapshot(raw)
-	if err != nil {
-		t.Fatal(err)
-	}
+	restored := restoreRecord(t, l.Snapshot())
 	_, ctl, err := restored.activityControl(a.Activity)
 	if err != nil || ctl.AcceptedResult != result.ID || ctl.Incarnation != 2 {
 		t.Fatalf("recovery lost accepted result: %+v %v", ctl, err)
@@ -317,7 +307,7 @@ func TestRecoverySnapshotRejectsBrokenContinuationAndConsumption(t *testing.T) {
 	} {
 		s := l.Snapshot()
 		mutate(&s)
-		if _, err := EncodeSnapshot(s); err == nil {
+		if _, err := EncodeRecordImage(s); err == nil {
 			t.Fatal("broken recovery checkpoint accepted by snapshot encoder")
 		}
 	}
@@ -327,7 +317,7 @@ func TestRecoverySnapshotRejectsBrokenContinuationAndConsumption(t *testing.T) {
 	recoveryControl(t, l, "consume", ControlCommand{ConsumeMessage: &ConsumeMessageCommand{Consumption: consumption, Authority: b}})
 	s := l.Snapshot()
 	s.Lifecycle.Consumptions[0].GoalEpoch = 2
-	if _, err := EncodeSnapshot(s); err == nil {
+	if _, err := EncodeRecordImage(s); err == nil {
 		t.Fatal("message consumption forged across goal epochs")
 	}
 }

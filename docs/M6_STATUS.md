@@ -1,5 +1,7 @@
 # M6：第一版收口状态
 
+> 2026-11-15 后续演进：新 Agent 准备统一使用 [record root/radix](formats/agent-record-state-v1.md)，上限为每条 4 MiB、所有集合合计 16,384 条、canonical 字节合计 256 MiB，并受分配、JSON、radix、事务和总对象数等限制；不保留旧 Agent snapshot 持久化格式。`Store.CreateRecoveryCheckpoint(ctx)` 已通过根包维护门面提供，显式完整验证后创建投影；打开只使用 `CURRENT` 所选 checkpoint，仍扫描全部物理历史并对后缀做语义重放，可用 `DisableRecoveryCheckpoints` 强制完整重放。见 [当前 API](ATE_API_REFERENCE.md) 和 [存储与 checkpoint 实测](validation/AGENT_RECORD_STORAGE_2026-11-14.md)。完整状态 CPU/内存成本仍在，准备仍会处理完整状态；有限样本与累计分配量不证明端到端性能或峰值 RSS。以下历史正文原样保留，其中整分区 ≤8 MiB snapshot 等“当前”描述属于当时版本，不代表今天的存储布局，也不因本次演进宣称所有能力完成。
+
 > 11-05 的当前源树与验证状态见 [交叉验收续记](validation/V1_CURRENT_CROSS_CHECK_2026-11-05.md)。本页以下记录对应其历史版本。
 
 > 2026-11-02 历史状态更正：下方原文保留第一次复核时的结论。后续实现续记已按

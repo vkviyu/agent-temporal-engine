@@ -23,6 +23,38 @@ type harness struct {
 func newHarness(t *testing.T) *harness {
 	return &harness{t: t, expected: oracle.NewProfile(), actual: agentprofile.New(), decisions: map[string]string{}}
 }
+
+func agentStateBytes(t testing.TB, snapshot agentprofile.Snapshot) []byte {
+	t.Helper()
+	image, err := agentprofile.EncodeRecordImage(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	records, err := image.Records()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var raw []byte
+	for _, record := range records {
+		raw = append(raw, record.Key...)
+		raw = append(raw, record.Raw...)
+	}
+	return raw
+}
+
+func restoreAgentState(t testing.TB, ledger *agentprofile.Ledger) *agentprofile.Ledger {
+	t.Helper()
+	image, err := agentprofile.EncodeRecordImage(ledger.Snapshot())
+	if err != nil {
+		t.Fatal(err)
+	}
+	restored, err := image.Restore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return restored
+}
+
 func digest(c string) model.ObjectID { return model.ObjectID(strings.Repeat(c, 64)) }
 func key(id string) model.RequestKey {
 	return model.RequestKey{Space: "space", Principal: "owner", RequestID: model.RequestID(id)}
@@ -42,10 +74,7 @@ func (h *harness) raw(c agentprofile.Command) {
 }
 func (h *harness) apply(name string, expected func(*oracle.Profile) error, actual agentprofile.Command) {
 	h.t.Helper()
-	before, err := agentprofile.EncodeSnapshot(h.actual.Snapshot())
-	if err != nil {
-		h.t.Fatal(err)
-	}
+	before := agentStateBytes(h.t, h.actual.Snapshot())
 	wantErr := h.expected.Batch(expected)
 	h.sequence++
 	_, gotErr := h.actual.ApplyCommand(key(fmt.Sprintf("%s-%d", name, h.sequence)), actual)
@@ -53,7 +82,7 @@ func (h *harness) apply(name string, expected func(*oracle.Profile) error, actua
 		h.t.Fatalf("%s acceptance mismatch: oracle=%v actual=%v", name, wantErr, gotErr)
 	}
 	if gotErr != nil {
-		after, _ := agentprofile.EncodeSnapshot(h.actual.Snapshot())
+		after := agentStateBytes(h.t, h.actual.Snapshot())
 		if !bytes.Equal(before, after) {
 			h.t.Fatalf("%s rejected transition mutated state", name)
 		}
@@ -62,14 +91,7 @@ func (h *harness) apply(name string, expected func(*oracle.Profile) error, actua
 	// Restore uses the production codec/reconstruction path, but never changes
 	// the independent map expectation, catching lost or invented projections.
 	if h.sequence%3 == 0 {
-		raw, err := agentprofile.EncodeSnapshot(h.actual.Snapshot())
-		if err != nil {
-			h.t.Fatal(err)
-		}
-		h.actual, err = agentprofile.RestoreSnapshot(raw)
-		if err != nil {
-			h.t.Fatal(err)
-		}
+		h.actual = restoreAgentState(h.t, h.actual)
 		h.compare(name + " restore")
 	}
 }

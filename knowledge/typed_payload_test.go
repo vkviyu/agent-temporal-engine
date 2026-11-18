@@ -50,11 +50,14 @@ func TestTypedImportPreservesKindAndCanonicalIdentity(t *testing.T) {
 			anchor.Knowledge = &key
 			anchor.Cursor = &model.Cursor{Store: anchor.Fence.Store, Space: "space", Revision: chain[len(chain)-1].ID}
 			command := Command{Import: &ImportCommand{Target: model.KnowledgeKey{Actor: "receiver", Execution: "target"}, Source: SourceAnchor{Anchor: anchor}, Observations: []model.ObjectID{origin.ID}}}
-			after, err := ApplyCommand(before, command)
+			records, err := ImportedObservations(*command.Import, map[model.ObjectID]Observation{origin.ID: origin})
 			if err != nil {
 				t.Fatal(err)
 			}
-			imported := after.Observations[len(after.Observations)-1]
+			if len(records) != 1 {
+				t.Fatalf("imported record count=%d", len(records))
+			}
+			imported := records[0]
 			if imported.PayloadKind != kind || imported.ImportedFrom != origin.ID || imported.Payload != origin.Payload || imported.Key != command.Import.Target {
 				t.Fatalf("import lost typed provenance: %+v", imported)
 			}
@@ -71,13 +74,11 @@ func TestTypedImportPreservesKindAndCanonicalIdentity(t *testing.T) {
 					t.Fatalf("accepted typed import truncated at %d", n)
 				}
 			}
-			image, err := EncodeSnapshot(after)
-			if err != nil {
-				t.Fatal(err)
+			if again, err := decoded.Canonical(); err != nil || !bytes.Equal(again, raw) {
+				t.Fatalf("typed import canonical bytes changed: %v", err)
 			}
-			restored, err := DecodeSnapshot(image)
-			if err != nil || len(restored.Observations) != 2 {
-				t.Fatalf("typed import snapshot restore: %+v %v", restored, err)
+			if err := (Snapshot{Observations: []Observation{origin, decoded}}).Validate(); err != nil {
+				t.Fatal("typed import DTO rejected", err)
 			}
 		})
 	}

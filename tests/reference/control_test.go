@@ -50,10 +50,7 @@ func TestIndependentInvocationAndContinuationContracts(t *testing.T) {
 	}
 	apply := func(name string, expected func(*oracle.Control) error, c agentprofile.ControlCommand) {
 		t.Helper()
-		before, err := agentprofile.EncodeSnapshot(h.actual.Snapshot())
-		if err != nil {
-			t.Fatal(err)
-		}
+		before := agentStateBytes(t, h.actual.Snapshot())
 		werr := want.Batch(expected)
 		h.sequence++
 		_, gerr := h.actual.ApplyCommand(key(fmt.Sprintf("contract-%d", h.sequence)), h.control(c))
@@ -61,7 +58,7 @@ func TestIndependentInvocationAndContinuationContracts(t *testing.T) {
 			t.Fatalf("%s acceptance oracle=%v actual=%v", name, werr, gerr)
 		}
 		if gerr != nil {
-			after, _ := agentprofile.EncodeSnapshot(h.actual.Snapshot())
+			after := agentStateBytes(t, h.actual.Snapshot())
 			if !bytes.Equal(before, after) {
 				t.Fatal("rejected contract changed state")
 			}
@@ -125,13 +122,6 @@ func TestIndependentInvocationAndContinuationContracts(t *testing.T) {
 	adapter.Version = 3
 	adapter.Adapter = bp.AdapterVersion
 	apply("adapter cannot change", func(c *oracle.Control) error { return c.Save(adapter, 2) }, save(bad, 2))
-	raw, err := agentprofile.EncodeSnapshot(h.actual.Snapshot())
-	if err != nil {
-		t.Fatal(err)
-	}
-	h.actual, err = agentprofile.RestoreSnapshot(raw)
-	if err != nil {
-		t.Fatal(err)
-	}
+	h.actual = restoreAgentState(t, h.actual)
 	compare("restored exact contracts")
 }

@@ -1,9 +1,11 @@
 package service
 
 import (
+	"cmp"
 	"context"
 	"net"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -36,10 +38,16 @@ func domainObservation(id model.ObjectID, source model.CommitFence, key model.Kn
 }
 
 func TestDomainServiceSDKCanonicalCommandsRecoveryAndKeyIsolation(t *testing.T) {
+	for _, transport := range []string{"pipe", "unix"} {
+		t.Run(transport, func(t *testing.T) { runDomainConformance(t, transport) })
+	}
+}
+
+func runDomainConformance(t *testing.T, transport string) {
+	t.Helper()
 	ctx := context.Background()
 	core, path := nativeAgentStore(t, true)
-	server := newServer(t, core, agentCredentials())
-	owner := pipeClient(t, server, "owner-token")
+	server, owner, _ := conformanceClients(t, core, transport)
 	caps := map[string]bool{}
 	for _, c := range owner.Identity().Capabilities {
 		caps[c] = true
@@ -139,8 +147,33 @@ func TestDomainServiceSDKCanonicalCommandsRecoveryAndKeyIsolation(t *testing.T) 
 	seedRequest := api.ApplyKnowledgeRequest{Key: domainKey("explicit-wire-knowledge-import"), Command: knowledge.Command{Import: &seed}}
 	seedAck, err := owner.ApplyKnowledge(ctx, seedRequest)
 	domainAck(t, seedAck, err)
-	check := func(c *client.Client) {
+	check := func(store *ate.Store, c *client.Client) {
 		t.Helper()
+		revisionRead := api.ReadGraphRevisionRequest{Space: "s", ID: r1.ID}
+		assertReadEqual(t, func() (api.GraphRevisionResult, error) { return store.GetGraphRevision(ctx, revisionRead) },
+			func() (api.GraphRevisionResult, error) { return c.GetGraphRevision(ctx, revisionRead) })
+		for _, anchor := range []*model.SnapshotAnchor{nil, {Space: "s", Fence: forkAck.Fence}} {
+			branchRead := api.ReadGraphBranchRequest{Space: "s", ID: "main", Anchor: anchor}
+			assertReadEqual(t, func() (api.GraphBranchResult, error) { return store.GetGraphBranch(ctx, branchRead) },
+				func() (api.GraphBranchResult, error) { return c.GetGraphBranch(ctx, branchRead) })
+		}
+		memoryRead := api.ReadMemoryStateRequest{Space: "s"}
+		assertReadEqual(t, func() (api.MemoryStateResult, error) {
+			result, err := store.GetMemoryState(ctx, memoryRead)
+			return orderedMemoryResult(result), err
+		}, func() (api.MemoryStateResult, error) {
+			result, err := c.GetMemoryState(ctx, memoryRead)
+			return orderedMemoryResult(result), err
+		})
+		for _, knowledgeRead := range []api.ReadKnowledgeStateRequest{
+			{Space: "s", Principal: "owner", Anchor: &past},
+			{Space: "s", Principal: "owner", Anchor: &seedSource},
+			{Space: "s", Principal: "owner", Knowledge: &key},
+			{Space: "s", Principal: "owner", Knowledge: &otherKey},
+		} {
+			assertReadEqual(t, func() (api.KnowledgeStateResult, error) { return store.GetKnowledgeState(ctx, knowledgeRead) },
+				func() (api.KnowledgeStateResult, error) { return c.GetKnowledgeState(ctx, knowledgeRead) })
+		}
 		got, err := c.GetGraphRevision(ctx, api.ReadGraphRevisionRequest{Space: "s", ID: r1.ID})
 		if err != nil || !got.Found || got.Value.ID != r1.ID {
 			t.Fatalf("revision=%+v %v", got, err)
@@ -214,7 +247,7 @@ func TestDomainServiceSDKCanonicalCommandsRecoveryAndKeyIsolation(t *testing.T) 
 			t.Fatalf("knowledge retry=%+v %v", retry, err)
 		}
 	}
-	check(owner)
+	check(core, owner)
 	if err = owner.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -233,9 +266,31 @@ func TestDomainServiceSDKCanonicalCommandsRecoveryAndKeyIsolation(t *testing.T) 
 			t.Error(err)
 		}
 	})
-	reopenedServer := newServer(t, reopened, agentCredentials())
-	reopenedClient := pipeClient(t, reopenedServer, "owner-token")
-	check(reopenedClient)
+	_, reopenedClient, _ := conformanceClients(t, reopened, transport)
+	check(reopened, reopenedClient)
+}
+
+// Snapshot collections are maps projected into slices, not ordered pages.
+// Compare every record and proof field while ignoring only collection order.
+func orderedMemoryResult(result api.MemoryStateResult) api.MemoryStateResult {
+	s := &result.Snapshot
+	s.Memories = slices.Clone(s.Memories)
+	s.Paths = slices.Clone(s.Paths)
+	s.Bans = slices.Clone(s.Bans)
+	s.Successors = slices.Clone(s.Successors)
+	s.PathSuccessors = slices.Clone(s.PathSuccessors)
+	slices.SortFunc(s.Memories, func(a, b memory.Memory) int { return cmp.Compare(a.ID, b.ID) })
+	slices.SortFunc(s.Paths, func(a, b memory.ExperiencePath) int { return cmp.Compare(a.ID, b.ID) })
+	slices.SortFunc(s.Bans, func(a, b memory.SourceBan) int { return cmp.Compare(a.Source, b.Source) })
+	for _, links := range [][]memory.VersionLink{s.Successors, s.PathSuccessors} {
+		slices.SortFunc(links, func(a, b memory.VersionLink) int {
+			if c := cmp.Compare(a.Before, b.Before); c != 0 {
+				return c
+			}
+			return cmp.Compare(a.After, b.After)
+		})
+	}
+	return result
 }
 
 func TestDomainServiceRejectsPrincipalSpoofScopeAndRawMutationInjection(t *testing.T) {

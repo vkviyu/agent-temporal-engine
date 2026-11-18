@@ -1,20 +1,24 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/vkviyu/agent-temporal-engine/agentprofile"
 	"github.com/vkviyu/agent-temporal-engine/api"
 	"github.com/vkviyu/agent-temporal-engine/client"
 	"github.com/vkviyu/agent-temporal-engine/model"
@@ -410,5 +414,139 @@ func TestCredentialValidationAndListenPreservesPaths(t *testing.T) {
 	info, _ := os.Stat(dir)
 	if info.Mode().Perm() != 0750 {
 		t.Fatal("Listen changed caller directory permissions")
+	}
+}
+
+type largeAgentBackend struct {
+	testBackend
+	state      api.AgentStateResult
+	prepared   atomic.Int64
+	consumed   atomic.Int64
+	mutations  atomic.Int64
+	agentReads atomic.Int64
+}
+
+func (b *largeAgentBackend) AgentProfileEnabled() bool { return true }
+func (b *largeAgentBackend) ApplyAgent(context.Context, api.ApplyAgentRequest) (api.CommitResult, error) {
+	b.mutations.Add(1)
+	return api.CommitResult{}, errors.New("unexpected agent mutation")
+}
+func (b *largeAgentBackend) Commit(context.Context, api.CommitRequest) (api.CommitResult, error) {
+	b.mutations.Add(1)
+	return api.CommitResult{}, errors.New("unexpected commit")
+}
+func (b *largeAgentBackend) Mutate(context.Context, api.MutateRequest) (api.CommitResult, error) {
+	b.mutations.Add(1)
+	return api.CommitResult{}, errors.New("unexpected mutation")
+}
+func (b *largeAgentBackend) GetAgentState(ctx context.Context, r api.ReadAgentStateRequest) (api.AgentStateResult, error) {
+	b.agentReads.Add(1)
+	if r.Principal != "host" {
+		return api.AgentStateResult{}, ErrUnauthorized
+	}
+	if r.Space == "small" {
+		return fakeReadResult(ctx, api.AgentStateResult{Anchor: model.SnapshotAnchor{Space: r.Space, Fence: testFence()}, Fence: testFence()})
+	}
+	return fakeReadResult(ctx, b.state)
+}
+
+type countedReadGrant struct {
+	api.ReadDeliveryGrant
+	consumed *atomic.Int64
+}
+
+func (g countedReadGrant) Consume(binding api.ReadDeliveryBinding) ([]byte, error) {
+	g.consumed.Add(1)
+	return g.ReadDeliveryGrant.Consume(binding)
+}
+func (b *largeAgentBackend) PrepareReadDelivery(ctx context.Context, binding api.ReadDeliveryBinding, read func(context.Context) error) (api.ReadDeliveryGrant, error) {
+	b.prepared.Add(1)
+	grant, err := b.testBackend.PrepareReadDelivery(ctx, binding, read)
+	if err != nil {
+		return nil, err
+	}
+	return countedReadGrant{grant, &b.consumed}, nil
+}
+
+func TestOversizedAgentStateReturnsResourceLimitAndClientRemainsUsable(t *testing.T) {
+	b := &largeAgentBackend{state: api.AgentStateResult{
+		Found: true, Anchor: model.SnapshotAnchor{Space: "s", Fence: testFence()}, Fence: testFence(),
+		RootSet: model.ObjectID(strings.Repeat("b", 64)), LiveControlRoot: model.ObjectID(strings.Repeat("c", 64)),
+	}}
+	for i := 0; i < 25; i++ {
+		b.state.Snapshot.Lifecycle.Queries = append(b.state.Snapshot.Lifecycle.Queries, agentprofile.Query{
+			ID: fmt.Sprintf("q-%03d", i), Space: "s", Owner: "host", Status: "open", Version: 1,
+			Input: bytes.Repeat([]byte("x"), 512<<10),
+		})
+	}
+	image, err := agentprofile.EncodeRecordImage(b.state.Snapshot)
+	if err != nil || image.Size() <= protocol.MaxFrameBytes {
+		t.Fatalf("invalid oversized record fixture: size=%d err=%v", image.Size(), err)
+	}
+	server := newServer(t, b, Options{Credentials: map[string]Credential{
+		"secret": {Principal: "host", Spaces: []model.SpaceID{"s", "small"}},
+	}})
+	c := pipeClient(t, server, "secret")
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	got, err := c.GetAgentState(ctx, api.ReadAgentStateRequest{Space: "s"})
+	// testBackend classifies every error as Internal: the local frame failure
+	// must still arrive as the exact application ResourceLimit class.
+	remoteCode(t, err, api.ErrorResourceLimit)
+	if !reflect.DeepEqual(got, api.AgentStateResult{}) {
+		t.Fatal("oversized response exposed partial agent state")
+	}
+	if b.prepared.Load() != 1 || b.consumed.Load() != 1 || b.agentReads.Load() != 1 || b.mutations.Load() != 0 {
+		t.Fatalf("read bypassed authorization, retried or committed: prepares=%d consumes=%d reads=%d mutations=%d",
+			b.prepared.Load(), b.consumed.Load(), b.agentReads.Load(), b.mutations.Load())
+	}
+	small, err := c.GetAgentState(ctx, api.ReadAgentStateRequest{Space: "small"})
+	if err != nil || small.Found || small.Anchor.Space != "small" {
+		t.Fatalf("same client cannot read a bounded snapshot: found=%v err=%v", small.Found, err)
+	}
+	if value, err := c.GetState(ctx, api.ReadStateRequest{Space: "s"}); err != nil || value.Fence != testFence() {
+		t.Fatalf("subsequent request failed: %+v %v", value, err)
+	}
+	if b.prepared.Load() != 3 || b.consumed.Load() != 3 || b.mutations.Load() != 0 {
+		t.Fatal("delivery changed the backend's mutation state or lost grants")
+	}
+}
+
+func TestReplyChecksFullEnvelopeBeforeWriting(t *testing.T) {
+	response := protocol.Response{Version: protocol.Version, CorrelationID: "<correlation>", Body: json.RawMessage(`{"data":""}`)}
+	empty, err := encodeResponse(response)
+	if err != nil {
+		t.Fatal(err)
+	}
+	padding := protocol.MaxFrameBytes - len(empty)
+	response.Body = json.RawMessage(`{"data":"` + strings.Repeat("x", padding) + `"}`)
+	if raw, err := encodeResponse(response); err != nil || len(raw) != protocol.MaxFrameBytes {
+		t.Fatalf("exact ceiling rejected: length=%d err=%v", len(raw), err)
+	}
+	response.Body = json.RawMessage(`{"data":"` + strings.Repeat("x", padding+1) + `"}`)
+	if len(response.Body) >= protocol.MaxFrameBytes {
+		t.Fatal("fixture must exceed the limit only after adding the envelope")
+	}
+	if _, err := encodeResponse(response); !errors.Is(err, protocol.ErrFrameLimit) {
+		t.Fatalf("oversized envelope accepted: %v", err)
+	}
+	server := newServer(t, &testBackend{}, Options{})
+	a, z := net.Pipe()
+	defer a.Close()
+	defer z.Close()
+	ss := &session{server: server, conn: z}
+	done := make(chan error, 1)
+	go func() { done <- ss.reply(response) }()
+	_ = a.SetReadDeadline(time.Now().Add(10 * time.Second))
+	raw, err := protocol.ReadFrame(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := protocol.DecodeResponse(raw)
+	if err != nil || got.CorrelationID != response.CorrelationID || string(got.Body) != "{}" || got.Error == nil || got.Error.Code != api.ErrorResourceLimit {
+		t.Fatalf("expected only a complete ResourceLimit frame, got length=%d err=%v response=%+v", len(raw), err, got)
+	}
+	if err := <-done; err != nil {
+		t.Fatalf("application limit returned a transport failure: %v", err)
 	}
 }

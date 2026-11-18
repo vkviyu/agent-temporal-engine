@@ -44,7 +44,9 @@ func EncodeContextRequirementImage(kind, id string, record any) ([]byte, error) 
 // records describe obligations owned by this execution, without inferring
 // semantic facts from arbitrary text.
 func ContextRequirements(snapshot Snapshot, execution model.ExecutionID) ([]ContextRequirementImage, error) {
-	if err := snapshot.Validate(); err != nil {
+	// Requirements operate on semantic records, including record-root images
+	// larger than the legacy recovery envelope. Keep all relationship checks.
+	if err := snapshot.validate(true); err != nil {
 		return nil, err
 	}
 	tasks := map[model.EntityID]Task{}
@@ -170,7 +172,7 @@ func ContextRequirements(snapshot Snapshot, execution model.ExecutionID) ([]Cont
 			}
 		}
 	}
-	if len(out) > MaxSnapshotRecords {
+	if len(out) > MaxStateRecords {
 		return nil, ErrInvalid
 	}
 	sort.Slice(out, func(i, j int) bool {

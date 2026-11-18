@@ -13,8 +13,12 @@ import (
 // installs the finished batch under mu. Public readers may use the same base.
 // Only new batch data is retained here; it never owns or advances the journal.
 func (e *Engine) stagingView() *Engine {
+	options := e.options
+	options.Observation = nil
 	return &Engine{
-		journal: e.journal, options: e.options, roots: e.roots, rootSet: e.rootSet,
+		// The publication owner builds query indexes when it installs the batch.
+		skipTaskTraceIndex: true,
+		journal:            e.journal, options: options, roots: e.roots, rootSet: e.rootSet,
 		publication: e.publication, index: newStagingIndex(e.index),
 		envelopes: make(map[model.TxID]commitEnvelope), baseEnvelopes: e.envelopes,
 		history: make(map[uint64]commitEnvelope), baseHistory: e.history,

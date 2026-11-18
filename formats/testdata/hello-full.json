@@ -1,1 +1,24 @@
-{"principal":"owner","spaces":["s"],"capabilities":["core/storage-v1","core/state-view-v1","protocol/local-v1","core/node-query-v1","core/node-explore-v1","core/content-range-v1","core/publication-ref-v1","agent/v1","event/v1","agent/task-trace-v1","graph/query-v1","graph/v1","memory/v1","knowledge/v1","annotation/v1","investigation/v1","transfer/archive-v1"]}
+{
+  "principal": "owner",
+  "spaces": ["s"],
+  "capabilities": [
+    "core/storage-v1",
+    "core/state-view-v1",
+    "protocol/local-v1",
+    "core/node-query-v1",
+    "core/node-explore-v1",
+    "core/content-range-v1",
+    "core/publication-ref-v1",
+    "agent/v1",
+    "agent/record-read-v1",
+    "event/v1",
+    "agent/task-trace-v1",
+    "graph/query-v1",
+    "graph/v1",
+    "memory/v1",
+    "knowledge/v1",
+    "annotation/v1",
+    "investigation/v1",
+    "transfer/archive-v1"
+  ]
+}

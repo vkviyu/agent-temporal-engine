@@ -10,6 +10,7 @@ import (
 
 	"github.com/vkviyu/agent-temporal-engine/api"
 	"github.com/vkviyu/agent-temporal-engine/engine"
+	"github.com/vkviyu/agent-temporal-engine/observation"
 	"github.com/vkviyu/agent-temporal-engine/storage"
 )
 
@@ -30,6 +31,7 @@ type Store struct {
 func Create(path string, options Options) (*Store, error) {
 	d, err := storage.OpenDirectory(path)
 	if err != nil {
+		options.Observation.Emit(observation.Event{Kind: observation.Create, Outcome: observation.Failure})
 		return nil, err
 	}
 	core, err := engine.Create(d, options)
@@ -44,6 +46,7 @@ func Create(path string, options Options) (*Store, error) {
 func OpenExisting(path string, options Options) (*Store, storage.RecoveryReport, error) {
 	d, err := storage.OpenDirectory(path)
 	if err != nil {
+		options.Observation.Emit(observation.Event{Kind: observation.Open, Outcome: observation.Failure})
 		return nil, storage.RecoveryReport{}, err
 	}
 	core, report, err := engine.OpenExisting(d, options)
@@ -137,6 +140,12 @@ func (s *Store) ApplyAgent(ctx context.Context, req api.ApplyAgentRequest) (api.
 }
 func (s *Store) GetAgentState(ctx context.Context, req api.ReadAgentStateRequest) (api.AgentStateResult, error) {
 	return s.core.GetAgentState(ctx, req)
+}
+
+var _ api.AgentRecordReader = (*Store)(nil)
+
+func (s *Store) GetAgentStateRecords(ctx context.Context, req api.ReadAgentStateRecordsRequest) (api.AgentStateRecordsPage, error) {
+	return s.core.GetAgentStateRecords(ctx, req)
 }
 func (s *Store) AgentProfileEnabled() bool   { return s.core.AgentProfileEnabled() }
 func (s *Store) EventProfileEnabled() bool   { return s.core.EventProfileEnabled() }

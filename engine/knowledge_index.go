@@ -15,14 +15,12 @@ import (
 	"github.com/vkviyu/agent-temporal-engine/storage"
 )
 
-// One owner radix, separate from the legacy owner value, gives indexed
-// records their historical publication cut without rewriting the legacy
-// snapshot. Every index entry points to the same immutable canonical record.
+// One owner radix gives indexed records their historical publication cut.
+// Every index entry points to an immutable canonical record.
 type knowledgeIndex struct {
 	reader state.ObjectReader
 	space  model.SpaceID
 	root   model.ObjectID
-	legacy knowledge.Snapshot
 }
 
 func knowledgeIndexKey(space model.SpaceID, principal model.PrincipalID) []byte {
@@ -44,6 +42,12 @@ func knowledgeSequenceKey(key model.KnowledgeKey, sequence uint64) []byte {
 
 func openKnowledgeIndex(ctx context.Context, reader state.ObjectReader, root model.ObjectID, space model.SpaceID, principal model.PrincipalID) (knowledgeIndex, error) {
 	k := knowledgeIndex{reader: reader, space: space}
+	// Reject old and mixed stores instead of silently hiding their knowledge.
+	if _, found, err := state.Get(ctx, reader, space, root, legacyKnowledgeStateKey(space, principal)); err != nil {
+		return k, err
+	} else if found {
+		return k, knowledge.ErrUnsupportedSchema
+	}
 	index, found, err := state.Get(ctx, reader, space, root, knowledgeIndexKey(space, principal))
 	if err != nil {
 		return k, err
@@ -51,8 +55,7 @@ func openKnowledgeIndex(ctx context.Context, reader state.ObjectReader, root mod
 	if found {
 		k.root = index
 	}
-	k.legacy, _, err = readLegacyKnowledge(ctx, reader, root, space, principal)
-	return k, err
+	return k, nil
 }
 
 func (e *Engine) knowledgeIndexAt(ctx context.Context, roots model.RootSet, space model.SpaceID, principal model.PrincipalID) (knowledgeIndex, model.ObjectID, error) {
@@ -98,28 +101,10 @@ func (k knowledgeIndex) observation(ctx context.Context, id model.ObjectID) (kno
 		}
 		return observation, true, nil
 	}
-	for _, observation := range k.legacy.Observations {
-		if observation.ID == id {
-			return observation, true, nil
-		}
-	}
 	return knowledge.Observation{}, false, nil
 }
 
 func (k knowledgeIndex) packet(ctx context.Context, id model.ObjectID) (knowledge.ContextPacket, bool, error) {
-	packet, found, err := k.indexedPacket(ctx, id)
-	if err != nil || found {
-		return packet, found, err
-	}
-	for _, packet := range k.legacy.Packets {
-		if packet.ID == id {
-			return packet, true, nil
-		}
-	}
-	return knowledge.ContextPacket{}, false, nil
-}
-
-func (k knowledgeIndex) indexedPacket(ctx context.Context, id model.ObjectID) (knowledge.ContextPacket, bool, error) {
 	raw, found, err := k.get(ctx, "packet/"+string(id))
 	if err != nil || !found {
 		return knowledge.ContextPacket{}, false, err
@@ -150,7 +135,6 @@ type recordedKnowledgePacket struct {
 	packet   knowledge.ContextPacket
 	selected knowledge.Snapshot
 	roots    model.RootSet
-	indexed  bool
 }
 
 // packetAt resolves one packet and only the observations it selects. A caller
@@ -161,18 +145,9 @@ func (e *Engine) packetAt(ctx context.Context, roots model.RootSet, space model.
 	if err != nil {
 		return out, err
 	}
-	packet, found, err := index.indexedPacket(ctx, id)
+	packet, found, err := index.packet(ctx, id)
 	if err != nil {
 		return out, err
-	}
-	out.indexed = found
-	if !found {
-		for _, legacy := range index.legacy.Packets {
-			if legacy.ID == id {
-				packet, found = legacy, true
-				break
-			}
-		}
 	}
 	if !found {
 		return out, agentprofile.ErrUnknown
@@ -209,29 +184,11 @@ func (k knowledgeIndex) sequence(ctx context.Context, key model.KnowledgeKey) (u
 		}
 		return binary.BigEndian.Uint64(raw), nil
 	}
-	var sequence uint64
-	for _, o := range k.legacy.Observations {
-		if o.Key == key && o.Sequence > sequence {
-			sequence = o.Sequence
-		}
-	}
-	return sequence, nil
+	return 0, nil
 }
 
 func (k knowledgeIndex) snapshot(ctx context.Context, key *model.KnowledgeKey, scoped, packets bool) (knowledge.Snapshot, error) {
 	var out knowledge.Snapshot
-	for _, o := range k.legacy.Observations {
-		if !scoped || key != nil && o.Key == *key {
-			out.Observations = append(out.Observations, o)
-		}
-	}
-	if packets {
-		for _, p := range k.legacy.Packets {
-			if !scoped || key == nil && p.Key == nil || key != nil && p.Key != nil && *p.Key == *key {
-				out.Packets = append(out.Packets, p)
-			}
-		}
-	}
 	prefix := ""
 	if scoped {
 		prefix = knowledgeScopeKey(key)
@@ -364,31 +321,13 @@ func (e *Engine) prepareKnowledgeRecords(ctx context.Context, req api.CommitRequ
 	if packet != nil {
 		dependencies.Packets = []knowledge.ContextPacket{*packet}
 	}
-	refs := knowledge.ContentReferences(dependencies)
+	refs := physicalReferences(knowledge.ContentReferences(dependencies))
 	if err := verifyContentClosure(ctx, e.index, refs); err != nil {
 		return nil, err
 	}
 	next := index.root
 	for batch := range slices.Chunk(mutations, state.MaxMutations) {
 		delta, err := state.Apply(ctx, b, req.Space, next, batch)
-		if err != nil {
-			return nil, err
-		}
-		for _, object := range delta.Objects {
-			if _, err = b.add(object, storage.KindObject); err != nil {
-				return nil, err
-			}
-		}
-		next = delta.Root
-	}
-	if next == state.EmptyRoot {
-		// An exact duplicate can exist exclusively in the legacy snapshot.
-		// Add a private format marker so the receipt still has a typed write.
-		marker, err := add([]byte{2})
-		if err != nil {
-			return nil, err
-		}
-		delta, err := state.Apply(ctx, b, req.Space, next, []state.Mutation{{Key: []byte("format"), Value: marker}})
 		if err != nil {
 			return nil, err
 		}

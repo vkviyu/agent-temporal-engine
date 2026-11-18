@@ -204,7 +204,7 @@ func (e *Engine) prepareGraph(ctx context.Context, req api.CommitRequest, digest
 		if err = e.verifyGraphState(ctx, r); err != nil {
 			return nil, err
 		}
-		if err = verifyContentClosure(ctx, e.index, graph.ContentReferences(r)); err != nil {
+		if err = verifyContentClosure(ctx, e.index, physicalReferences(graph.ContentReferences(r))); err != nil {
 			return nil, err
 		}
 		key = graphRevisionKey(r.ID)

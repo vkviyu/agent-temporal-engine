@@ -2,11 +2,34 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-ATE is a temporal engine for agents.
+ATE is the durable temporal memory and execution record layer for an external Agent system.
 
-It gives an external Agent system a durable way to remember what happened, when it happened, what an agent knew at that point, which decisions depended on it, and where execution can continue after a failure.
+Use it when work lasts longer than one process or one conversation. ATE records what
+happened, when it happened, what an Agent knew when it made a decision, which parent
+and child executions were involved, and where the work can safely continue after a
+failure. It turns a long-running Agent task into a verifiable history that the host
+can inspect, query, branch and resume.
 
-ATE is intentionally not an Agent Loop. It does not decide how an agent thinks, call a model on its own, run tools, or manage a workspace. The host Agent system keeps those responsibilities. ATE records and validates the resulting timeline.
+ATE is intentionally not an Agent Loop. It does not decide how an Agent thinks, call
+a model on its own, run tools, or manage a workspace. The host Agent system keeps
+those responsibilities; ATE records and validates the timeline created by them.
+
+## What ATE provides
+
+ATE lets an external Agent system:
+
+- run a task for days or weeks across process restarts without losing its execution history;
+- let a root Agent coordinate child Agents while keeping their findings, ownership and knowledge boundaries explicit;
+- explain what an Agent knew when it made a decision, instead of reconstructing context from an undifferentiated transcript;
+- let one Agent explicitly adopt another Agent's result while preserving its source and historical meaning;
+- resume work after retries, restarts or uncertain external effects without treating an unconfirmed operation as successful;
+- inspect what the task looked like at an earlier point in time and trace why a result or decision was visible;
+- explore alternative domain states in isolated branches and merge a chosen result explicitly;
+- connect the same durable task model to an embedded Go host or a local Unix service.
+
+ATE provides the durable record and verification boundary. The host still decides
+which model or tool to call, performs the external operation, and reconciles its
+real-world result.
 
 ## Why a temporal engine?
 
@@ -106,9 +129,9 @@ The distinction is semantic. A short conversation, routing decision, or read-onl
 
 The core identity and time types are defined in [`model/`](model/). The public contracts are in [`api/`](api/).
 
-## What ATE provides
+## How these capabilities are implemented
 
-ATE currently provides the core mechanisms for:
+The current implementation provides the core mechanisms behind those capabilities:
 
 - immutable, content-addressed objects;
 - historical snapshots and anchored reads;
@@ -169,6 +192,8 @@ The five authoritative roots separate domain state, execution knowledge, branch 
 
 For Go SDK and Unix Socket methods, parameters, return values, and examples, see the [ATE API reference](docs/ATE_API_REFERENCE.md) (Chinese).
 
+For the repository-wide refactoring backlog, execution order, and acceptance criteria, see the [ATE refactoring master plan](docs/ATE_REFACTOR_MASTER_PLAN.md) (Chinese).
+
 If you are new to the project, read in this order:
 
 1. [`docs/AGENT_TEMPORAL_ENGINE_DESIGN.md`](docs/AGENT_TEMPORAL_ENGINE_DESIGN.md) — overall design and semantics.
@@ -183,13 +208,26 @@ If you are new to the project, read in this order:
 The project targets Go 1.27.0:
 
 ```sh
-go test ./...
-go test -race ./...
-go vet ./...
+go run ./scripts/verify full
+go run ./scripts/verify race
 ```
+
+These commands run tests, vet, build, formatting and diff checks, and record source
+fingerprints and skipped tests in a private report directory outside the repository.
+See the [verification guide](docs/validation/VERIFY.md) for quick checks, report
+options and validation boundaries.
 
 For state-store initialization, recovery, local service usage and format details, see [`docs/ATE_IMPLEMENTATION_STATUS.md`](docs/ATE_IMPLEMENTATION_STATUS.md).
 
 ## Project status
 
-ATE is an experimental V1 implementation. The core state, Agent profile, Graph, Knowledge, Memory, query, recovery and local-service paths are implemented and covered by package and integration tests. Strict V1 acceptance remains open. Native evidence covers Darwin/arm64 APFS and Linux/arm64 ext4, including real ENOSPC and an orderly guest reboot; see [platform scope](docs/PLATFORM_SUPPORT.md). Device power-loss certification and broad external exactly-once guarantees are not claimed. Current gaps and verification are tracked in the [2026-11-06 cross-audit](docs/validation/V1_CROSS_AUDIT_2026-11-06.md).
+ATE is an experimental V1 implementation. The core state, Agent profile, Graph,
+Knowledge, Memory, query, recovery and local-service paths are implemented and
+covered by package and integration tests. R23–R25 have completed their first
+adapter-lock, memory/index/cache and logical-quota baselines; R14 remains deferred
+until mutation-delta equivalence and cost evidence are available. Strict V1
+acceptance, the final full/race/native verification pass and some external
+durability evidence remain open. Device power-loss certification and broad
+external exactly-once guarantees are not claimed. Current scope and evidence are
+tracked in the [ATE refactoring master plan](docs/ATE_REFACTOR_MASTER_PLAN.md) and
+the [implementation status](docs/ATE_IMPLEMENTATION_STATUS.md).

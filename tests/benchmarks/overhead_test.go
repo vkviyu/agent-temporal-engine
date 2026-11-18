@@ -179,28 +179,38 @@ func knowledgeCorpus(b *testing.B, count int) (knowledge.Snapshot, model.Knowled
 
 func BenchmarkKnowledge(b *testing.B) {
 	for _, count := range []int{32, 256} {
-		b.Run(fmt.Sprintf("EncodeSnapshot%d", count), func(b *testing.B) {
+		b.Run(fmt.Sprintf("EncodeCanonicalObservationRecords%d", count), func(b *testing.B) {
 			snapshot, _ := knowledgeCorpus(b, count)
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				if _, err := knowledge.EncodeSnapshot(snapshot); err != nil {
-					b.Fatal(err)
+				for _, observation := range snapshot.Observations {
+					if _, err := observation.Canonical(); err != nil {
+						b.Fatal(err)
+					}
 				}
 			}
 		})
-		b.Run(fmt.Sprintf("DecodeSnapshot%d", count), func(b *testing.B) {
+		b.Run(fmt.Sprintf("DecodeCanonicalObservationRecords%d", count), func(b *testing.B) {
 			snapshot, _ := knowledgeCorpus(b, count)
-			raw, err := knowledge.EncodeSnapshot(snapshot)
-			if err != nil {
-				b.Fatal(err)
+			records := make([][]byte, len(snapshot.Observations))
+			var totalBytes int64
+			for i, observation := range snapshot.Observations {
+				raw, err := observation.Canonical()
+				if err != nil {
+					b.Fatal(err)
+				}
+				records[i] = raw
+				totalBytes += int64(len(raw))
 			}
 			b.ReportAllocs()
-			b.SetBytes(int64(len(raw)))
+			b.SetBytes(totalBytes)
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				if _, err := knowledge.DecodeSnapshot(raw); err != nil {
-					b.Fatal(err)
+				for _, raw := range records {
+					if _, err := knowledge.DecodeObservation(raw); err != nil {
+						b.Fatal(err)
+					}
 				}
 			}
 		})

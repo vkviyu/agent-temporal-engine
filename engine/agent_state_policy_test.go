@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/vkviyu/agent-temporal-engine/agentprofile"
@@ -42,8 +43,45 @@ func TestAgentStateHistoricalDisclosureChecksKnownModelProvenance(t *testing.T) 
 			if err != nil || len(before.Snapshot.Lifecycle.Results) != 1 || !bytes.Equal(before.Snapshot.Lifecycle.Results[0].Payload, secret) {
 				t.Fatalf("setup did not retain exact accepted output: %+v %v", before, err)
 			}
+			pageReq := api.ReadAgentStateRecordsRequest{Space: read.Space, Principal: read.Principal, Anchor: &before.Anchor, Limit: 1}
+			page, err := s.e.GetAgentStateRecords(ctx, pageReq)
+			if err != nil || page.Continuation == "" {
+				t.Fatalf("first record page: %+v %v", page, err)
+			}
+			pageReq.Continuation = page.Continuation
+			// Select a next page that does not itself contain the sensitive
+			// result. A page-only disclosure check would miss its provenance.
+			for {
+				next, err := s.e.GetAgentStateRecords(ctx, pageReq)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !bytes.Contains(next.Records[0].Raw, []byte("state-result")) {
+					break
+				}
+				if next.Continuation == "" {
+					t.Fatal("fixture has no non-result continuation page")
+				}
+				pageReq.Continuation = next.Continuation
+			}
 			applyMemory(t, s.e, "state-policy-withdraw", memory.Command{RetractSource: &memory.RetractSourceCommand{Source: payload, Retraction: memory.Retraction{Kind: kind, Reason: "withdraw explicit model source"}}})
 			privacy := kind == memory.RetractionPrivacyErasure || kind == memory.RetractionACLRevocation
+			cut, err := s.e.Snapshot(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			next, pageErr := s.e.GetAgentStateRecords(ctx, pageReq)
+			if privacy {
+				if !errors.Is(pageErr, memory.ErrHistoryAccessDenied) || !reflect.DeepEqual(next, api.AgentStateRecordsPage{}) {
+					t.Fatalf("continuation bypassed full disclosure: %+v %v", next, pageErr)
+				}
+			} else if pageErr != nil {
+				t.Fatal(pageErr)
+			}
+			afterRead, err := s.e.Snapshot(ctx)
+			if err != nil || !reflect.DeepEqual(cut, afterRead) {
+				t.Fatal("page disclosure check changed publication")
+			}
 			for _, historical := range []bool{false, true} {
 				if historical {
 					anchor := before.Anchor.Clone()

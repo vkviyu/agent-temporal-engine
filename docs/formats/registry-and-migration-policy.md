@@ -20,9 +20,13 @@ opcode 7 are retired pre-release shapes.
 
 The outer Agent command remains schema 1 and retains standalone data operations for
 unmanaged state. Engine admission rejects standalone CompleteStep, including unmanaged
-executions, because completed steps require the protected Work checkpoint boundary. Agent snapshots 1 and 2, Observation 1–4 and core Event 1 and 2
-remain registered formats. Their current canonical layout and per-operation
-validation still govern admission and replay.
+executions, because completed steps require the protected Work checkpoint boundary.
+Agent state uses only [record-state v1](agent-record-state-v1.md), registered as
+`agent.record-state` with domain `ATE-AGENT-RECORD\0`. The removed Agent snapshot
+formats 1 and 2 are not registered for decode, replay or write. The public
+`agentprofile.Snapshot` remains an in-memory API view, not another storage format.
+Observation 1–4 and core Event 1 and 2 remain registered formats. Their current
+canonical layout and per-operation validation still govern admission and replay.
 
 Each family version distinguishes:
 
@@ -38,6 +42,12 @@ registry cannot authorize access or substitute for the real decoder. Unknown
 versions are rejected; a format-specific unsupported error remains appropriate.
 
 ## Compatibility and migration rules
+
+The independent `journalstore` and `graphstore` adapters are outside this core
+registry. Their current transaction metadata is documented in
+[adapter publication metadata v2](adapter-publication-metadata-v2.md). It stores
+logical LSN and original physical Generation separately and rejects v1 adapter
+metadata. This development cutover does not migrate existing directories.
 
 Supported historical bytes, content identities, original RequestKeys and receipts
 are preserved. Opening an existing store or AuditFull compaction is not a
@@ -77,6 +87,13 @@ Public codec schema constants are also checked against the registry.
 The complete dispatch method inventory is compared to the production service's
 static wire routes, including Query-only `get_query_progress`; mutation remains
 the existing `commit` transport with the canonical Work envelope.
+The check discovers all non-test Go files in `service`, including platform-specific
+sources, instead of maintaining a file allowlist. Static `Method` switches and
+equality checks are collected regardless of request variable names; nonliteral
+route cases fail the check. Fixture tests verify moved routes, unregistered new
+routes, removed advertised methods and ignored test-only routes. A future routing
+representation must update this inventory checker as part of the same change;
+this AST inventory is not a general reachability proof.
 
 Core Event v1 remains a live format for commands without typed occurrences.
 Agent and Work transactions use core Event v2 with Profile registry 2 and

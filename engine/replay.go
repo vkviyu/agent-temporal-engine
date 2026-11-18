@@ -182,8 +182,11 @@ func validateRecord(ctx context.Context, obj codec.Object, reader state.ObjectRe
 	case rootSetType:
 		_, err := readRootSet(obj)
 		return err
-	case agentSnapshotType:
-		_, _, err := readAgentSnapshot(obj)
+	case agentRecordType:
+		_, _, err := readAgentRecord(obj)
+		return err
+	case agentRecordRootType:
+		_, _, err := loadAgentRecordImage(ctx, reader, obj)
 		return err
 	case eventlog.Type, eventlog.ProfileType:
 		_, err := eventlog.Decode(obj)

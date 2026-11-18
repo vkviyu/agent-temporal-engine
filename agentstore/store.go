@@ -18,18 +18,11 @@ import (
 )
 
 var (
-	ErrInvalidOptions     = errors.New("invalid agent store options")
-	ErrProfileScope       = errors.New("agent profile request is outside the configured scope")
-	ErrProfileState       = errors.New("agent profile state is unavailable or malformed")
-	ErrUncertain          = errors.New("agent profile result requires reconciliation")
-	ErrLegacyProfileState = errors.New("legacy domain profile snapshot requires explicit migration")
+	ErrInvalidOptions = errors.New("invalid agent store options")
+	ErrProfileScope   = errors.New("agent profile request is outside the configured scope")
+	ErrProfileState   = errors.New("agent profile state is unavailable or malformed")
+	ErrUncertain      = errors.New("agent profile result requires reconciliation")
 )
-
-const snapshotKeyName = "ate.profile/agent/v1/snapshot"
-
-// SnapshotKey identifies the former domain-state representation. Current
-// commands never write it; hosts may use it to detect/export legacy data.
-func SnapshotKey() []byte { return []byte(snapshotKeyName) }
 
 // CommandError preserves the original key and core outcome when a typed result
 // is unavailable. WaitInterrupted/CommitUnknown never prove durable absence.
@@ -80,11 +73,7 @@ func Create(path string, o Options) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &Store{core: core, space: o.ProfileSpace, principal: o.Principal}
-	if err := s.checkLegacy(context.Background()); err != nil {
-		return nil, storage.CloseOnError(err, core)
-	}
-	return s, nil
+	return &Store{core: core, space: o.ProfileSpace, principal: o.Principal}, nil
 }
 func OpenExisting(path string, o Options) (*Store, storage.RecoveryReport, error) {
 	o, err := o.checked()
@@ -95,21 +84,7 @@ func OpenExisting(path string, o Options) (*Store, storage.RecoveryReport, error
 	if err != nil {
 		return nil, report, err
 	}
-	s := &Store{core: core, space: o.ProfileSpace, principal: o.Principal}
-	if err := s.checkLegacy(context.Background()); err != nil {
-		return nil, report, storage.CloseOnError(err, core)
-	}
-	return s, report, nil
-}
-func (s *Store) checkLegacy(ctx context.Context) error {
-	legacy, err := s.core.GetState(ctx, api.ReadStateRequest{Space: s.space, Key: SnapshotKey()})
-	if err != nil {
-		return err
-	}
-	if legacy.Found {
-		return errors.Join(ErrProfileState, ErrLegacyProfileState)
-	}
-	return nil
+	return &Store{core: core, space: o.ProfileSpace, principal: o.Principal}, report, nil
 }
 func (s *Store) checkScope(key model.RequestKey) error {
 	if s == nil || s.core == nil {
@@ -169,11 +144,7 @@ func (s *Store) execute(ctx context.Context, key model.RequestKey, command agent
 	return result, ack.Fence, nil
 }
 func resultAt(snapshot agentprofile.Snapshot, command agentprofile.Command) (agentprofile.Result, error) {
-	raw, err := agentprofile.EncodeSnapshot(snapshot)
-	if err != nil {
-		return agentprofile.Result{}, err
-	}
-	ledger, err := agentprofile.RestoreSnapshot(raw)
+	ledger, err := agentprofile.RestoreStateSnapshot(snapshot)
 	if err != nil {
 		return agentprofile.Result{}, err
 	}
@@ -302,16 +273,19 @@ func (s *Store) currentLedger() (*agentprofile.Ledger, model.CommitFence, error)
 	if s == nil || s.core == nil {
 		return nil, model.CommitFence{}, storage.ErrClosed
 	}
-	state, err := s.core.GetAgentState(context.Background(), api.ReadAgentStateRequest{Space: s.space, Principal: s.principal})
+	return readCurrentLedger(s.core, api.ReadAgentStateRequest{Space: s.space, Principal: s.principal})
+}
+
+func readCurrentLedger(core api.AgentCommands, request api.ReadAgentStateRequest) (*agentprofile.Ledger, model.CommitFence, error) {
+	state, err := core.GetAgentState(context.Background(), request)
 	if err != nil {
 		return nil, model.CommitFence{}, err
 	}
-	raw, err := agentprofile.EncodeSnapshot(state.Snapshot)
+	ledger, err := agentprofile.RestoreStateSnapshot(state.Snapshot)
 	if err != nil {
 		return nil, model.CommitFence{}, errors.Join(ErrProfileState, err)
 	}
-	ledger, err := agentprofile.RestoreSnapshot(raw)
-	return ledger, state.Fence, err
+	return ledger, state.Fence, nil
 }
 func (s *Store) GetTask(id model.EntityID) (agentprofile.Task, error) {
 	ledger, _, err := s.currentLedger()

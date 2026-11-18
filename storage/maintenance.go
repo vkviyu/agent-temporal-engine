@@ -9,13 +9,11 @@ import (
 	"strings"
 )
 
-// RetentionPolicy describes the only destructive maintenance currently
-// permitted by the storage layer. Published segments and manifests are never
-// deleted by this API: they are part of the publication proof and require a
-// future manifest-rewrite protocol. Quarantine evidence may be removed only
-// when the caller explicitly opts in and the store owner lock is acquired.
+// RetentionPolicy defaults to inspection only. Neither option removes segments
+// or checkpoint streams, rewrites authority, or performs recovery/tail repair.
 type RetentionPolicy struct {
-	DropQuarantine bool
+	DropQuarantine         bool
+	DropPublicationStaging bool
 }
 
 func (p RetentionPolicy) Validate() error {
@@ -23,21 +21,45 @@ func (p RetentionPolicy) Validate() error {
 }
 
 type MaintenanceReport struct {
-	QuarantineBefore   []string
-	RemovedQuarantine  []string
+	QuarantineBefore  []string
+	RemovedQuarantine []string
+	// Physical legacy prefix counts, NOT counts of authoritative publications.
+	// PublishedManifests includes obsolete and even malformed MANIFEST.* files.
 	PublishedSegments  int
 	PublishedManifests int
+	// The four inventory categories below are disjoint, sorted store-relative
+	// paths. SelectedMetadata includes CURRENT, IDENTITY, the selected manifest
+	// and its checkpoint path. Checkpoint paths are references (possibly absent),
+	// not verification of the stream contents.
+	SelectedMetadata      []string
+	RetainedProofMetadata []string
+	// StagedMetadata includes authenticated obsolete final manifests as well
+	// as .STAGE.* and .CURRENT.* files. It is an inventory, not authorization
+	// to remove files when PublicationReclamationBlocked is true.
+	StagedMetadata        []string
+	UnknownMetadata       []string
+	RemovedStagedMetadata []string
+	// Unknown metadata might conceal a source reference. Preserve it and block
+	// ALL publication removal, without blocking explicitly requested quarantine
+	// removal. ReclamationBlockers names the unknown paths causing the block.
+	PublicationReclamationBlocked bool
+	ReclamationBlockers           []string
 }
 
 var ErrMaintenanceBusy = errors.New("maintenance requires exclusive store ownership")
 
 // Maintain performs a bounded, crash-safe maintenance pass. It is deliberately
-// conservative: published history is retained until a manifest/reclamation
-// protocol can prove that no retained RootSet, Anchor, or recovery path needs
-// the bytes. The operation is idempotent; an interrupted removal is retried on
-// the next pass and never changes CURRENT or a published manifest.
-func Maintain(ctx context.Context, d DurableIO, p RetentionPolicy) (MaintenanceReport, error) {
-	var report MaintenanceReport
+// conservative: only authenticated, unselected publication metadata outside
+// the proof closure can be removed. Sources referenced even by obsolete
+// manifests are retained for this pass, so interrupted removal cannot strand
+// a surviving reference; reclaiming their sources may require later passes.
+// Inspection completes before any mutation. Requested cleanup always syncs its
+// directories, including on an empty retry following an unsynced removal. Before
+// reclamation it stabilizes the observed CURRENT namespace, which might have
+// been left unsynced by an interrupted publisher; it never rewrites file bytes.
+// If owner cleanup fails, the returned error retains a *CleanupError. Callers
+// must keep d alive and retry that handle's Close until ownership is released.
+func Maintain(ctx context.Context, d DurableIO, p RetentionPolicy) (report MaintenanceReport, err error) {
 	if err := ctx.Err(); err != nil {
 		return report, err
 	}
@@ -49,10 +71,17 @@ func Maintain(ctx context.Context, d DurableIO, p RetentionPolicy) (MaintenanceR
 	}
 	owner, err := d.AcquireOwnerLock()
 	if err != nil {
-		return report, fmt.Errorf("%w: %v", ErrMaintenanceBusy, err)
+		// Acquisition can return a live owner together with an error.
+		return report, CloseOnError(fmt.Errorf("%w: %w", ErrMaintenanceBusy, err), owner)
 	}
-	defer owner.Close()
-	segments, err := d.List("segments")
+	defer func() {
+		// In particular, do NOT close the owner behind readMetadata's pending
+		// file handle. CloseOnError composes FILE -> OWNER retry ownership.
+		err = CloseOnError(err, owner)
+		sortMaintenanceReport(&report)
+	}()
+	scan := publicationMaintenance{ctx: ctx, io: d}
+	segments, err := scan.list("segments", false)
 	if err != nil {
 		return report, err
 	}
@@ -61,7 +90,7 @@ func Maintain(ctx context.Context, d DurableIO, p RetentionPolicy) (MaintenanceR
 			report.PublishedSegments++
 		}
 	}
-	manifests, err := d.List("manifests")
+	manifests, err := scan.list("manifests", false)
 	if err != nil {
 		return report, err
 	}
@@ -70,35 +99,81 @@ func Maintain(ctx context.Context, d DurableIO, p RetentionPolicy) (MaintenanceR
 			report.PublishedManifests++
 		}
 	}
-	q, err := d.List("quarantine")
+	q, err := scan.list("quarantine", true)
 	if err != nil {
-		if !errors.Is(err, fs.ErrNotExist) {
-			return report, err
-		}
-		q = nil
+		return report, err
 	}
 	sort.Strings(q)
 	report.QuarantineBefore = append([]string(nil), q...)
-	if !p.DropQuarantine || len(q) == 0 {
-		return report, nil
-	}
 	for _, n := range q {
 		if err := ctx.Err(); err != nil {
 			return report, err
 		}
-		if n == "." || n == ".." || strings.Contains(n, "/") || n == "" {
+		if p.DropQuarantine && !maintenanceBaseName(n) {
 			return report, ErrMalformed
 		}
-		if err := d.Remove("quarantine/" + n); err != nil {
+	}
+	if err = scan.inspect(manifests, &report); err != nil {
+		return report, err
+	}
+	if p.DropPublicationStaging && !report.PublicationReclamationBlocked {
+		// A process may have died after replacing CURRENT but before syncing
+		// the root. Stabilize the observed publication BEFORE deleting an old
+		// final manifest; otherwise a crash could restore the old CURRENT
+		// after its manifest's removal was made durable. Publication already
+		// synced the file bytes before installation. Never rewrite those bytes.
+		for _, dir := range []string{"manifests", "."} {
+			if err = ctx.Err(); err != nil {
+				return report, err
+			}
+			if err = d.SyncDir(dir); err != nil {
+				return report, err
+			}
+		}
+	}
+	if p.DropQuarantine {
+		for _, n := range q {
+			if err = ctx.Err(); err != nil {
+				return report, err
+			}
+			if err = d.Remove("quarantine/" + n); err != nil && !errors.Is(err, fs.ErrNotExist) {
+				return report, err
+			}
+			report.RemovedQuarantine = append(report.RemovedQuarantine, n)
+		}
+		if err = ctx.Err(); err != nil {
 			return report, err
 		}
-		report.RemovedQuarantine = append(report.RemovedQuarantine, n)
+		if err = d.SyncDir("quarantine"); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return report, err
+		}
 	}
-	if err := d.SyncDir("quarantine"); err != nil {
-		return report, err
+	if p.DropPublicationStaging {
+		if !report.PublicationReclamationBlocked {
+			for _, name := range report.StagedMetadata {
+				if err = ctx.Err(); err != nil {
+					return report, err
+				}
+				if err = d.Remove(name); err != nil && !errors.Is(err, fs.ErrNotExist) {
+					return report, err
+				}
+				report.RemovedStagedMetadata = append(report.RemovedStagedMetadata, name)
+			}
+		}
+		if err = ctx.Err(); err != nil {
+			return report, err
+		}
+		if err = d.SyncDir("manifests"); err != nil {
+			return report, err
+		}
 	}
-	if err := d.SyncDir("."); err != nil {
-		return report, err
+	if p.DropQuarantine || p.DropPublicationStaging {
+		if err = ctx.Err(); err != nil {
+			return report, err
+		}
+		if err = d.SyncDir("."); err != nil {
+			return report, err
+		}
 	}
 	return report, nil
 }

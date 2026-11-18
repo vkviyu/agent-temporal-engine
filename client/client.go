@@ -151,6 +151,9 @@ func (c *Client) call(ctx context.Context, method string, body, out any, key *mo
 		return transportFailure(protocol.ErrProtocol)
 	}
 	payload := bytes.TrimSpace(reply.Body)
+	if _, records := out.(*api.AgentStateRecordsPage); records && len(reply.Body) > api.MaxAgentStatePageBytes {
+		return transportFailure(protocol.ErrProtocol)
+	}
 	// A successful RPC must carry its typed object. JSON null must not turn
 	// a missing ACK or View into a successful zero Go value.
 	if bytes.Equal(payload, []byte("null")) {
@@ -322,6 +325,8 @@ func validateResult(out any, key *model.RequestKey) error {
 		}
 	case *api.AgentStateResult:
 		return validateAgentState(*r)
+	case *api.AgentStateRecordsPage:
+		return validateAgentStateRecords(*r)
 	}
 	return nil
 }

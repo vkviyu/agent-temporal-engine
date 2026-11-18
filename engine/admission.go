@@ -11,6 +11,7 @@ import (
 
 	"github.com/vkviyu/agent-temporal-engine/api"
 	"github.com/vkviyu/agent-temporal-engine/model"
+	"github.com/vkviyu/agent-temporal-engine/observation"
 	"github.com/vkviyu/agent-temporal-engine/storage"
 )
 
@@ -67,14 +68,15 @@ func (b BatchOptions) checked() (BatchOptions, error) {
 }
 
 type flight struct {
-	request api.CommitRequest
-	digest  model.ObjectID
-	result  api.CommitResult
-	err     error
-	done    chan struct{}
-	waiters int
-	phase   string
-	bytes   uint64
+	request  api.CommitRequest
+	digest   model.ObjectID
+	result   api.CommitResult
+	err      error
+	done     chan struct{}
+	waiters  int
+	phase    string
+	bytes    uint64
+	queuedAt time.Time
 }
 
 // The membership hint is a complete, rebuildable index of published request
@@ -146,6 +148,10 @@ func (e *Engine) stopAdmission(reason error) {
 		return
 	}
 	a.mu.Lock()
+	terminalFence := errors.Is(a.terminal, storage.ErrStoreFenced) || errors.Is(a.terminal, storage.ErrCommitUnknown)
+	if (errors.Is(reason, storage.ErrStoreFenced) || errors.Is(reason, storage.ErrCommitUnknown)) && !terminalFence {
+		e.options.Observation.Emit(observation.Event{Kind: observation.Fence, Outcome: observationOutcome(reason)})
+	}
 	a.accepting = false
 	if a.terminal == nil || errors.Is(reason, storage.ErrStoreFenced) {
 		a.terminal = reason
@@ -263,6 +269,7 @@ func (e *Engine) commitQueued(ctx context.Context, req api.CommitRequest) (api.C
 			return admissionFailure(req.RequestID, err)
 		}
 		f := &flight{request: ownRequest(req), digest: digest, done: make(chan struct{}), waiters: 1, phase: "queued", bytes: cost}
+		f.queuedAt = e.options.Observation.Start()
 		a.flights[req.Key()] = f
 		a.queue = append(a.queue, f)
 		a.pendingBytes += cost

@@ -12,20 +12,20 @@
 
 外层为 `ATE-COMMAND` envelope，Method 为 `agent.apply/v1`。顶层 Body 依次为 raw `ATE-AGENT-COMMAND`+NUL、uint schema=1、uint operation、bytes operation body。Lifecycle 为 opcode 12。Control 为 opcode 13，其内部依次为 raw `ATE-AGENT-CONTROL`+NUL、uint schema=6、uint operation 及 operation 的固定字段。公开解码拒绝 Control schema 1–5、Invocation schema 1 和 Lifecycle Continuation opcode 7。时间旅行重放已发布的受支持 V1 事务。完整 body 最多 1 MiB，未知版本或操作拒绝。Control 字节不使用 JSON。
 
-| operation | 字段 |
-| --- | --- |
-| 1 CreateTask | canonical Task |
-| 2 Spawn | canonical Execution |
-| 3 StartStep | canonical Step |
-| 4 RecordInvocation | canonical Invocation |
-| 5 CompleteStep | Execution string、Sequence uint、GoalEpoch uint。纯 Ledger 保留此操作，Engine 准入统一拒绝，完成必须通过 Work 中的 FinishStep 和 checkpoint |
-| 6 CancelTask | Task string |
-| 7 RebaseGoal | Task string、NewGoal string、ExpectedEpoch uint |
-| 8 PutPending | canonical PendingAction |
-| 9 RebindPending | Key string、Generation uint |
-| 11 SettleInvocation | Invocation ID string、Result bytes |
-| 12 Lifecycle | canonical lifecycle command body |
-| 13 Control | canonical authority/activity/goal/action/recovery control command body |
+| operation           | 字段                                                                                                                                        |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1 CreateTask        | canonical Task                                                                                                                              |
+| 2 Spawn             | canonical Execution                                                                                                                         |
+| 3 StartStep         | canonical Step                                                                                                                              |
+| 4 RecordInvocation  | canonical Invocation                                                                                                                        |
+| 5 CompleteStep      | Execution string、Sequence uint、GoalEpoch uint。纯 Ledger 保留此操作，Engine 准入统一拒绝，完成必须通过 Work 中的 FinishStep 和 checkpoint |
+| 6 CancelTask        | Task string                                                                                                                                 |
+| 7 RebaseGoal        | Task string、NewGoal string、ExpectedEpoch uint                                                                                             |
+| 8 PutPending        | canonical PendingAction                                                                                                                     |
+| 9 RebindPending     | Key string、Generation uint                                                                                                                 |
+| 11 SettleInvocation | Invocation ID string、Result bytes                                                                                                          |
+| 12 Lifecycle        | canonical lifecycle command body                                                                                                            |
+| 13 Control          | canonical authority/activity/goal/action/recovery control command body                                                                      |
 
 `agentprofile.Command` 必须恰好选择一个分支。外层 RequestKey 绑定 Space/Principal/RequestID；调用者不能提交替换快照或任意控制根。Task.Owner/Space 必须匹配主体和 Space；其他操作从 Task 或所属 Execution 解析所有权。Pending.Request 必须等于原外层 key。
 
@@ -44,19 +44,19 @@ V1 的 fence 统一使用递归执行树语义；历史读取以已发布的当�
 
 ## LiveControl 投影
 
-LiveControl 为系统 scope radix，键为三个 canonical string 的串联：`agent/v1`、Space、Principal。其值是 `ate.agent.snapshot`、version=1、Space=请求 Space 的 immutable object。
+LiveControl 为系统 scope radix，键为三个 canonical string 的串联：`agent/v1`、Space、Principal。其值固定为 version=1、Space=请求 Space 的 `ate.agent.record-root` immutable object。Record root 引用持久 radix，叶子引用有界 semantic record 对象，复用未变化对象和子树；完整布局见 [Agent record state v1](agent-record-state-v1.md)。
 
-Snapshot payload 为 uint schema=1、uint flags=0、Owner string、bytes canonical Snapshot。Snapshot 的独立编码域为 `ATE-AGENT-SNAPSHOT`+NUL，version=1（无生命周期记录）或 version=2（追加 lifecycle envelope）；原五类记录以有界 count/bytes 保存。生命周期 envelope 当前使用固定字段、排序 slices 的 JSON，并由解码后精确重编码检查；这与传输 JSON 和二进制 command body 是不同表示。payload 包括 owner 与包装在内受 8 MiB object 限制。
+Agent profile 持久化只使用 `ate.agent.record-root` 和 `ate.agent.record`。公开 `Snapshot` 仍是 API 的内存状态视图，不代表另一种持久化对象格式。旧开发数据如需继续使用，应直接重建 store；当前没有旧 Agent snapshot 的读取、迁移或静默重写路径。
 
-实体 ID、命令摘要和 CommitFence 摘要不是 ObjectID 引用；此 snapshot 的 envelope.Refs 为空。它们的历史发布来源目前由完整保留的 Journal/history 认证。本阶段没有 GC，不能据此宣称已实现保留闭包或可安全删除历史。
+实体 ID、命令摘要和 CommitFence 摘要不是 ObjectID 引用；record root/radix 显式引用其结构对象。逻辑实体及来源引用的历史发布仍由完整保留的 Journal/history 认证；这些结构引用不构成选择性 GC 策略，不能据此宣称已实现保留闭包或可安全删除历史。
 
 ## 单次发布与重放
 
-Agent 命令构造：Command → profile snapshot → LiveControl radix delta → StateOps → receipt → receipt radix delta → RootSet。StateOps.BeforeRoot/AfterRoot 是该笔 LiveControl 根，change 是该分区 snapshot identity 的前后值。`CommitResult.StateRoot` 对此 Method 表示 LiveControl；对原 `core.state.mutate/v1` 仍表示 domain state 根。
+新 Agent 命令构造：Command → profile record image → record/radix delta 与 record root → LiveControl radix delta → StateOps → receipt → receipt radix delta → RootSet。StateOps.BeforeRoot/AfterRoot 是该笔 LiveControl 根，change 是该分区 profile object identity 的前后值。`CommitResult.StateRoot` 对此 Method 表示 LiveControl；对原 `core.state.mutate/v1` 仍表示 domain state 根。
 
 所有已注册命令共用 `finishPlan`，派生同一个五根 RootSet：Agent 修改 LiveControl，Graph 修改 BranchRefs，Memory/Knowledge 修改 ExecutionKnowledge，普通宿主写入修改 DomainStates；它们都修改 CommandReceipts，其他根保持不变。RefUpdates 为旧/新 BranchRefs 根；Memory/Knowledge 的 ControlUpdates 记录旧/新 ExecutionKnowledge 根，其他命令记录旧/新 LiveControl 根。只有 coordinator 的 P1 能发布它们。
 
-Open 从上一 RootSet 读取 profile 分区，重算同一静态转换、对象序、StateOps、receipt、ControlUpdates 和 PostRootSet。完整相符才交换对象目录和根；未知 schema、损坏对象或状态转换不符拒绝打开。未知发布结果不安装候选，公开读取会 fencing，恢复只采用实际认证前缀。
+语义重放从上一 RootSet 读取 record-root profile 分区，重算同一静态转换、对象序、StateOps、receipt、ControlUpdates 和 PostRootSet；Work 内部子步骤也只使用 record catalog。最终 operations 和有序事务记录必须精确相符。Open 使用有效的 `CURRENT` 所选恢复 checkpoint 时仍扫描全部物理历史并认证投影，仅对未认证后缀执行语义重放；禁用 checkpoint 或回退时从头重放，见 [Recovery checkpoint schema 2](recovery-checkpoint-v1.md)。完整验证成功才暴露对象目录和根；未知存储 schema、损坏对象或状态转换不符拒绝打开。未知发布结果不安装候选，公开读取会 fencing，恢复只采用实际认证前缀。
 
 ## Domain typed command
 
@@ -64,21 +64,23 @@ Open 从上一 RootSet 读取 profile 分区，重算同一静态转换、对象
 
 Graph 当前支持 AddRevision、Fork、Advance。Revision 的 root/entries 必须来自认证的领域状态；parent/head 必须存在，分支按 version CAS。Memory 验证新增来源和状态转换，不允许普通 Transition 绕过 Validate/Promote。Knowledge 校验 canonical ID、连续序号、来源发布与 Packet 成员采用时点。
 
-这是对先前实验 facade 的纠正：三个受保护 method 不再接受 `EncodeStateBatch` 的 bytes，也不把替换 snapshot 当领域命令。先前使用该实验表示写入的记录不能默认为新格式；当前没有自动转换或静默重写迁移。打开失败时应保留原 store，使用匹配版本显式导出/迁移。
+这是对先前实验 facade 的纠正：三个受保护 method 不再接受 `EncodeStateBatch` 的 bytes，也不把替换 snapshot 当领域命令。先前使用该实验表示写入的记录不能默认为新格式；当前没有自动转换或静默重写迁移。旧实验开发数据应重建 store。
 
 Knowledge 的系统 slot 先按 Space 指向 radix，再使用由 Space/Principal 规范编码摘要得到的有界分区 key。读取必须提供有效 Principal；local service 从连接绑定它。KnowledgeKey 进一步选择 `(Actor,Execution)`，并认证历史与当前所有权。不同 Principal 即使复用相同 Actor/Execution ID，也不共享观察流和序号。Frontier 只绑定所选观察集合，渲染 Packet 不会推进它。
+
+Knowledge command 只接受 schema 2，持久化使用 owner radix 中的 indexed canonical records；`Snapshot` 只是内存 DTO。没有旧 Knowledge JSON snapshot 读取或迁移。schema 1 恢复 checkpoint 通过公共头和来源绑定检查后回退到 genesis 重放；若 journal 包含不受支持的 Knowledge command v1，打开失败。
 
 ## 查询与 convenience facade
 
 `ApplyAgent` 返回统一 durable receipt；同 key/同 canonical 请求在 epoch 变更、取消和重启后先返回原 ACK，不重新执行转换；同 key/不同 body 冲突。`GetAgentState` 用 Space、Principal 及可选历史 Anchor 读取当时分区，禁止 Cursor/Knowledge selector 被悄悄替换成 latest。
 
-`agentstore` 提供 typed convenience result，必须从 ACK 对应历史 Fence 解析结果，而不能从最新快照猜测。旧 domain-key snapshot 不自动当作新 LiveControl 状态；需要显式迁移，检测到旧格式时拒绝打开 facade，防止默默丢失状态。
+`agentstore` 提供 typed convenience result，必须从 ACK 对应历史 Fence 解析结果，而不能从最新状态猜测。Agent profile 只接受 record-root 持久化状态；开发数据如需重建，直接重新创建 store。
 
 ## 明确边界
 
-- 当前是每 Space/Principal 一幅有界完整快照；命令与读取会有 O(n) 编解码和复制，尚未实现实体级增量更新或大规模长程任务容量优化。
+- 当前每 Space/Principal 使用有界 record 状态，持久写入复用未变化记录；准备仍加载、克隆、编码和校验完整状态并扫描 radix keys，CPU/内存仍随完整状态增长，尚未实现仅处理变化记录的内存 reducer。准备成本测量见 [存储与 checkpoint 实测](../validation/AGENT_RECORD_STORAGE_2026-11-14.md)。
 - Invocation settlement 会校验原调用、结果幂等性和 Pending/Unknown 屏障；重复 settlement 只能返回相同语义。Activity/Attempt/Result、消息消费和 Continuation 记录属于 lifecycle opcode 12。
-- Agent snapshot 受 8 MiB object 上限约束；当前 domain snapshot 仍使用 core value，Knowledge/Memory 分区受 1 MiB value 上限约束，超限拒绝。
+- 新 Agent record 状态上限为每条 4 MiB、所有集合合计 16,384 条、canonical 字节合计 256 MiB，另受 JSON 深度/token、分配预检、radix 节点/字节、transaction 和总对象数等限制，详见 record registry。Knowledge 每条 canonical record 和 Memory 分区 snapshot 受 1 MiB core value 上限约束，超限拒绝；Knowledge 全量读取另有显式界限。
 - 独立 Durable 适配器仍可单独使用，但不参与同一个 core store 的第二套发布。
 - KnowledgeKey 历史筛选、领域/知识 Cursor、正式 Event、Trace/Search、核心联合 Fork/Join/Prune、
   SourcePublicationRef、RecordedInput 与 bounded content reader 已接入 core/library/service/client。
@@ -90,14 +92,14 @@ Knowledge 的系统 slot 先按 Space 指向 radix，再使用由 Space/Principa
 
 Control 6 keeps the existing operation selectors and uses the following fixed layouts. Strings use canonical length framing, booleans are uint 0/1, slices begin with a uint count, and `Authority` is `Deployment string, OwnerEpoch uint, Incarnation uint, Holder string`.
 
-| Operation | Layout |
-| --- | --- |
-| 6 CreateActivity | Existing `ActivitySpec` through `ResourceScope`, then `EffectContract`, `FinalAnswerInput`, then command `Authority` |
-| 7 ClaimAttempt | `Attempt, Activity, Sequence, Authority, RetryUse` |
-| 8 DispatchAttempt | `Attempt, Authority, Evidence, RetryUse` |
-| 13 RetryActivity | `Activity, ExpectedVersion, Authority, RetryUse` |
-| 32 PutIdempotencyGuarantee | `IdempotencyGuarantee` |
-| 33 AuthorizeRetry | `RetryAuthorization` |
+| Operation                  | Layout                                                                                                               |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| 6 CreateActivity           | Existing `ActivitySpec` through `ResourceScope`, then `EffectContract`, `FinalAnswerInput`, then command `Authority` |
+| 7 ClaimAttempt             | `Attempt, Activity, Sequence, Authority, RetryUse`                                                                   |
+| 8 DispatchAttempt          | `Attempt, Authority, Evidence, RetryUse`                                                                             |
+| 13 RetryActivity           | `Activity, ExpectedVersion, Authority, RetryUse`                                                                     |
+| 32 PutIdempotencyGuarantee | `IdempotencyGuarantee`                                                                                               |
+| 33 AuthorizeRetry          | `RetryAuthorization`                                                                                                 |
 
 `EffectContract` fields are `Version, Definition, Recipient, AllowsMutation, VerifiedPure, HistoricalRead, KeyNamespace, RetentionNanos, DifferentRequest, ResultQuery, ResourceFence, Compensation, CompensationLimit, LateArrivalFence`. The digest hashes `ATE-EFFECT-CONTRACT` + NUL + uint 1 + these fields. The immutable Activity also fixes the exact request object/digest, recipient, resource scope and idempotency key. An idempotent Activity requires a key namespace, a positive retention period, same-key different-request rejection and a declared late-arrival fence.
 
@@ -124,16 +126,16 @@ Position fields`.
 Position is mandatory in V1. Its fields, including the final optional source,
 are ordered as follows:
 
-| Field | Encoding |
-| --- | --- |
-| Space, Principal | canonical strings |
-| Step | uint; zero only before a Step exists |
-| KnowledgeFence | Store string, LSN uint, CommitDigest string |
-| KnowledgeCursor | Store string, Space string, Revision string |
-| KnowledgeKey | Actor string, Execution string |
-| AdapterVersion | canonical string |
-| NextActions | count uint; sorted Key string / Generation uint pairs |
-| KnowledgeSource | presence uint (0/1), followed by SourcePublicationRef when present |
+| Field            | Encoding                                                           |
+| ---------------- | ------------------------------------------------------------------ |
+| Space, Principal | canonical strings                                                  |
+| Step             | uint; zero only before a Step exists                               |
+| KnowledgeFence   | Store string, LSN uint, CommitDigest string                        |
+| KnowledgeCursor  | Store string, Space string, Revision string                        |
+| KnowledgeKey     | Actor string, Execution string                                     |
+| AdapterVersion   | canonical string                                                   |
+| NextActions      | count uint; sorted Key string / Generation uint pairs              |
+| KnowledgeSource  | presence uint (0/1), followed by SourcePublicationRef when present |
 
 An embedded SourcePublicationRef is `Store string, Space string, ProducerTx
 string, Cursor presence uint, [Cursor fields], Knowledge presence uint,
@@ -176,7 +178,6 @@ publication is reconciled through its original receipt before any new action.
 `agentprofile.PublicationReferences` exposes these transaction dependencies
 separately from `ContentReferences`; a ProducerTx is never interpreted as a raw
 ObjectID. AuditFull compaction retains every producer and its original roots.
-
 
 ## V1 output capture and durable stream prefix
 

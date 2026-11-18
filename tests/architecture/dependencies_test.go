@@ -15,14 +15,15 @@ import (
 func TestProductionDependencyDirection(t *testing.T) {
 	const module = "github.com/vkviyu/agent-temporal-engine/"
 	allowed := map[string]string{
-		".":     "api engine storage graph memory knowledge model transfer",
-		"model": "", "codec": "model", "api": "agentprofile annotation model graph investigation memory knowledge transfer",
+		".":           "api engine storage graph memory knowledge model observation transfer",
+		"observation": "",
+		"model":       "", "codec": "model", "api": "agentprofile annotation model graph investigation memory knowledge transfer",
 		// Annotation and investigation are pure public domains over identities.
 		// The API, engine and transports consume their types and codecs.
 		"annotation":    "model",
 		"investigation": "model",
-		"state":         "codec model",
-		"engine":        "agentprofile annotation api codec eventlog graph investigation knowledge memory model state storage transfer", "reference": "api codec model",
+		"state":         "codec model observation",
+		"engine":        "agentprofile annotation api codec eventlog graph investigation knowledge memory model observation state storage transfer", "reference": "api codec model",
 		"tests/reference": "", "formats": "",
 		"transfer": "codec memory model",
 		"eventlog": "codec model",
@@ -31,6 +32,8 @@ func TestProductionDependencyDirection(t *testing.T) {
 		"protocol": "api model transfer",
 		"service":  "agentprofile annotation api graph investigation knowledge memory model protocol transfer",
 		"cmd/ate":  ". api model storage service",
+		// Verification is a standalone standard-library tool, not a runtime layer.
+		"scripts/verify": "",
 	}
 	root := filepath.Join("..", "..")
 	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {

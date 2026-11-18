@@ -12,6 +12,7 @@ import (
 	"github.com/vkviyu/agent-temporal-engine/knowledge"
 	"github.com/vkviyu/agent-temporal-engine/memory"
 	"github.com/vkviyu/agent-temporal-engine/model"
+	"github.com/vkviyu/agent-temporal-engine/storage"
 )
 
 func TestQueryOnlyOpenPersistsProgressWithoutTaskOrExecution(t *testing.T) {
@@ -21,6 +22,14 @@ func TestQueryOnlyOpenPersistsProgressWithoutTaskOrExecution(t *testing.T) {
 			name = "tool-answer"
 		}
 		t.Run(name, func(t *testing.T) { runQueryOnlyRecovery(t, tools) })
+	}
+}
+
+func TestQueryDecisionAcceptancePublicationUnknownRecoversWholeTurn(t *testing.T) {
+	for _, after := range []bool{false, true} {
+		t.Run(map[bool]string{false: "before-current", true: "after-current"}[after], func(t *testing.T) {
+			runQueryOnlyRecovery(t, false, after)
+		})
 	}
 }
 
@@ -58,7 +67,10 @@ func TestUnmanagedQueryCannotCreateExternalTool(t *testing.T) {
 	workApply(t, s, api.ApplyWorkRequest{Key: agentKey("standalone-checkpoint-without-query-tool"), Unit: unit})
 }
 
-func runQueryOnlyRecovery(t *testing.T, withTools bool) {
+func runQueryOnlyRecovery(t *testing.T, withTools bool, publicationFault ...bool) {
+	if len(publicationFault) > 1 {
+		t.Fatal("at most one publication fault configuration is supported")
+	}
 	ctx := context.Background()
 	s := newIntegrationStore(t, engine.Options{AgentProfile: true, EventProfile: true})
 	definition := testPureToolDefinition("read", "executor")
@@ -189,7 +201,28 @@ func runQueryOnlyRecovery(t *testing.T, withTools bool) {
 		decision.Unit.QueryTurn.Invocations = nil
 		decision.Unit.QueryTurn.Next = &decisionNext
 	}
-	decisionAck := workApply(t, s, decision)
+	var decisionAck api.CommitResult
+	if len(publicationFault) == 0 {
+		decisionAck = workApply(t, s, decision)
+	} else {
+		if err := s.e.Close(); err != nil {
+			t.Fatal(err)
+		}
+		fault := &workCurrentFaultIO{DurableIO: s.d, after: publicationFault[0]}
+		var err error
+		s.e, _, err = engine.OpenExisting(fault, s.options)
+		if err != nil {
+			t.Fatal(err)
+		}
+		fault.armed = true
+		out, err := s.e.ApplyWork(ctx, decision)
+		if out.Code != api.CodeCommitUnknown || !errors.Is(err, errWorkCurrent) {
+			t.Fatalf("query decision publication should be unknown: %+v %v", out, err)
+		}
+		s.options.Journal.TailPolicy = storage.TailQuarantine
+		s.reopen()
+		decisionAck = workApply(t, s, decision)
+	}
 	s.reopen()
 	progress, err := s.e.GetQueryProgress(ctx, read)
 	if err != nil || progress.Progress.Sequence != 1 || progress.Progress.Decisions[0].AcceptedResult != result.ID || !reflect.DeepEqual(progress.Progress.Next, &decisionNext) {

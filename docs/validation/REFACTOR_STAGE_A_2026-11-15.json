@@ -1,0 +1,53 @@
+{
+  "schema": 1,
+  "plan": "../ATE_REFACTOR_MASTER_PLAN.md",
+  "stage": "A",
+  "completed": ["R01", "R02", "R03", "R05"],
+  "partial": {
+    "R09": "Minimal verification entry point completed; requirement mapping, skip budgets and benchmark/native lanes remain."
+  },
+  "environment": {
+    "go": "go1.27.0",
+    "os": "darwin",
+    "arch": "arm64"
+  },
+  "source": {
+    "policy": "ate-source-v2",
+    "head": "1161b28eb34f3f40dd68352e87da0bc03bbeb497",
+    "dirty": true,
+    "sha256": "e352c2fc3530a3d9ebd123b47979941792db4e77b8fe4b002c47f45131c2b88b"
+  },
+  "runs": [
+    {
+      "command": ["go", "run", "./scripts/verify", "full"],
+      "exit_code": 0,
+      "status": "selected_passed_with_skips",
+      "source_stable": true,
+      "started": "2026-11-16T04:11:13.638709Z",
+      "finished": "2026-11-16T04:14:34.604077Z",
+      "passed_checks": ["format", "diff", "vet", "build", "test"],
+      "report_directory": "/private/var/folders/bw/p1qj0ln54pv806l_92fy0yh40000gn/T/ate-verify-1456289653"
+    },
+    {
+      "command": ["go", "run", "./scripts/verify", "race"],
+      "exit_code": 0,
+      "status": "selected_passed_with_skips",
+      "source_stable": true,
+      "started": "2026-11-16T04:14:35.293395Z",
+      "finished": "2026-11-16T04:22:26.011067Z",
+      "passed_checks": ["format", "diff", "vet", "build", "race"],
+      "report_directory": "/private/var/folders/bw/p1qj0ln54pv806l_92fy0yh40000gn/T/ate-verify-1069564503"
+    }
+  ],
+  "skipped_tests_in_each_run": [
+    "tests/evaluation.TestRealModelRecursiveSummaryAndEvidenceRecall",
+    "tests/evaluation.TestRealModelTypedSummaryReviewAndEvidenceRecallV2",
+    "tests/evaluation.TestRealModelCrossProjectMemoryApplicability"
+  ],
+  "skip_reason": "Opt-in real model evaluation was not enabled with explicit endpoint, model and artifact directory.",
+  "packages_without_tests": ["transfer"],
+  "unverified_lanes": ["native-durability", "device-power-loss", "benchmark"],
+  "artifact_retention": "Full manifests and logs are local temporary artifacts; this summary is retained in the repository.",
+  "format_change": "Independent journalstore and graphstore transaction metadata now accept v2 only. Existing directories were not migrated or removed.",
+  "git_committed": false
+}

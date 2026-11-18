@@ -10,6 +10,7 @@ import (
 	"github.com/vkviyu/agent-temporal-engine/api"
 	"github.com/vkviyu/agent-temporal-engine/memory"
 	"github.com/vkviyu/agent-temporal-engine/model"
+	"github.com/vkviyu/agent-temporal-engine/observation"
 	"github.com/vkviyu/agent-temporal-engine/state"
 	"github.com/vkviyu/agent-temporal-engine/storage"
 )
@@ -94,9 +95,19 @@ func (e *Engine) beginReadCut(ctx context.Context) (context.Context, func(), err
 		return ctx, nil, err
 	}
 	cut.reader = &fixedObjectReader{index: e.index, source: pin, canonical: e.journal}
+	var measured *observedReader
+	start := e.options.Observation.Start()
+	if e.options.Observation.Enabled() {
+		measured = &observedReader{source: cut.reader}
+		cut.reader = measured
+	}
 	closeCut := func() {
 		cut.release.Do(func() {
 			cut.closed.Store(true)
+			if measured != nil {
+				e.options.Observation.Finish(start, observation.Event{Kind: observation.Read,
+					Outcome: observation.Outcome(measured.outcome.Load()), Count: measured.objects.Load(), Bytes: measured.bytes.Load()})
+			}
 			_ = pin.Close()
 			v.mu.Lock()
 			v.readers--
@@ -105,6 +116,25 @@ func (e *Engine) beginReadCut(ctx context.Context) (context.Context, func(), err
 		})
 	}
 	return context.WithValue(ctx, readCutKey{}, cut), closeCut, nil
+}
+
+// Read measures object IO within the public cut, not authorization or delivery.
+// Atomic counters also support internal parallel readers sharing the same cut.
+type observedReader struct {
+	source         state.ObjectReader
+	objects, bytes atomic.Uint64
+	outcome        atomic.Uint32
+}
+
+func (r *observedReader) ReadObject(ctx context.Context, id model.ObjectID) ([]byte, error) {
+	b, err := r.source.ReadObject(ctx, id)
+	if err == nil {
+		r.objects.Add(1)
+		r.bytes.Add(uint64(len(b)))
+	} else {
+		r.outcome.Store(uint32(observationOutcome(err)))
+	}
+	return b, err
 }
 
 func (e *Engine) readReady(ctx context.Context) error {

@@ -160,6 +160,7 @@ func (j *journalWriterState) prepareLayout(batch []*PreparedTransaction, total u
 		SegmentID: active.descriptor.SegmentID, SegmentHeaderDigest: active.descriptor.HeaderDigest,
 		PublishedEnd: p.PublishedEnd + total, PrefixDigest: active.descriptor.PrefixDigest,
 		Position: tip.position, PostRootSet: tip.postRootSet}
+	m.RecoveryCheckpoint = j.manifest.RecoveryCheckpoint
 	if pending := j.retirementDescriptors(); len(pending) > 0 {
 		m.LayoutSource = j.manifest.LayoutSource
 		m.RetiredSegments = pending

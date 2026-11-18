@@ -53,6 +53,7 @@ func TestEmbeddedReadDeliveryCoversEveryOrdinaryTransportRead(t *testing.T) {
 		"export_transfer":         "ExportTransfer",
 		"get_transfer":            "GetTransfer",
 		"get_agent_state":         "GetAgentState",
+		"get_agent_state_records": "GetAgentStateRecords",
 		"get_query_intake":        "GetQueryIntake",
 		"get_query_progress":      "GetQueryProgress",
 		"get_knowledge":           "GetKnowledgeState",

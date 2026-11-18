@@ -29,6 +29,10 @@ func sortRecovery(s *RecoverySnapshot) {
 	}
 }
 func validateRecoveryShape(s *RecoverySnapshot) error {
+	return validateRecoveryShapeMode(s, false)
+}
+
+func validateRecoveryShapeMode(s *RecoverySnapshot, records bool) error {
 	if s == nil {
 		return nil
 	}
@@ -37,6 +41,16 @@ func validateRecoveryShape(s *RecoverySnapshot) error {
 		if v.Field(i).Len() > MaxLifecycleRecords {
 			return ErrInvalid
 		}
+		if records {
+			for j := 0; j < v.Field(i).Len(); j++ {
+				if _, err := appendControlValue(nil, v.Field(i).Index(j), 0); err != nil {
+					return ErrInvalid
+				}
+			}
+		}
+	}
+	if records {
+		return nil
 	}
 	if _, err := appendControlValue(nil, v, 0); err != nil {
 		return ErrInvalid
@@ -55,6 +69,10 @@ func (s Snapshot) recoveryState() *RecoverySnapshot { return s.Lifecycle.Recover
 // validateRecoveryState checks authoritative cross-record relations after a
 // pure transition and again when an immutable snapshot is restored.
 func validateRecoveryState(snapshot Snapshot) error {
+	return validateRecoveryStateMode(snapshot, false)
+}
+
+func validateRecoveryStateMode(snapshot Snapshot, records bool) error {
 	if err := validateOutputState(snapshot); err != nil {
 		return err
 	}
@@ -95,7 +113,7 @@ func validateRecoveryState(snapshot Snapshot) error {
 	if s == nil {
 		return nil
 	}
-	if err := validateRecoveryShape(s); err != nil {
+	if err := validateRecoveryShapeMode(s, records); err != nil {
 		return err
 	}
 	queries := map[string]Query{}

@@ -67,7 +67,7 @@ func appendControlValue(b []byte, v reflect.Value, depth int) ([]byte, error) {
 	default:
 		return nil, ErrCommandShape
 	}
-	if len(b) > MaxSnapshotBytes {
+	if len(b) > MaxCommandBytes {
 		return nil, ErrCommandShape
 	}
 	return b, nil

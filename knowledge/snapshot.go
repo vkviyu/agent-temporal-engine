@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"sort"
 
 	"github.com/vkviyu/agent-temporal-engine/codec"
@@ -12,15 +11,16 @@ import (
 )
 
 const (
+	// MaxSnapshotRecords bounds each collection in the in-memory Snapshot DTO
+	// and its contiguous sequence validation, not indexed persistence capacity.
 	MaxSnapshotRecords = 65536
-	MaxSnapshotBytes   = 8 << 20
 	MaxCommandBytes    = MaxRecordBytes + 64
-	snapshotPrefix     = "ATE-KNOWLEDGE-SNAPSHOT\x00"
 	commandPrefix      = "ATE-KNOWLEDGE-COMMAND\x00"
 	commandVersion     = 2
 )
 
-// Snapshot contains immutable, content-addressed observations and packets.
+// Snapshot is an in-memory DTO of immutable, content-addressed observations and
+// packets for validation and selection. Persistence uses individual records.
 // Sequence is contiguous within each (Space, KnowledgeKey); source publication
 // and the observation's adoption cut must additionally be checked by the core.
 type Snapshot struct {
@@ -29,24 +29,12 @@ type Snapshot struct {
 }
 
 // Command is a closed transition union. Its canonical bytes contain exactly
-// one existing canonical Observation or ContextPacket, never a replacement
+// one canonical Observation, ContextPacket, or ImportCommand, never a replacement
 // snapshot. Publication and authentication belong to the outer core command.
 type Command struct {
 	Observation *Observation
 	Packet      *ContextPacket
 	Import      *ImportCommand
-	version     uint64
-}
-
-// UsesLegacySnapshot reports whether this command was encoded before indexed
-// record publication. Replay must use the original reducer for those bytes.
-func (c Command) UsesLegacySnapshot() bool { return c.version == 1 }
-
-// Keep this struct and prefix stable so previously valid JSON snapshots retain
-// their exact bytes. JSON transport commands are not content identity.
-type snapshotWire struct {
-	Observations []Observation   `json:"observations,omitempty"`
-	Packets      []ContextPacket `json:"packets,omitempty"`
 }
 
 type snapshotScope struct {
@@ -136,42 +124,6 @@ func (s Snapshot) Validate() error {
 	return nil
 }
 
-func EncodeSnapshot(s Snapshot) ([]byte, error) {
-	if err := s.Validate(); err != nil {
-		return nil, err
-	}
-	s = s.Clone()
-	sort.Slice(s.Observations, func(i, j int) bool { return s.Observations[i].ID < s.Observations[j].ID })
-	sort.Slice(s.Packets, func(i, j int) bool { return s.Packets[i].ID < s.Packets[j].ID })
-	raw, err := json.Marshal(snapshotWire{Observations: s.Observations, Packets: s.Packets})
-	if err != nil {
-		return nil, err
-	}
-	if len(raw) > MaxSnapshotBytes-len(snapshotPrefix) {
-		return nil, ErrInvalid
-	}
-	return append([]byte(snapshotPrefix), raw...), nil
-}
-
-func DecodeSnapshot(raw []byte) (Snapshot, error) {
-	if len(raw) > MaxSnapshotBytes || !bytes.HasPrefix(raw, []byte(snapshotPrefix)) {
-		return Snapshot{}, ErrInvalid
-	}
-	var wire snapshotWire
-	if err := json.Unmarshal(raw[len(snapshotPrefix):], &wire); err != nil {
-		return Snapshot{}, ErrInvalid
-	}
-	s := Snapshot{Observations: wire.Observations, Packets: wire.Packets}
-	canonical, err := EncodeSnapshot(s)
-	if err != nil {
-		return Snapshot{}, err
-	}
-	if !bytes.Equal(canonical, raw) {
-		return Snapshot{}, ErrInvalid
-	}
-	return s, nil
-}
-
 func (c Command) Validate() error {
 	count := 0
 	for _, present := range []bool{c.Observation != nil, c.Packet != nil, c.Import != nil} {
@@ -204,13 +156,6 @@ func (c Command) Validate() error {
 }
 
 func EncodeCommand(c Command) ([]byte, error) {
-	if c.UsesLegacySnapshot() {
-		return encodeCommandVersion(c, 1)
-	}
-	return encodeCommandVersion(c, commandVersion)
-}
-
-func encodeCommandVersion(c Command, version uint64) ([]byte, error) {
 	if err := c.Validate(); err != nil {
 		return nil, err
 	}
@@ -229,7 +174,7 @@ func encodeCommandVersion(c Command, version uint64) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	b := codec.AppendUint([]byte(commandPrefix), version)
+	b := codec.AppendUint([]byte(commandPrefix), commandVersion)
 	b = codec.AppendUint(b, operation)
 	return codec.AppendBytes(b, raw)
 }
@@ -240,8 +185,11 @@ func DecodeCommand(raw []byte) (Command, error) {
 	}
 	d := codec.NewDecoder(raw[len(commandPrefix):])
 	version, err := d.Uint()
-	if err != nil || (version != 1 && version != commandVersion) {
+	if err != nil {
 		return Command{}, ErrInvalid
+	}
+	if version != commandVersion {
+		return Command{}, ErrUnsupportedSchema
 	}
 	operation, err := d.Uint()
 	if err != nil {
@@ -255,9 +203,6 @@ func DecodeCommand(raw []byte) (Command, error) {
 		return Command{}, err
 	}
 	c := Command{}
-	if version != commandVersion {
-		c.version = version
-	}
 	switch operation {
 	case 1:
 		value, e := DecodeObservation(body)
@@ -280,52 +225,11 @@ func DecodeCommand(raw []byte) (Command, error) {
 	default:
 		return Command{}, ErrInvalid
 	}
-	canonical, err := encodeCommandVersion(c, version)
+	canonical, err := EncodeCommand(c)
 	if err != nil || !bytes.Equal(canonical, raw) {
 		return Command{}, ErrInvalid
 	}
 	return c, nil
-}
-
-// ApplyCommand builds an owned candidate. It cannot authenticate source
-// publication or the observation's adoption cut; the publisher must do so
-// before accepting the candidate. Repeated exact content IDs are idempotent.
-func ApplyCommand(s Snapshot, c Command) (Snapshot, error) {
-	if err := s.Validate(); err != nil {
-		return Snapshot{}, err
-	}
-	if err := c.Validate(); err != nil {
-		return Snapshot{}, err
-	}
-	out := s.Clone()
-	if c.Observation != nil {
-		for _, previous := range s.Observations {
-			if previous.ID == c.Observation.ID {
-				return out, nil
-			}
-		}
-		out.Observations = append(out.Observations, c.Observation.Clone())
-	} else if c.Packet != nil {
-		for _, previous := range s.Packets {
-			if previous.ID == c.Packet.ID {
-				return out, nil
-			}
-		}
-		out.Packets = append(out.Packets, clonePacket(*c.Packet))
-	} else {
-		var err error
-		out, err = applyImport(s, *c.Import)
-		if err != nil {
-			return Snapshot{}, err
-		}
-	}
-	if err := out.Validate(); err != nil {
-		return Snapshot{}, err
-	}
-	if _, err := EncodeSnapshot(out); err != nil {
-		return Snapshot{}, err
-	}
-	return out, nil
 }
 
 // SelectSnapshot returns only the exact execution's observations and packets.

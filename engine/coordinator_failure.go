@@ -27,6 +27,8 @@ func (e *Engine) abortPublished(planned []plannedFlight, deferred []deferredDeci
 // fenceWriter is called with writerMu held and mu released. Output remains
 // closed until both the in-memory state and physical publisher are fenced.
 func (e *Engine) fenceWriter(cause error) error {
+	e.traceEvidence.stop()
+	e.traceProfiles.stop()
 	e.mu.Lock()
 	if e.fenced == nil {
 		e.fenced = semanticError(cause)

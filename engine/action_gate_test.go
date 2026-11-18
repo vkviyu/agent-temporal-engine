@@ -27,18 +27,17 @@ func TestActionGateRejectsAmbiguousLegacyReservations(t *testing.T) {
 	request := coordinatorRequest(t, "reserved", "effect", "once", api.ValueCondition{})
 	intent := agentprofile.ActionIntent{Action: agentprofile.PendingAction{Key: "first", Generation: 1, Request: request.Key(), CommandDigest: agentprofile.ExactRequestDigest(request.Body), InputFence: model.CommitFence{Store: "store", CommitDigest: model.CommitDigest(integrationHex('b'))}, Owner: x.ID, Status: agentprofile.ActionPending}, Method: request.Method, ExactCommand: request.Body, Authority: binding}
 	apply(agentprofile.Command{Control: &agentprofile.ControlCommand{PutAction: &agentprofile.PutActionCommand{Intent: intent, Authority: binding}}})
-	// Historical schema-1 snapshots could contain distinct slots sharing a
-	// request. Restore such data through its canonical snapshot validation;
-	// newer admission rules must not silently choose one historical slot.
+	// Distinct record slots sharing a request must not be silently selected by
+	// newer admission rules.
 	snapshot := ledger.Snapshot()
 	intent.Action.Key = "second"
 	snapshot.Actions = append(snapshot.Actions, intent.Action)
 	snapshot.Lifecycle.Recovery.Actions = append(snapshot.Lifecycle.Recovery.Actions, intent)
-	raw, err := agentprofile.EncodeSnapshot(snapshot)
+	image, err := agentprofile.EncodeRecordImage(snapshot)
 	if err != nil {
 		t.Fatal(err)
 	}
-	ledger, err = agentprofile.RestoreSnapshot(raw)
+	ledger, err = image.Restore()
 	if err != nil {
 		t.Fatal(err)
 	}

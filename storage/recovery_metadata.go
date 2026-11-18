@@ -16,6 +16,7 @@ type recoveryMetadata struct {
 	descriptors []SegmentDescriptor
 }
 
+// The caller owns every returned compaction handle, including on error.
 func readRecoveryMetadata(d DurableIO, o JournalOptions) (recoveryMetadata, error) {
 	var out recoveryMetadata
 	currentBytes, err := readMetadata(d, "CURRENT")

@@ -23,6 +23,9 @@ func TestFramingShortIOAndBounds(t *testing.T) {
 	if err := WriteFrame(&b, make([]byte, MaxFrameBytes+1)); err != ErrFrameLimit {
 		t.Fatal(err)
 	}
+	if b.Len() != 0 {
+		t.Fatal("oversized write emitted a partial header or payload")
+	}
 }
 func TestStrictRejectsDuplicateUnknownTrailingDepthAndFloatRoundTrip(t *testing.T) {
 	var out Request

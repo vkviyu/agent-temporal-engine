@@ -7,13 +7,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"go/ast"
-	"go/parser"
-	"go/token"
 	"os"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"syscall"
 	"testing"
 	"time"
@@ -91,6 +87,28 @@ func TestRegistryPolicyAndOwnership(t *testing.T) {
 	}
 }
 
+func TestKnowledgeCommandRegistryCutover(t *testing.T) {
+	r, err := formats.Current()
+	if err != nil {
+		t.Fatal(err)
+	}
+	family, ok := r.Family("knowledge.command")
+	if !ok || len(family.Versions) != 1 || family.Versions[0].Number != 2 {
+		t.Fatalf("Knowledge commands must register only schema 2: %+v", family)
+	}
+	for _, purpose := range []formats.Purpose{formats.Decode, formats.Replay, formats.Write} {
+		if err := r.Check("knowledge.command", 1, purpose); !errors.Is(err, formats.ErrUnsupported) {
+			t.Fatalf("%s accepted retired Knowledge command schema 1: %v", purpose, err)
+		}
+		if err := r.Check("knowledge.command", 2, purpose); err != nil {
+			t.Fatalf("%s rejected Knowledge command schema 2: %v", purpose, err)
+		}
+	}
+	if _, err := r.PlanMigration("knowledge.command", 1, 2); !errors.Is(err, formats.ErrUnsupported) {
+		t.Fatal("retired Knowledge commands must not have a migration plan", err)
+	}
+}
+
 // The real hello test freezes capability behavior. This additional inventory
 // check prevents a production route being added/removed without registry review.
 func TestRegistryCoversActualProtocolDispatchMethods(t *testing.T) {
@@ -104,50 +122,12 @@ func TestRegistryCoversActualProtocolDispatchMethods(t *testing.T) {
 			registered[method] = true
 		}
 	}
-	actual := map[string]bool{"hello": true}
-	for _, path := range []string{"../service/session.go", "../service/nodes.go"} {
-		file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
-		if err != nil {
-			t.Fatal(err)
-		}
-		ast.Inspect(file, func(n ast.Node) bool {
-			s, ok := n.(*ast.SwitchStmt)
-			if !ok {
-				return true
-			}
-			tag, ok := s.Tag.(*ast.SelectorExpr)
-			if !ok || tag.Sel.Name != "Method" {
-				return true
-			}
-			req, ok := tag.X.(*ast.Ident)
-			if !ok || req.Name != "req" {
-				return true
-			}
-			for _, stmt := range s.Body.List {
-				for _, expr := range stmt.(*ast.CaseClause).List {
-					literal, ok := expr.(*ast.BasicLit)
-					if !ok || literal.Kind != token.STRING {
-						t.Fatal("wire method route is not a static string")
-					}
-					method, err := strconv.Unquote(literal.Value)
-					if err != nil {
-						t.Fatal(err)
-					}
-					actual[method] = true
-				}
-			}
-			return false
-		})
+	actual, err := protocolDispatchMethods(os.DirFS("../service"))
+	if err != nil {
+		t.Fatal(err)
 	}
-	for method := range actual {
-		if !registered[method] {
-			t.Errorf("production wire method absent from registry: %s", method)
-		}
-	}
-	for method := range registered {
-		if !actual[method] {
-			t.Errorf("registry advertises absent wire method: %s", method)
-		}
+	if err := compareProtocolMethods(registered, actual); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -177,7 +157,8 @@ func TestRegistryMatchesPublishedCodecConstants(t *testing.T) {
 		id      string
 		version uint64
 	}{
-		{"agent.command", agentprofile.CommandSchema}, {"agent.snapshot", agentprofile.SnapshotVersion},
+		{"agent.command", agentprofile.CommandSchema},
+		{"agent.record-state", agentprofile.RecordStateVersion},
 		{"graph.command", graph.CommandSchema}, {"graph.revision", graph.RevisionSchema}, {"graph.branch", graph.BranchSchema},
 		{"graph.command", graph.LocalCommandSchema}, {"graph.revision", graph.ProducedRevisionSchema}, {"graph.branch", graph.ScopedBranchSchema},
 		{"knowledge.observation", knowledge.Schema}, {"knowledge.packet", knowledge.PacketSchema}, {"knowledge.summary", knowledge.SummarySchema},
@@ -187,6 +168,25 @@ func TestRegistryMatchesPublishedCodecConstants(t *testing.T) {
 		if err := r.Check(check.id, check.version, formats.Write); err != nil {
 			t.Fatal(check, err)
 		}
+	}
+}
+
+func TestRegistryRejectsRemovedAgentSnapshotFormats(t *testing.T) {
+	r, err := formats.Current()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, version := range []uint64{1, 2} {
+		for _, purpose := range []formats.Purpose{formats.Decode, formats.Replay, formats.Write} {
+			if err := r.Check("agent.snapshot", version, purpose); !errors.Is(err, formats.ErrUnsupported) {
+				t.Fatalf("removed snapshot schema %d advertised for %s: %v", version, purpose, err)
+			}
+		}
+	}
+	family, ok := r.Family("agent.record-state")
+	if !ok || family.Domain != `ATE-AGENT-RECORD\0` || len(family.Versions) != 1 ||
+		family.Versions[0].Number != agentprofile.RecordStateVersion {
+		t.Fatalf("record-state family differs from current codec: %+v", family)
 	}
 }
 

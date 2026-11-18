@@ -18,8 +18,6 @@ import (
 	"github.com/vkviyu/agent-temporal-engine/storage"
 )
 
-const agentSnapshotType = "ate.agent.snapshot"
-
 var _ api.AgentCommands = (*Engine)(nil)
 
 // All profile partitions are protected by the system LiveControl radix. The
@@ -41,93 +39,35 @@ func validAgentScope(space model.SpaceID, principal model.PrincipalID) error {
 	return nil
 }
 
-func makeAgentSnapshot(space model.SpaceID, owner model.PrincipalID, snapshot agentprofile.Snapshot) (codec.Object, error) {
-	if err := validAgentScope(space, owner); err != nil {
-		return codec.Object{}, err
-	}
-	for _, task := range snapshot.Tasks {
-		if task.Space != space || task.Owner != owner {
-			return codec.Object{}, agentprofile.ErrCommandScope
-		}
-	}
-	raw, err := agentprofile.EncodeSnapshot(snapshot)
-	if err != nil {
-		return codec.Object{}, err
-	}
-	payload, err := codec.AppendString(corePrefix(), string(owner))
-	if err != nil {
-		return codec.Object{}, err
-	}
-	payload, err = codec.AppendBytes(payload, raw)
-	if err != nil {
-		return codec.Object{}, err
-	}
-	if len(payload) > codec.MaxObjectPayload {
-		return codec.Object{}, storage.ErrLimit
-	}
-	// Preserve the original snapshot envelope. Its schema-specific references
-	// are extracted by agentprofile.ContentReferences; source fences and logical
-	// Knowledge PacketIDs also retain history. Object.Refs alone is insufficient
-	// for selective sweeping. AuditFull retains every canonical transaction.
-	return coreObject(agentSnapshotType, space, nil, payload)
-}
-
-func readAgentSnapshot(obj codec.Object) (agentprofile.Snapshot, model.PrincipalID, error) {
-	if err := checkCoreObject(obj, agentSnapshotType, false); err != nil {
-		return agentprofile.Snapshot{}, "", err
-	}
-	d, err := coreDecoder(obj.Payload)
-	if err != nil {
-		return agentprofile.Snapshot{}, "", err
-	}
-	owner, err := d.String(model.MaxIdentityBytes)
-	if err != nil {
-		return agentprofile.Snapshot{}, "", err
-	}
-	raw, err := d.Bytes(codec.MaxObjectPayload)
-	if err != nil {
-		return agentprofile.Snapshot{}, "", err
-	}
-	if err = d.Done(); err != nil {
-		return agentprofile.Snapshot{}, "", err
-	}
-	snapshot, err := agentprofile.DecodeSnapshot(raw)
-	if err != nil {
-		return agentprofile.Snapshot{}, "", err
-	}
-	expected, err := makeAgentSnapshot(obj.Space, model.PrincipalID(owner), snapshot)
-	if err != nil {
-		return agentprofile.Snapshot{}, "", err
-	}
-	if !bytes.Equal(expected.Payload, obj.Payload) || checkRefs(obj, nil) != nil {
-		return agentprofile.Snapshot{}, "", ErrInvalidStateData
-	}
-	return snapshot, model.PrincipalID(owner), nil
-}
-
 func loadAgentLedger(ctx context.Context, reader state.ObjectReader, root model.ObjectID, space model.SpaceID, principal model.PrincipalID) (*agentprofile.Ledger, model.ObjectID, bool, error) {
 	id, found, err := state.Get(ctx, reader, systemSpace, root, agentPartitionKey(space, principal))
 	if err != nil || !found {
 		return agentprofile.New(), "", found, err
 	}
+	if image, ok := workAgentRecordsAt(ctx, id, space, principal); ok {
+		ledger, err := image.Restore()
+		return ledger, id, true, err
+	}
 	obj, err := readObject(ctx, reader, id)
 	if err != nil {
 		return nil, "", false, err
 	}
-	_, owner, err := readAgentSnapshot(obj)
+	if obj.Type != agentRecordRootType {
+		return nil, "", false, fmt.Errorf("%w: %w", ErrStoredObject, ErrUnsupportedSchema)
+	}
+	catalog, owner, err := loadAgentRecordCatalog(ctx, reader, obj)
 	if err != nil {
-		return nil, "", false, fmt.Errorf("%w: %w", ErrStoredObject, err)
+		return nil, "", false, err
 	}
 	if owner != principal || obj.Space != space {
 		return nil, "", false, ErrInvalidStateData
 	}
-	d, _ := coreDecoder(obj.Payload)
-	_, _ = d.String(model.MaxIdentityBytes)
-	raw, _ := d.Bytes(codec.MaxObjectPayload)
-	ledger, err := agentprofile.RestoreSnapshot(raw)
+	ledger, err := catalog.image.Restore()
 	if err != nil {
-		return nil, "", false, fmt.Errorf("%w: %w", ErrStoredObject, err)
+		return nil, "", false, err
 	}
+	catalog.id = id
+	retainWorkAgentRecords(ctx, catalog)
 	return ledger, id, true, err
 }
 
@@ -198,7 +138,9 @@ func (e *Engine) prepareAgent(ctx context.Context, req api.CommitRequest, digest
 	if err = e.checkTaskValidation(ctx, req, candidate, c, recorded != nil); err != nil {
 		return nil, err
 	}
-	if _, err = candidate.ApplyCommand(req.Key(), c); err != nil {
+	var records agentprofile.RecordImage
+	_, records, err = candidate.ApplyCommandRecords(req.Key(), c)
+	if err != nil {
 		return nil, err
 	}
 	builder := newBuilder(ctx, e.index, e.options.MaxObjects)
@@ -210,11 +152,9 @@ func (e *Engine) prepareAgent(ctx context.Context, req api.CommitRequest, digest
 	if err != nil {
 		return nil, err
 	}
-	obj, err := makeAgentSnapshot(req.Space, req.Principal, candidate.Snapshot())
-	if err != nil {
-		return nil, err
-	}
-	after, err := builder.add(obj, storage.KindObject)
+	var after model.ObjectID
+	var recordCatalog agentRecordCatalog
+	after, recordCatalog, err = storeAgentRecords(ctx, builder, req.Space, req.Principal, before, records)
 	if err != nil {
 		return nil, err
 	}
@@ -252,7 +192,13 @@ func (e *Engine) prepareAgent(ctx context.Context, req api.CommitRequest, digest
 	}
 	roots := e.roots
 	roots.LiveControl = delta.Root
-	return e.finishPlan(ctx, req, digest, txID, lsn, builder, roots, roots.LiveControl, commandID, opsID)
+	plan, err := e.finishPlan(ctx, req, digest, txID, lsn, builder, roots, roots.LiveControl, commandID, opsID)
+	if err == nil {
+		// The validated image and object mapping become visible to Work only
+		// after the complete plan passes finishPlan.
+		retainWorkAgentRecords(ctx, recordCatalog)
+	}
+	return plan, err
 }
 
 func (e *Engine) GetAgentState(ctx context.Context, req api.ReadAgentStateRequest) (api.AgentStateResult, error) {

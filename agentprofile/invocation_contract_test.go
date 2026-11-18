@@ -90,7 +90,15 @@ func TestInvocationContractRequiresAcceptedPrimaryAndKeepsDispatchClass(t *testi
 	assertRecoveryRejected(t, l, Command{Control: &ControlCommand{CreateActivity: &CreateActivityCommand{Spec: tool, Authority: authority}}}, ErrConflict)
 	tool.Effect = "pure"
 	recoveryControl(t, l, "tool", ControlCommand{CreateActivity: &CreateActivityCommand{Spec: tool, Authority: authority}})
-	if _, err := DecodeSnapshot(mustInvocationSnapshot(t, l)); err != nil {
+	image, err := EncodeRecordImage(l.Snapshot())
+	if err != nil {
+		t.Fatal(err)
+	}
+	records, err := image.Records()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := DecodeRecordImage(records); err != nil {
 		t.Fatal(err)
 	}
 	snapshot := l.Snapshot()
@@ -107,15 +115,11 @@ func TestInvocationContractRequiresAcceptedPrimaryAndKeepsDispatchClass(t *testi
 
 func mustInvocationSnapshot(t *testing.T, l *Ledger) []byte {
 	t.Helper()
-	raw, err := EncodeSnapshot(l.Snapshot())
-	if err != nil {
-		t.Fatal(err)
-	}
-	return raw
+	return recordCanonical(t, l.Snapshot())
 }
 
 // acceptPrimaryResult records the real model lifecycle used by tool contracts.
-func acceptPrimaryResult(t *testing.T, l *Ledger, authority AuthorityBinding, execution model.ExecutionID, step uint64, resultID string) {
+func acceptPrimaryResult(t testing.TB, l *Ledger, authority AuthorityBinding, execution model.ExecutionID, step uint64, resultID string) {
 	t.Helper()
 	spec := ActivitySpec{Activity: "primary-" + resultID, Execution: execution, Step: step, Role: "primary_decision", GoalEpoch: 1, InputFence: recoveryFence(), Request: digest('b'), RequestDigest: digest('c'), ContextPacket: digest('d'), Recipient: "model", Effect: "pure", ResourceScope: "session"}
 	recoveryControl(t, l, "create-"+resultID, ControlCommand{CreateActivity: &CreateActivityCommand{Spec: spec, Authority: authority}})
